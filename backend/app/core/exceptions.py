@@ -74,3 +74,15 @@ class VaultValidationError(VaultError):
     * Name is blank after stripping whitespace.
     * Name exceeds the allowed character limit.
     """
+
+
+class VaultManifestError(VaultError):
+    """
+    Raised when a ``manifest.json`` is found on disk but cannot be read
+    or parsed (missing, malformed JSON, missing required fields, etc.).
+
+    Callers that are iterating over multiple vaults should catch this,
+    log it, and *skip* the offending vault rather than aborting the
+    entire listing operation.  This preserves a best-effort read
+    guarantee: one corrupt vault must never hide all other valid vaults.
+    """

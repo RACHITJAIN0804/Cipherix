@@ -1,11 +1,12 @@
 """
 vault/vault_manager.py
 ----------------------
-Filesystem orchestrator for vault creation.
+Filesystem orchestrator for vault operations.
 
-:class:`VaultManager` is responsible for *one thing only*: turning an
-abstract "create a vault" instruction into a concrete directory tree on
-disk.  It knows nothing about HTTP, Pydantic, or business rules.
+:class:`VaultManager` is responsible for all filesystem interactions:
+creating the directory tree for a new vault, and discovering and reading
+existing vaults from disk.  It knows nothing about HTTP, Pydantic, or
+business rules.
 
 Vault layout on disk
 --------------------
@@ -34,7 +35,7 @@ Design decisions
 
 from pathlib import Path
 
-from app.core.exceptions import VaultAlreadyExistsError, VaultCreationError
+from app.core.exceptions import VaultAlreadyExistsError, VaultCreationError, VaultManifestError
 from app.core.logger import get_logger
 from app.vault.manifest import VaultManifest
 
@@ -46,7 +47,7 @@ _VAULT_SUBDIRS: tuple[str, ...] = ("encrypted", "metadata", "temp")
 
 class VaultManager:
     """
-    Handles all filesystem operations required to create a vault.
+    Handles all filesystem operations for vault management.
 
     Parameters
     ----------
@@ -98,6 +99,61 @@ class VaultManager:
         logger.info("Vault %r scaffolded at %s", manifest.name, vault_root)
         return vault_root
 
+    def list_vaults(self) -> list[VaultManifest]:
+        """
+        Discover and read all valid vaults from the base directory.
+
+        A vault directory is considered **valid** if it satisfies both:
+
+        1. It is a directory (not a stray file).
+        2. It contains a ``manifest.json`` file.
+
+        Directories that fail either criterion are silently skipped.
+        Directories whose ``manifest.json`` exists but cannot be parsed
+        raise :class:`~app.core.exceptions.VaultManifestError` internally;
+        the caller (service layer) is responsible for catching that,
+        logging it, and continuing with the remaining vaults.
+
+        Returns
+        -------
+        list[VaultManifest]
+            One :class:`~app.vault.manifest.VaultManifest` per valid vault,
+            in filesystem-iteration order (unsorted — the service layer
+            is responsible for ordering).
+        """
+        if not self._base.exists():
+            logger.debug("Vault base directory does not exist: %s", self._base)
+            return []
+
+        manifests: list[VaultManifest] = []
+
+        for entry in self._base.iterdir():
+            if not entry.is_dir():
+                logger.debug("Skipping non-directory entry: %s", entry.name)
+                continue
+
+            manifest_path = entry / "manifest.json"
+            if not manifest_path.is_file():
+                logger.debug(
+                    "Skipping vault candidate (no manifest.json): %s", entry.name
+                )
+                continue
+
+            try:
+                manifest = self._read_manifest(manifest_path, entry.name)
+                manifests.append(manifest)
+            except VaultManifestError as exc:
+                # One corrupt vault must never abort the entire listing.
+                # Log the problem at WARNING level so operators can investigate,
+                # then continue processing the remaining vaults.
+                logger.warning(
+                    "Skipping vault '%s': %s", entry.name, exc.detail
+                )
+                continue
+
+        logger.debug("Discovered %d valid vault(s) in %s", len(manifests), self._base)
+        return manifests
+
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
@@ -146,4 +202,43 @@ class VaultManager:
             raise VaultCreationError(
                 f"Failed to write manifest.json for vault '{vault_id}'",
                 detail=f"OS error writing manifest: {exc.strerror}",
+            ) from exc
+
+    def _read_manifest(
+        self, manifest_path: Path, vault_dir_name: str
+    ) -> VaultManifest:
+        """
+        Attempt to deserialise a ``manifest.json`` and return it.
+
+        On any read or parse failure the method raises
+        :class:`~app.core.exceptions.VaultManifestError`.  The caller
+        (``list_vaults``) is responsible for catching it, logging it, and
+        continuing with the next vault.
+
+        Parameters
+        ----------
+        manifest_path:
+            Absolute path to the ``manifest.json`` file.
+        vault_dir_name:
+            The directory name (vault UUID), used only in error messages.
+
+        Returns
+        -------
+        VaultManifest
+            The deserialised manifest.
+
+        Raises
+        ------
+        VaultManifestError
+            On any I/O or parse error.
+        """
+        try:
+            return VaultManifest.read(manifest_path)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise VaultManifestError(
+                f"Cannot read manifest for vault '{vault_dir_name}': {exc}",
+                detail=(
+                    f"Vault '{vault_dir_name}' has a malformed or unreadable "
+                    f"manifest.json and will be skipped."
+                ),
             ) from exc

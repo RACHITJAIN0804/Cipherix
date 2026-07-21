@@ -26,7 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.config import settings
 from app.core.exceptions import CipherixError, VaultCreationError, VaultValidationError
 from app.core.logger import get_logger
-from app.schemas.vault import CreateVaultRequest, VaultResponse
+from app.schemas.vault import CreateVaultRequest, VaultResponse, VaultSummary
 from app.services.vault_service import VaultService
 from app.vault.vault_manager import VaultManager
 
@@ -128,6 +128,53 @@ async def create_vault(
     except CipherixError as exc:
         # Catch-all for any other domain error not handled above.
         logger.error("Unexpected domain error | %s", exc.detail)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=exc.detail,
+        ) from exc
+
+
+@router.get(
+    "/",
+    response_model=list[VaultSummary],
+    status_code=status.HTTP_200_OK,
+    summary="List all vaults",
+    description=(
+        "Return a summary of every valid vault on disk, sorted by creation "
+        "date descending (newest first). Returns an empty list if no vaults "
+        "exist. Vaults with malformed or missing manifest.json are silently "
+        "skipped and logged server-side."
+    ),
+    responses={
+        200: {"description": "List of vault summaries (may be empty)."},
+        500: {"description": "Unexpected server error during vault discovery."},
+    },
+)
+async def list_vaults(
+    service: VaultService = Depends(_get_vault_service),
+) -> list[VaultSummary]:
+    """
+    ``GET /vaults`` — list all vaults.
+
+    Returns
+    -------
+    list[VaultSummary]
+        Zero or more vault summaries ordered newest-first.
+        An empty list is a valid, non-error response.
+
+    Raises
+    ------
+    HTTPException(500)
+        Only for unexpected server-level failures — not for missing or
+        corrupt individual vaults (those are skipped gracefully).
+    """
+    try:
+        vaults = service.list_vaults()
+        logger.info("GET /vaults succeeded | count=%d", len(vaults))
+        return vaults
+
+    except CipherixError as exc:
+        logger.error("Vault listing failed unexpectedly | %s", exc.detail)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=exc.detail,

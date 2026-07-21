@@ -99,3 +99,48 @@ class VaultResponse(BaseModel):
     )
 
     model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# List
+# ---------------------------------------------------------------------------
+
+
+class VaultSummary(BaseModel):
+    """
+    Compact vault representation used in ``GET /vaults`` list responses.
+
+    Intentionally kept separate from :class:`VaultResponse` even though the
+    fields are currently identical.  The two models serve different semantic
+    roles:
+
+    * :class:`VaultResponse` is a **creation receipt** — returned with 201
+      after a vault is successfully scaffolded.
+    * :class:`VaultSummary` is a **list item** — one entry in the array
+      returned by the listing endpoint.
+
+    Keeping them separate means adding a field to one (e.g. ``file_count``
+    to ``VaultSummary``) never forces a change to the other.
+    """
+
+    vault_id: str = Field(
+        ...,
+        description="UUID4 that uniquely identifies the vault.",
+        examples=["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
+    )
+    name: str = Field(
+        ...,
+        description="Human-readable vault name as stored.",
+        examples=["My Private Notes"],
+    )
+    created_at: datetime = Field(
+        ...,
+        description="UTC timestamp of vault creation in ISO-8601 format.",
+    )
+    status: str = Field(
+        ...,
+        description="Current vault status.",
+        examples=["locked"],
+    )
+
+    model_config = {"from_attributes": True}
