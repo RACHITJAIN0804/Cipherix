@@ -26,6 +26,7 @@ from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.constants import APP_DESCRIPTION, APP_VERSION
 from app.core.logger import configure_logging, get_logger
+from app.api.router import api_router
 
 # ---------------------------------------------------------------------------
 # Bootstrap logging before anything else so that all subsequent imports
@@ -127,6 +128,12 @@ def create_app() -> FastAPI:
             status_code=500,
             content={"detail": "An internal server error occurred."},
         )
+
+    # ----------------------------------------------------------------
+    # Feature routers
+    # ----------------------------------------------------------------
+
+    application.include_router(api_router)
 
     # ----------------------------------------------------------------
     # Routes
