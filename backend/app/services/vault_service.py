@@ -24,9 +24,9 @@ manager during unit testing.
 """
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
-from app.core.exceptions import VaultCreationError, VaultManifestError, VaultValidationError
+from app.core.exceptions import VaultValidationError
 from app.core.logger import get_logger
 from app.schemas.vault import CreateVaultRequest, VaultResponse, VaultSummary
 from app.vault.manifest import VaultManifest

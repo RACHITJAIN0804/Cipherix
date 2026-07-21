@@ -92,7 +92,7 @@ class VaultManifest:
     # Serialisation
     # ------------------------------------------------------------------
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, str]:
         """Return a plain dictionary representation of the manifest."""
         return asdict(self)
 

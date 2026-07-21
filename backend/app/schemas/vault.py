@@ -64,18 +64,21 @@ class CreateVaultRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Response
+# Shared base (internal — not part of the public API surface)
 # ---------------------------------------------------------------------------
 
 
-class VaultResponse(BaseModel):
+class _VaultBase(BaseModel):
     """
-    Serialised vault data returned to the API consumer after successful
-    creation.
+    Internal base model holding the four fields common to every vault
+    response shape.
 
-    Only the fields that are safe and relevant for clients are exposed
-    here.  Internal implementation details (filesystem paths, encryption
-    keys, etc.) must never appear in this model.
+    Using a private base class eliminates field duplication while keeping
+    :class:`VaultResponse` and :class:`VaultSummary` as independent public
+    types.  Each subclass can add, override, or remove fields freely without
+    affecting the other.
+
+    This class is intentionally not exported.
     """
 
     vault_id: str = Field(
@@ -99,6 +102,22 @@ class VaultResponse(BaseModel):
     )
 
     model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# Response
+# ---------------------------------------------------------------------------
+
+
+class VaultResponse(_VaultBase):
+    """
+    Serialised vault data returned to the API consumer after successful
+    creation (``POST /vaults`` — HTTP 201).
+
+    Only the fields that are safe and relevant for clients are exposed
+    here.  Internal implementation details (filesystem paths, encryption
+    keys, etc.) must never appear in this model.
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -106,41 +125,20 @@ class VaultResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class VaultSummary(BaseModel):
+class VaultSummary(_VaultBase):
     """
-    Compact vault representation used in ``GET /vaults`` list responses.
+    Compact vault representation used in ``GET /vaults`` list responses
+    (HTTP 200).
 
-    Intentionally kept separate from :class:`VaultResponse` even though the
-    fields are currently identical.  The two models serve different semantic
-    roles:
+    Intentionally a separate class from :class:`VaultResponse` even though
+    the fields are currently identical.  The two models serve different
+    semantic roles:
 
-    * :class:`VaultResponse` is a **creation receipt** — returned with 201
-      after a vault is successfully scaffolded.
+    * :class:`VaultResponse` is a **creation receipt** — returned once,
+      immediately after a vault is scaffolded.
     * :class:`VaultSummary` is a **list item** — one entry in the array
       returned by the listing endpoint.
 
     Keeping them separate means adding a field to one (e.g. ``file_count``
     to ``VaultSummary``) never forces a change to the other.
     """
-
-    vault_id: str = Field(
-        ...,
-        description="UUID4 that uniquely identifies the vault.",
-        examples=["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
-    )
-    name: str = Field(
-        ...,
-        description="Human-readable vault name as stored.",
-        examples=["My Private Notes"],
-    )
-    created_at: datetime = Field(
-        ...,
-        description="UTC timestamp of vault creation in ISO-8601 format.",
-    )
-    status: str = Field(
-        ...,
-        description="Current vault status.",
-        examples=["locked"],
-    )
-
-    model_config = {"from_attributes": True}
