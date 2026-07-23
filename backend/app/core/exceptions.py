@@ -66,13 +66,14 @@ class VaultAlreadyExistsError(VaultError):
 
 class VaultValidationError(VaultError):
     """
-    Raised when the incoming vault creation request fails business-rule
-    validation *before* any filesystem work is attempted.
+    Raised when a request fails business-rule validation before any
+    filesystem work is attempted.
 
     Examples
     --------
-    * Name is blank after stripping whitespace.
-    * Name exceeds the allowed character limit.
+    * Vault name is blank after stripping whitespace.
+    * Vault name exceeds the allowed character limit.
+    * ``vault_id`` is not a well-formed UUID string.
     """
 
 
@@ -85,4 +86,24 @@ class VaultManifestError(VaultError):
     log it, and *skip* the offending vault rather than aborting the
     entire listing operation.  This preserves a best-effort read
     guarantee: one corrupt vault must never hide all other valid vaults.
+    """
+
+
+class VaultNotFoundError(VaultError):
+    """
+    Raised when a requested vault directory does not exist on disk.
+
+    This is the canonical "404" signal in the domain layer.  Routes
+    should catch it and return ``HTTP 404 Not Found`` to the client.
+    """
+
+
+class VaultDeletionError(VaultError):
+    """
+    Raised when the filesystem cannot remove a vault directory tree
+    (e.g. permission denied, directory in use on Windows, I/O error).
+
+    This represents a server-side failure — the vault existed and the
+    request was valid, but the OS prevented removal.  Routes should
+    map this to ``HTTP 500 Internal Server Error``.
     """

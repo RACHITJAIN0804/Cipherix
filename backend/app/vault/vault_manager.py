@@ -4,9 +4,9 @@ vault/vault_manager.py
 Filesystem orchestrator for vault operations.
 
 :class:`VaultManager` is responsible for all filesystem interactions:
-creating the directory tree for a new vault, and discovering and reading
-existing vaults from disk.  It knows nothing about HTTP, Pydantic, or
-business rules.
+creating the directory tree for a new vault, discovering and reading
+existing vaults from disk, and permanently deleting vault directories.
+It knows nothing about HTTP, Pydantic, or business rules.
 
 Vault layout on disk
 --------------------
@@ -33,9 +33,16 @@ Design decisions
   before any subdirectory is created.
 """
 
+import shutil
 from pathlib import Path
 
-from app.core.exceptions import VaultAlreadyExistsError, VaultCreationError, VaultManifestError
+from app.core.exceptions import (
+    VaultAlreadyExistsError,
+    VaultCreationError,
+    VaultDeletionError,
+    VaultManifestError,
+    VaultNotFoundError,
+)
 from app.core.logger import get_logger
 from app.vault.manifest import VaultManifest
 
@@ -99,6 +106,44 @@ class VaultManager:
         logger.info("Vault %r scaffolded at %s", manifest.name, vault_root)
         return vault_root
 
+    def delete_vault(self, vault_id: str) -> None:
+        """
+        Permanently and recursively delete a vault directory from disk.
+
+        Pre-deletion checks
+        -------------------
+        1. The vault directory (``<base>/<vault_id>/``) must exist.
+        2. A ``manifest.json`` must be present inside it.
+
+        These two checks together ensure we never silently delete an
+        unrelated directory that somehow shares the path — the manifest
+        is the authoritative marker that a path belongs to Cipherix.
+
+        Parameters
+        ----------
+        vault_id:
+            UUID4 string identifying the vault folder to remove.
+
+        Raises
+        ------
+        VaultNotFoundError
+            If the vault directory does not exist.
+        VaultManifestError
+            If the directory exists but contains no ``manifest.json``
+            (invalid vault structure).
+        VaultDeletionError
+            If the OS refuses to remove the directory tree.
+        """
+        vault_root = self._base / vault_id
+
+        logger.debug("Attempting to delete vault at %s", vault_root)
+
+        self._assert_vault_exists(vault_root, vault_id)
+        self._assert_manifest_present(vault_root, vault_id)
+        self._delete_vault_tree(vault_root, vault_id)
+
+        logger.info("Vault '%s' deleted successfully from %s", vault_id, vault_root)
+
     def list_vaults(self) -> list[VaultManifest]:
         """
         Discover and read all valid vaults from the base directory.
@@ -157,6 +202,57 @@ class VaultManager:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _assert_vault_exists(self, vault_root: Path, vault_id: str) -> None:
+        """Raise :class:`VaultNotFoundError` if the vault directory is absent.
+
+        ``Path.is_dir()`` returns ``False`` for both missing paths *and*
+        non-directory entries (files, symlinks), so a single call is
+        sufficient to guard against both cases without a TOCTOU split.
+        """
+        if not vault_root.is_dir():
+            raise VaultNotFoundError(
+                f"Vault directory not found: {vault_root}",
+                detail=f"No vault with ID '{vault_id}' exists.",
+            )
+
+    def _assert_manifest_present(self, vault_root: Path, vault_id: str) -> None:
+        """
+        Raise :class:`VaultManifestError` if ``manifest.json`` is missing.
+
+        A vault directory without a manifest is considered structurally
+        invalid.  Refusing to delete it protects against accidental removal
+        of unrelated directories that happen to share the same path.
+        """
+        manifest_path = vault_root / "manifest.json"
+        if not manifest_path.is_file():
+            raise VaultManifestError(
+                f"Vault '{vault_id}' is missing manifest.json — refusing deletion.",
+                detail=(
+                    f"Vault '{vault_id}' exists on disk but has no manifest.json. "
+                    "This may indicate a corrupt vault. Deletion was aborted."
+                ),
+            )
+
+    def _delete_vault_tree(self, vault_root: Path, vault_id: str) -> None:
+        """
+        Recursively remove the vault root directory and all its contents.
+
+        Uses :func:`shutil.rmtree` internally.  On Windows, files inside
+        the tree that are marked read-only will cause an ``OSError``;
+        this is surfaced as a :class:`VaultDeletionError`.
+        """
+        try:
+            shutil.rmtree(vault_root)
+            logger.debug("Vault tree removed at %s", vault_root)
+        except OSError as exc:
+            raise VaultDeletionError(
+                f"Failed to delete vault tree at {vault_root}: {exc}",
+                detail=(
+                    f"OS error while deleting vault '{vault_id}': {exc.strerror}. "
+                    "Check filesystem permissions."
+                ),
+            ) from exc
 
     def _create_vault_root(self, vault_root: Path, vault_id: str) -> None:
         """Create the top-level ``<vault_uuid>/`` directory."""

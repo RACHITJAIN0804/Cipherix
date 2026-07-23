@@ -22,9 +22,17 @@ for the manager.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 
 from app.core.config import settings
-from app.core.exceptions import CipherixError, VaultCreationError, VaultValidationError
+from app.core.exceptions import (
+    CipherixError,
+    VaultCreationError,
+    VaultDeletionError,
+    VaultManifestError,
+    VaultNotFoundError,
+    VaultValidationError,
+)
 from app.core.logger import get_logger
 from app.schemas.vault import CreateVaultRequest, VaultResponse, VaultSummary
 from app.services.vault_service import VaultService
@@ -175,6 +183,105 @@ async def list_vaults(
 
     except CipherixError as exc:
         logger.error("Vault listing failed unexpectedly | %s", exc.detail)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=exc.detail,
+        ) from exc
+
+
+@router.delete(
+    "/{vault_id}",
+    response_model=None,
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Permanently delete a vault",
+    description=(
+        "Permanently and recursively delete the vault identified by ``vault_id``. "
+        "The entire vault directory — including its manifest, encrypted data, "
+        "metadata, and temp folders — is removed from disk. "
+        "This action is **irreversible**."
+    ),
+    responses={
+        204: {"description": "Vault deleted successfully. No body is returned."},
+        400: {"description": "Invalid vault_id format (not a UUID)."},
+        404: {"description": "Vault with the given ID does not exist."},
+        409: {"description": "Vault exists but has an invalid structure (no manifest.json)."},
+        500: {"description": "Filesystem error prevented vault deletion."},
+    },
+)
+async def delete_vault(
+    vault_id: str,
+    service: VaultService = Depends(_get_vault_service),
+) -> Response:
+    """
+    ``DELETE /vaults/{vault_id}`` — permanently delete a vault.
+
+    Parameters
+    ----------
+    vault_id:
+        UUID4 string that identifies the vault to remove.
+    service:
+        Injected :class:`~app.services.vault_service.VaultService` instance.
+
+    Returns
+    -------
+    Response
+        HTTP 204 No Content on success.
+
+    Raises
+    ------
+    HTTPException(400)
+        If ``vault_id`` is not a valid UUID.
+    HTTPException(404)
+        If no vault with that ID exists on disk.
+    HTTPException(409)
+        If the vault directory exists but lacks ``manifest.json``.
+    HTTPException(500)
+        If the OS cannot remove the directory tree.
+    """
+    try:
+        service.delete_vault(vault_id)
+        logger.info("DELETE /vaults/%s succeeded", vault_id)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    except VaultValidationError as exc:
+        logger.warning("Vault deletion rejected: invalid ID | %s", exc.detail)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=exc.detail,
+        ) from exc
+
+    except VaultNotFoundError as exc:
+        logger.warning("Vault deletion failed: not found | vault_id=%s", vault_id)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=exc.detail,
+        ) from exc
+
+    except VaultManifestError as exc:
+        logger.error(
+            "Vault deletion aborted: corrupt structure | vault_id=%s | %s",
+            vault_id,
+            exc.detail,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=exc.detail,
+        ) from exc
+
+    except VaultDeletionError as exc:
+        logger.error(
+            "Vault deletion failed: OS error | vault_id=%s | %s",
+            vault_id,
+            exc.detail,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=exc.detail,
+        ) from exc
+
+    except CipherixError as exc:
+        # Final safety net for any other unforeseen domain error.
+        logger.error("Unexpected domain error during deletion | %s", exc.detail)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=exc.detail,

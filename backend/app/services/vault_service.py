@@ -26,7 +26,10 @@ manager during unit testing.
 import uuid
 from datetime import datetime
 
-from app.core.exceptions import VaultValidationError
+from app.core.exceptions import (
+    VaultError,
+    VaultValidationError,
+)
 from app.core.logger import get_logger
 from app.schemas.vault import CreateVaultRequest, VaultResponse, VaultSummary
 from app.vault.manifest import VaultManifest
@@ -37,7 +40,7 @@ logger = get_logger(__name__)
 
 class VaultService:
     """
-    Orchestrates vault creation and listing.
+    Orchestrates vault creation, listing, and deletion.
 
     Parameters
     ----------
@@ -99,6 +102,48 @@ class VaultService:
             created_at=datetime.fromisoformat(manifest.created_at),
             status=manifest.status,
         )
+
+    def delete_vault(self, vault_id: str) -> None:
+        """
+        Permanently delete an existing vault and all of its contents.
+
+        Flow
+        ----
+        1. Validate that ``vault_id`` is a well-formed UUID4 string.
+        2. Delegate filesystem removal to
+           :meth:`~app.vault.vault_manager.VaultManager.delete_vault`.
+        3. Log success or re-raise a typed domain exception on failure.
+
+        Parameters
+        ----------
+        vault_id:
+            The UUID4 string that identifies the vault to delete.
+
+        Raises
+        ------
+        VaultValidationError
+            If ``vault_id`` is not a valid UUID string.
+        VaultNotFoundError
+            If no vault with that ID exists on disk.
+        VaultManifestError
+            If the vault directory has no ``manifest.json`` (corrupt vault).
+        VaultDeletionError
+            If the OS prevents removing the directory tree.
+        """
+        self._validate_vault_id(vault_id)
+
+        logger.info("Initiating vault deletion | vault_id=%s", vault_id)
+
+        try:
+            self._manager.delete_vault(vault_id)
+        except VaultError:
+            # Let the route layer map the specific subclass to an HTTP status.
+            # Re-raise immediately; the manager already records the detail at
+            # DEBUG level, so we add one structured WARNING/ERROR here.
+            logger.warning("Vault deletion did not complete | vault_id=%s", vault_id)
+            raise
+
+        logger.info("Vault deleted successfully | vault_id=%s", vault_id)
 
     def list_vaults(self) -> list[VaultSummary]:
         """
@@ -173,3 +218,23 @@ class VaultService:
                 "Vault name must not be empty.",
                 detail="Provide a non-empty name between 3 and 50 characters.",
             )
+
+    def _validate_vault_id(self, vault_id: str) -> None:
+        """
+        Ensure ``vault_id`` is a valid UUID string before touching the filesystem.
+
+        Catching a malformed ID early prevents any path-traversal risk and
+        gives the caller a meaningful 400 instead of a cryptic 404.
+
+        Raises
+        ------
+        VaultValidationError
+            If ``vault_id`` cannot be parsed as a UUID.
+        """
+        try:
+            uuid.UUID(vault_id)
+        except ValueError as exc:
+            raise VaultValidationError(
+                f"Invalid vault ID: '{vault_id}'",
+                detail=f"'{vault_id}' is not a valid UUID. Provide a UUID4 vault identifier.",
+            ) from exc

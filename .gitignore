@@ -1,6 +1,48 @@
-*.pyc
+# Python
 __pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Environment Variables
 .env
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+logs/
+*.log
+
+# Database
 *.db
+*.sqlite3
+
+# OS Files
 .DS_Store
-node_modules/
+Thumbs.db
+
+# Build
+dist/
+build/
+
+# Python Packaging
+*.egg-info/
+
+# Models
+models/
+
+# Vector Database
+vector_db/
+
+# Vault Data
+vaults/
+
+# Temporary Files
+*.tmp
+*.bak
