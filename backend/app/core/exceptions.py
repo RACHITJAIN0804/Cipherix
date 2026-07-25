@@ -107,3 +107,18 @@ class VaultDeletionError(VaultError):
     request was valid, but the OS prevented removal.  Routes should
     map this to ``HTTP 500 Internal Server Error``.
     """
+
+
+class VaultStateError(VaultError):
+    """
+    Raised when a lock or unlock transition is a no-op.
+
+    Examples
+    --------
+    * Calling ``POST /vaults/{id}/lock`` on a vault that is already locked.
+    * Calling ``POST /vaults/{id}/unlock`` on a vault that is already unlocked.
+
+    Routes should map this to ``HTTP 409 Conflict`` so that callers
+    receive a clear signal that the vault is already in the desired state,
+    rather than a generic 400 or 500 response.
+    """

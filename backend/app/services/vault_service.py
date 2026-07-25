@@ -28,19 +28,31 @@ from datetime import datetime
 
 from app.core.exceptions import (
     VaultError,
+    VaultStateError,
     VaultValidationError,
 )
 from app.core.logger import get_logger
-from app.schemas.vault import CreateVaultRequest, VaultResponse, VaultSummary
-from app.vault.manifest import VaultManifest
+from app.schemas.vault import (
+    CreateVaultRequest,
+    VaultResponse,
+    VaultStateResponse,
+    VaultSummary,
+)
 from app.vault.vault_manager import VaultManager
 
 logger = get_logger(__name__)
 
+# ---------------------------------------------------------------------------
+# Module-level constants
+# ---------------------------------------------------------------------------
+
+_STATUS_LOCKED: str = "locked"
+_STATUS_UNLOCKED: str = "unlocked"
+
 
 class VaultService:
     """
-    Orchestrates vault creation, listing, and deletion.
+    Orchestrates vault creation, listing, deletion, and state transitions.
 
     Parameters
     ----------
@@ -193,9 +205,150 @@ class VaultService:
         logger.info("Listing vaults | count=%d", len(summaries))
         return summaries
 
+    def lock_vault(self, vault_id: str) -> VaultStateResponse:
+        """
+        Transition a vault to the locked state.
+
+        Delegates to :meth:`_transition_vault_state`.  Raises
+        :class:`VaultStateError` if the vault is already locked.
+
+        Parameters
+        ----------
+        vault_id:
+            UUID4 string that identifies the vault to lock.
+
+        Returns
+        -------
+        VaultStateResponse
+            Confirmation that the vault is now ``"locked"``.
+
+        Raises
+        ------
+        VaultValidationError
+            If ``vault_id`` is not a valid UUID.
+        VaultNotFoundError
+            If no vault with that ID exists on disk.
+        VaultManifestError
+            If ``manifest.json`` is absent, unreadable, or cannot be written.
+        VaultStateError
+            If the vault is already locked.
+        """
+        return self._transition_vault_state(
+            vault_id,
+            target_status=_STATUS_LOCKED,
+            current_label="locked",
+        )
+
+    def unlock_vault(self, vault_id: str) -> VaultStateResponse:
+        """
+        Transition a vault to the unlocked state.
+
+        Delegates to :meth:`_transition_vault_state`.  Raises
+        :class:`VaultStateError` if the vault is already unlocked.
+
+        Parameters
+        ----------
+        vault_id:
+            UUID4 string that identifies the vault to unlock.
+
+        Returns
+        -------
+        VaultStateResponse
+            Confirmation that the vault is now ``"unlocked"``.
+
+        Raises
+        ------
+        VaultValidationError
+            If ``vault_id`` is not a valid UUID.
+        VaultNotFoundError
+            If no vault with that ID exists on disk.
+        VaultManifestError
+            If ``manifest.json`` is absent, unreadable, or cannot be written.
+        VaultStateError
+            If the vault is already unlocked.
+        """
+        return self._transition_vault_state(
+            vault_id,
+            target_status=_STATUS_UNLOCKED,
+            current_label="unlocked",
+        )
+
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _transition_vault_state(
+        self,
+        vault_id: str,
+        target_status: str,
+        current_label: str,
+    ) -> VaultStateResponse:
+        """
+        Core implementation shared by :meth:`lock_vault` and :meth:`unlock_vault`.
+
+        Flow
+        ----
+        1. Validate ``vault_id`` is a well-formed UUID.
+        2. Read the current manifest from disk.
+        3. Guard against a no-op: raise :class:`VaultStateError` if the
+           vault is already in ``target_status``.
+        4. Delegate the status write to
+           :meth:`~app.vault.vault_manager.VaultManager.update_vault_status`.
+        5. Log the operation and return a :class:`VaultStateResponse`.
+
+        Parameters
+        ----------
+        vault_id:
+            UUID4 string that identifies the vault.
+        target_status:
+            The status string to transition to (``"locked"`` or ``"unlocked"``).
+        current_label:
+            Human-readable label for the target state, used in error messages
+            and log output (e.g. ``"locked"``, ``"unlocked"``).
+
+        Returns
+        -------
+        VaultStateResponse
+            Confirmation of the new vault state.
+
+        Raises
+        ------
+        VaultValidationError
+            If ``vault_id`` is not a valid UUID.
+        VaultNotFoundError
+            If no vault with that ID exists on disk.
+        VaultManifestError
+            If ``manifest.json`` is absent, unreadable, or cannot be written.
+        VaultStateError
+            If the vault is already in ``target_status``.
+        """
+        self._validate_vault_id(vault_id)
+        logger.info(
+            "Initiating vault %s | vault_id=%s", current_label, vault_id
+        )
+
+        manifest = self._manager.read_manifest(vault_id)
+
+        if manifest.status == target_status:
+            logger.warning(
+                "State transition rejected: vault already %s | vault_id=%s",
+                current_label,
+                vault_id,
+            )
+            raise VaultStateError(
+                f"Vault '{vault_id}' is already {current_label}.",
+                detail=(
+                    f"Vault '{vault_id}' is already in the '{target_status}' state. "
+                    "No change was made."
+                ),
+            )
+
+        self._manager.update_vault_status(vault_id, target_status)
+        logger.info(
+            "Vault %s successfully | vault_id=%s", current_label, vault_id
+        )
+
+        return VaultStateResponse(vault_id=vault_id, status=target_status)
 
     def _validate(self, request: CreateVaultRequest) -> None:
         """

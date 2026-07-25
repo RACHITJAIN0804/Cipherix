@@ -142,3 +142,42 @@ class VaultSummary(_VaultBase):
     Keeping them separate means adding a field to one (e.g. ``file_count``
     to ``VaultSummary``) never forces a change to the other.
     """
+
+
+# ---------------------------------------------------------------------------
+# State
+# ---------------------------------------------------------------------------
+
+
+class VaultStateResponse(BaseModel):
+    """
+    Returned by ``POST /vaults/{vault_id}/lock`` and
+    ``POST /vaults/{vault_id}/unlock``.
+
+    Intentionally minimal — a state-transition receipt only needs to
+    confirm *which* vault was affected and what its *new* status is.
+    Callers should not need to re-fetch the full vault listing just to
+    learn the outcome of a lock/unlock call.
+
+    Attributes
+    ----------
+    vault_id:
+        UUID4 string that identifies the vault whose state was changed.
+    status:
+        The vault's current status after the operation.
+        Either ``"locked"`` or ``"unlocked"``.
+    """
+
+    vault_id: str = Field(
+        ...,
+        description="UUID4 that uniquely identifies the vault.",
+        examples=["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
+    )
+    status: str = Field(
+        ...,
+        description="Current vault status after the state transition.",
+        examples=["locked", "unlocked"],
+    )
+
+    model_config = {"from_attributes": True}
+

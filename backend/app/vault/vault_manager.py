@@ -199,9 +199,122 @@ class VaultManager:
         logger.debug("Discovered %d valid vault(s) in %s", len(manifests), self._base)
         return manifests
 
+    def read_manifest(self, vault_id: str) -> VaultManifest:
+        """
+        Read and return the current ``manifest.json`` for a single vault.
+
+        This method is the canonical way for upper layers (e.g.
+        :class:`~app.services.vault_service.VaultService`) to inspect a
+        vault's state without touching the filesystem path directly.
+
+        Parameters
+        ----------
+        vault_id:
+            UUID4 string that identifies the vault folder.
+
+        Returns
+        -------
+        VaultManifest
+            The deserialised manifest as it currently exists on disk.
+
+        Raises
+        ------
+        VaultNotFoundError
+            If the vault directory does not exist.
+        VaultManifestError
+            If ``manifest.json`` is absent, unreadable, or malformed JSON.
+        """
+        return self._load_manifest(vault_id)
+
+    def update_vault_status(self, vault_id: str, new_status: str) -> None:
+        """
+        Mutate the ``status`` field in ``manifest.json`` and write it back.
+
+        This is the single, authoritative method for changing a vault's
+        lock state.  It reads the current manifest, applies the status
+        change in memory, then overwrites ``manifest.json`` on disk.
+
+        No encryption, password verification, or key management is
+        performed here — this is a pure state-flag update.
+
+        Parameters
+        ----------
+        vault_id:
+            UUID4 string identifying the target vault.
+        new_status:
+            The new status string to write.  Expected values are
+            ``"locked"`` and ``"unlocked"``.
+
+        Raises
+        ------
+        VaultNotFoundError
+            If the vault directory does not exist.
+        VaultManifestError
+            If ``manifest.json`` is absent, unreadable, malformed, or
+            cannot be written back (e.g. permission denied, disk full).
+        """
+        manifest = self._load_manifest(vault_id)
+        manifest_path = self._base / vault_id / "manifest.json"
+
+        logger.debug(
+            "Updating vault '%s' status: '%s' -> '%s'",
+            vault_id,
+            manifest.status,
+            new_status,
+        )
+
+        manifest.status = new_status
+
+        try:
+            manifest.write(manifest_path)
+        except OSError as exc:
+            raise VaultManifestError(
+                f"Failed to write updated manifest for vault '{vault_id}': {exc}",
+                detail=(
+                    f"OS error while updating manifest.json for vault "
+                    f"'{vault_id}': {exc.strerror}. Check filesystem permissions."
+                ),
+            ) from exc
+
+        logger.debug("manifest.json updated for vault '%s' (status=%s)", vault_id, new_status)
+
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _load_manifest(self, vault_id: str) -> VaultManifest:
+        """
+        Assert the vault exists and its manifest is present, then parse it.
+
+        This is the single, shared read pipeline used by both
+        :meth:`read_manifest` and :meth:`update_vault_status`.  Centralising
+        the three steps here means future changes (e.g. caching, retries)
+        only need to be made in one place.
+
+        Parameters
+        ----------
+        vault_id:
+            UUID4 string identifying the target vault.
+
+        Returns
+        -------
+        VaultManifest
+            The deserialised manifest.
+
+        Raises
+        ------
+        VaultNotFoundError
+            If the vault directory does not exist.
+        VaultManifestError
+            If ``manifest.json`` is absent, unreadable, or malformed JSON.
+        """
+        vault_root = self._base / vault_id
+        manifest_path = vault_root / "manifest.json"
+
+        self._assert_vault_exists(vault_root, vault_id)
+        self._assert_manifest_present(vault_root, vault_id)
+
+        return self._read_manifest(manifest_path, vault_id)
 
     def _assert_vault_exists(self, vault_root: Path, vault_id: str) -> None:
         """Raise :class:`VaultNotFoundError` if the vault directory is absent.
@@ -221,16 +334,16 @@ class VaultManager:
         Raise :class:`VaultManifestError` if ``manifest.json`` is missing.
 
         A vault directory without a manifest is considered structurally
-        invalid.  Refusing to delete it protects against accidental removal
-        of unrelated directories that happen to share the same path.
+        invalid.  This guard applies to all operations that require a
+        well-formed vault (read, delete, lock, unlock).
         """
         manifest_path = vault_root / "manifest.json"
         if not manifest_path.is_file():
             raise VaultManifestError(
-                f"Vault '{vault_id}' is missing manifest.json — refusing deletion.",
+                f"Vault '{vault_id}' is missing manifest.json.",
                 detail=(
                     f"Vault '{vault_id}' exists on disk but has no manifest.json. "
-                    "This may indicate a corrupt vault. Deletion was aborted."
+                    "This may indicate a corrupt vault."
                 ),
             )
 
