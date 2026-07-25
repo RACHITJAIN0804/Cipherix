@@ -38,6 +38,7 @@ from app.schemas.vault import (
     VaultStateResponse,
     VaultSummary,
 )
+from app.vault.manifest import VaultManifest
 from app.vault.vault_manager import VaultManager
 
 logger = get_logger(__name__)

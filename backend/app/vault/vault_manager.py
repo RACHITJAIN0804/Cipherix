@@ -17,7 +17,8 @@ Vault layout on disk
         ├── encrypted/      # future: AES-encrypted file blobs
         ├── metadata/       # future: per-file metadata records
         ├── temp/           # staging area for in-progress operations
-        └── manifest.json   # vault identity & status (written by VaultManifest)
+        ├── manifest.json   # vault identity & status (written by VaultManifest)
+        └── security.json   # cryptographic algorithm & init state (written by SecurityMetadataManager)
 
 Design decisions
 ----------------
@@ -37,6 +38,7 @@ import shutil
 from pathlib import Path
 
 from app.core.exceptions import (
+    SecurityMetadataError,
     VaultAlreadyExistsError,
     VaultCreationError,
     VaultDeletionError,
@@ -45,6 +47,7 @@ from app.core.exceptions import (
 )
 from app.core.logger import get_logger
 from app.vault.manifest import VaultManifest
+from app.vault.security_manager import SecurityMetadataManager
 
 logger = get_logger(__name__)
 
@@ -73,7 +76,16 @@ class VaultManager:
 
     def create(self, vault_id: str, manifest: VaultManifest) -> Path:
         """
-        Scaffold the vault directory tree and write ``manifest.json``.
+        Scaffold the vault directory tree, write ``manifest.json``, and
+        write ``security.json``.
+
+        Creation sequence
+        -----------------
+        1. Create the vault root directory (``<base>/<vault_id>/``).
+        2. Create the standard subdirectories (``encrypted/``, ``metadata/``,
+           ``temp/``).
+        3. Write ``manifest.json`` (vault identity and status).
+        4. Write ``security.json`` (cryptographic algorithm and init state).
 
         Parameters
         ----------
@@ -93,7 +105,8 @@ class VaultManager:
         VaultAlreadyExistsError
             If a directory already exists at the target path.
         VaultCreationError
-            If any other filesystem error occurs during creation.
+            If any filesystem error occurs during creation (directory
+            creation, manifest write, or security metadata write).
         """
         vault_root = self._base / vault_id
 
@@ -102,6 +115,7 @@ class VaultManager:
         self._create_vault_root(vault_root, vault_id)
         self._create_subdirectories(vault_root, vault_id)
         self._write_manifest(vault_root, manifest, vault_id)
+        self._write_security_metadata(vault_root, vault_id)
 
         logger.info("Vault %r scaffolded at %s", manifest.name, vault_root)
         return vault_root
@@ -411,6 +425,24 @@ class VaultManager:
             raise VaultCreationError(
                 f"Failed to write manifest.json for vault '{vault_id}'",
                 detail=f"OS error writing manifest: {exc.strerror}",
+            ) from exc
+
+    def _write_security_metadata(self, vault_root: Path, vault_id: str) -> None:
+        """
+        Write ``security.json`` to the vault root via
+        :class:`~app.vault.security_manager.SecurityMetadataManager`.
+
+        Delegates all I/O to :class:`SecurityMetadataManager` and re-wraps
+        any :class:`~app.core.exceptions.SecurityMetadataError` as a
+        :class:`~app.core.exceptions.VaultCreationError` so that
+        :meth:`create` exposes a single, consistent failure type.
+        """
+        try:
+            SecurityMetadataManager(vault_root).create(vault_id)
+        except SecurityMetadataError as exc:
+            raise VaultCreationError(
+                f"Failed to write security.json for vault '{vault_id}': {exc.message}",
+                detail=exc.detail,
             ) from exc
 
     def _read_manifest(

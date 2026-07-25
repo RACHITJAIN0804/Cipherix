@@ -122,3 +122,38 @@ class VaultStateError(VaultError):
     receive a clear signal that the vault is already in the desired state,
     rather than a generic 400 or 500 response.
     """
+
+
+# ---------------------------------------------------------------------------
+# Security errors
+# ---------------------------------------------------------------------------
+
+
+class SecurityMetadataNotFoundError(VaultError):
+    """
+    Raised when ``security.json`` is absent from a vault directory.
+
+    Every Cipherix vault must contain a ``security.json`` file that
+    records the cryptographic algorithm, key-derivation scheme, and
+    initialisation status.  A vault without this file is considered
+    structurally incomplete.
+
+    This is distinct from :class:`VaultManifestError` so that callers
+    can tell apart a missing *identity* file (``manifest.json``) from a
+    missing *cryptography* file (``security.json``).
+    """
+
+
+class SecurityMetadataError(VaultError):
+    """
+    Raised when ``security.json`` exists but cannot be read or parsed.
+
+    Examples
+    --------
+    * The file contains malformed JSON (e.g. truncated write).
+    * A required field (``algorithm``, ``key_derivation``, etc.) is absent.
+    * The file exists but cannot be opened due to a permissions error.
+
+    Callers should treat this as a corrupt-vault signal and handle it
+    the same way they would handle :class:`VaultManifestError`.
+    """
