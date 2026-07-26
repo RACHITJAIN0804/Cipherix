@@ -157,3 +157,42 @@ class SecurityMetadataError(VaultError):
     Callers should treat this as a corrupt-vault signal and handle it
     the same way they would handle :class:`VaultManifestError`.
     """
+
+
+# ---------------------------------------------------------------------------
+# Key management errors
+# ---------------------------------------------------------------------------
+
+
+class KeyMetadataNotFoundError(VaultError):
+    """
+    Raised when ``key.json`` is absent from a vault directory.
+
+    Every Cipherix vault must contain a ``key.json`` file that records
+    the key version, algorithm, and lifecycle status of the vault's
+    encryption key.  A vault without this file is considered
+    cryptographically incomplete.
+
+    This is distinct from :class:`SecurityMetadataNotFoundError` (which
+    covers ``security.json``) and :class:`VaultManifestError` (which
+    covers ``manifest.json``), giving callers precise signal about
+    *which* file is missing.
+    """
+
+
+class KeyMetadataError(VaultError):
+    """
+    Raised when ``key.json`` exists but cannot be read, parsed, or validated.
+
+    Examples
+    --------
+    * The file contains malformed JSON (e.g. truncated write).
+    * A required field (``key_version``, ``algorithm``, ``key_id``, etc.)
+      is absent or empty.
+    * The file exists but cannot be opened due to a permissions error.
+    * A field value has an unexpected type (e.g. integer instead of string).
+
+    Callers should treat this as a corrupt-vault signal.  The vault's
+    encryption posture is indeterminate until the file is repaired or
+    the vault is re-initialised.
+    """

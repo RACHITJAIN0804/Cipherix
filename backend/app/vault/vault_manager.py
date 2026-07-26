@@ -18,7 +18,8 @@ Vault layout on disk
         ├── metadata/       # future: per-file metadata records
         ├── temp/           # staging area for in-progress operations
         ├── manifest.json   # vault identity & status (written by VaultManifest)
-        └── security.json   # cryptographic algorithm & init state (written by SecurityMetadataManager)
+        ├── security.json   # cryptographic algorithm & init state (written by SecurityMetadataManager)
+        └── key.json        # key metadata & wrapped Vault Key (written by KeyManager)
 
 Design decisions
 ----------------
@@ -38,6 +39,7 @@ import shutil
 from pathlib import Path
 
 from app.core.exceptions import (
+    KeyMetadataError,
     SecurityMetadataError,
     VaultAlreadyExistsError,
     VaultCreationError,
@@ -46,6 +48,7 @@ from app.core.exceptions import (
     VaultNotFoundError,
 )
 from app.core.logger import get_logger
+from app.security.key_manager import KeyManager
 from app.vault.manifest import VaultManifest
 from app.vault.security_manager import SecurityMetadataManager
 
@@ -76,8 +79,8 @@ class VaultManager:
 
     def create(self, vault_id: str, manifest: VaultManifest) -> Path:
         """
-        Scaffold the vault directory tree, write ``manifest.json``, and
-        write ``security.json``.
+        Scaffold the vault directory tree, write ``manifest.json``,
+        ``security.json``, and ``key.json``.
 
         Creation sequence
         -----------------
@@ -86,6 +89,8 @@ class VaultManager:
            ``temp/``).
         3. Write ``manifest.json`` (vault identity and status).
         4. Write ``security.json`` (cryptographic algorithm and init state).
+        5. Generate a secure random Vault Key and write ``key.json``
+           (key metadata; raw key material is discarded immediately).
 
         Parameters
         ----------
@@ -106,7 +111,8 @@ class VaultManager:
             If a directory already exists at the target path.
         VaultCreationError
             If any filesystem error occurs during creation (directory
-            creation, manifest write, or security metadata write).
+            creation, manifest write, security metadata write, or key
+            metadata write).
         """
         vault_root = self._base / vault_id
 
@@ -116,6 +122,7 @@ class VaultManager:
         self._create_subdirectories(vault_root, vault_id)
         self._write_manifest(vault_root, manifest, vault_id)
         self._write_security_metadata(vault_root, vault_id)
+        self._write_key_metadata(vault_root, vault_id)
 
         logger.info("Vault %r scaffolded at %s", manifest.name, vault_root)
         return vault_root
@@ -442,6 +449,38 @@ class VaultManager:
         except SecurityMetadataError as exc:
             raise VaultCreationError(
                 f"Failed to write security.json for vault '{vault_id}': {exc.message}",
+                detail=exc.detail,
+            ) from exc
+
+    def _write_key_metadata(self, vault_root: Path, vault_id: str) -> None:
+        """
+        Generate a Vault Key and write ``key.json`` to the vault root via
+        :class:`~app.security.key_manager.KeyManager`.
+
+        Sequence
+        --------
+        1. Ask :class:`KeyManager` to generate a 256-bit random Vault Key.
+        2. Ask :class:`KeyManager` to persist the key *metadata* (never the
+           raw key) to ``key.json``.
+        3. Discard the raw ``vault_key_hex`` — it is never stored in the
+           plaintext form produced here.
+
+        Re-wraps any :class:`~app.core.exceptions.KeyMetadataError` as a
+        :class:`~app.core.exceptions.VaultCreationError` so that
+        :meth:`create` exposes a single, consistent failure type.
+        """
+        key_mgr = KeyManager(vault_root)
+        try:
+            vault_key_hex: str = key_mgr.generate_vault_key(vault_id)
+            key_mgr.create(vault_id, vault_key_hex)
+            # Remove the local name binding so raw key material is not
+            # reachable from this scope after create() returns.  The
+            # underlying string object is released when its reference
+            # count reaches zero (CPython) or when the GC next runs.
+            del vault_key_hex
+        except KeyMetadataError as exc:
+            raise VaultCreationError(
+                f"Failed to write key.json for vault '{vault_id}': {exc.message}",
                 detail=exc.detail,
             ) from exc
 
