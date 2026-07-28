@@ -80,6 +80,7 @@ _DEFAULT_KEY_VERSION: str = "1"
 # A vault key that has been generated but not yet wrapped by a Master Key.
 # The string value is an intentionally unambiguous sentinel — it is not a
 # hex value, a Base64 token, or any byte-string encoding.
+# Retained for backward-compatibility detection and migration guards.
 _PENDING_SENTINEL: str = "[PENDING_ENCRYPTION]"
 
 # Lifecycle states for a key record.
@@ -145,8 +146,6 @@ class KeyMetadata:
 
     # ------------------------------------------------------------------
     # Required fields — no default, must be supplied at construction time.
-    # The factory classmethod :meth:`create` is the canonical way to build
-    # a valid instance; direct construction should supply both fields.
     # ------------------------------------------------------------------
     created_at: str
     key_id: str
@@ -158,35 +157,44 @@ class KeyMetadata:
     algorithm: str = field(default=_DEFAULT_ALGORITHM)
     status: str = field(default=_STATUS_ACTIVE)
     encrypted_vault_key: str = field(default=_PENDING_SENTINEL)
+    nonce: str = field(default="")
+    # Base64-encoded 12-byte AES-GCM nonce stored alongside the
+    # encrypted Vault Key.  Empty string signals the vault pre-dates
+    # AES-256-GCM wrapping (migration required).
+
 
     # ------------------------------------------------------------------
     # Factory helpers
     # ------------------------------------------------------------------
 
     @classmethod
-    def create(cls) -> "KeyMetadata":
+    def create(
+        cls,
+        encrypted_vault_key: str,
+        nonce: str,
+    ) -> "KeyMetadata":
         """
         Build a brand-new :class:`KeyMetadata` for a vault created *now*.
 
         Generates a fresh ``key_id`` (128-bit random hex, globally unique)
-        and captures the current UTC timestamp.  All cryptographic algorithm
-        choices use their fixed defaults.
+        and captures the current UTC timestamp.
 
-        The ``encrypted_vault_key`` field is set to the sentinel
-        ``"[PENDING_ENCRYPTION]"`` because Master-Key wrapping is not yet
-        implemented.  A future milestone will accept the wrapped Vault Key
-        bytes and replace the sentinel with real ciphertext.
-
-        Raw Vault Key material is **never** accepted or stored here.
-        :class:`~app.security.key_manager.KeyManager` is responsible for
-        generating the Vault Key and will pass the wrapped form to this
-        model once wrapping is implemented.
+        Parameters
+        ----------
+        encrypted_vault_key:
+            Base64-encoded AES-256-GCM ciphertext of the Vault Key
+            (produced by
+            :meth:`~app.security.encryption.EncryptionManager.encode_for_storage`
+            after encryption).
+        nonce:
+            Base64-encoded 12-byte nonce used during encryption (also
+            produced by :meth:`~app.security.encryption.EncryptionManager.encode_for_storage`).
 
         Returns
         -------
         KeyMetadata
-            A fresh instance with ``status="active"`` and an unambiguous
-            placeholder for the wrapped key.
+            A fresh instance with ``status="active"`` and the wrapped Vault
+            Key stored as a Base64 string.
         """
         return cls(
             created_at=datetime.now(UTC).isoformat(),
@@ -194,9 +202,8 @@ class KeyMetadata:
             key_version=_DEFAULT_KEY_VERSION,
             algorithm=_DEFAULT_ALGORITHM,
             status=_STATUS_ACTIVE,
-            # Placeholder: will be replaced with Base64(AES-256-GCM(vault_key))
-            # once Argon2id key-derivation and key-wrapping are implemented.
-            encrypted_vault_key=_PENDING_SENTINEL,
+            encrypted_vault_key=encrypted_vault_key,
+            nonce=nonce,
         )
 
     # ------------------------------------------------------------------
@@ -233,6 +240,10 @@ class KeyMetadata:
         """
         Deserialise a ``key.json`` from disk into a :class:`KeyMetadata`.
 
+        Unknown fields are silently ignored for forward compatibility:
+        a ``key.json`` written by a newer version of Cipherix that added
+        extra metadata fields can still be read by this version.
+
         Parameters
         ----------
         path:
@@ -253,5 +264,9 @@ class KeyMetadata:
         TypeError
             If a field value has an unexpected type.
         """
+        import dataclasses
+
         data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
-        return cls(**data)
+        known: set[str] = {f.name for f in dataclasses.fields(cls)}
+        filtered: dict[str, Any] = {k: v for k, v in data.items() if k in known}
+        return cls(**filtered)

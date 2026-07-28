@@ -48,8 +48,10 @@ from app.core.exceptions import (
     VaultDeletionError,
     VaultManifestError,
     VaultNotFoundError,
+    VaultKeyEncryptionError,
 )
 from app.core.logger import get_logger
+from app.security.encryption import EncryptionManager
 from app.security.key_manager import KeyManager
 from app.security.password_manager import PasswordManager
 from app.vault.manifest import VaultManifest
@@ -96,8 +98,10 @@ class VaultManager:
            ``temp/``).
         3. Write ``manifest.json`` (vault identity and status).
         4. Write ``security.json`` (cryptographic algorithm and init state).
-        5. Generate a secure random Vault Key and write ``key.json``
-           (key metadata; raw key material is discarded immediately).
+        5. Generate a secure random Vault Key, derive the Master Key from the
+           user's password + salt, encrypt the Vault Key with AES-256-GCM,
+           and write ``key.json`` (stores only ciphertext + nonce; the raw
+           Vault Key and Master Key are discarded immediately).
         6. Generate a per-vault Argon2id salt and write
            ``password_meta.json`` (salt + KDF parameters; password and
            derived Master Key are never stored).
@@ -137,11 +141,15 @@ class VaultManager:
         self._create_subdirectories(vault_root, vault_id)
         self._write_manifest(vault_root, manifest, vault_id)
         self._write_security_metadata(vault_root, vault_id)
-        self._write_key_metadata(vault_root, vault_id)
-        self._write_password_metadata(vault_root, vault_id, password)
+        # _write_key_metadata owns both key.json and password_meta.json:
+        # it generates the vault key, derives the master key, encrypts the
+        # vault key with AES-256-GCM, writes key.json (ciphertext + nonce),
+        # and writes password_meta.json (salt + KDF params) in one atomic flow.
+        self._write_key_metadata(vault_root, vault_id, password)
 
         logger.info("Vault %r scaffolded at %s", manifest.name, vault_root)
         return vault_root
+
 
     def delete_vault(self, vault_id: str) -> None:
         """
@@ -468,37 +476,107 @@ class VaultManager:
                 detail=exc.detail,
             ) from exc
 
-    def _write_key_metadata(self, vault_root: Path, vault_id: str) -> None:
+    def _write_key_metadata(self, vault_root: Path, vault_id: str, password: str) -> None:
         """
-        Generate a Vault Key and write ``key.json`` to the vault root via
-        :class:`~app.security.key_manager.KeyManager`.
+        Generate, encrypt, and persist the Vault Key to ``key.json``.
 
         Sequence
         --------
-        1. Ask :class:`KeyManager` to generate a 256-bit random Vault Key.
-        2. Ask :class:`KeyManager` to persist the key *metadata* (never the
-           raw key) to ``key.json``.
-        3. Discard the raw ``vault_key_hex`` — it is never stored in the
-           plaintext form produced here.
+        1. Generate a 32-byte random Vault Key (OS CSPRNG).
+        2. Generate a 32-byte random Argon2id salt (OS CSPRNG).
+        3. Derive the ephemeral 32-byte Master Key from (password, salt)
+           using Argon2id (OWASP profile 2 parameters).
+        4. Generate a fresh 12-byte AES-GCM nonce (OS CSPRNG).
+        5. Encrypt the Vault Key with the Master Key using AES-256-GCM.
+        6. Base64-encode the ciphertext and nonce for JSON storage.
+        7. Write ``key.json`` containing the ciphertext, nonce, and
+           algorithm metadata.  No plaintext key material is written.
+        8. Immediately discard the raw Vault Key, Master Key, and salt
+           by deleting the local variable bindings.
 
-        Re-wraps any :class:`~app.core.exceptions.KeyMetadataError` as a
+        Re-wraps any key or encryption exception as a
         :class:`~app.core.exceptions.VaultCreationError` so that
         :meth:`create` exposes a single, consistent failure type.
         """
+        from app.core.exceptions import MissingSaltError  # local to avoid circular
+
         key_mgr = KeyManager(vault_root)
+        enc_mgr = EncryptionManager()
+        pwd_mgr = PasswordManager(vault_root)
+
         try:
+            # 1. Generate raw Vault Key
             vault_key_hex: str = key_mgr.generate_vault_key(vault_id)
-            key_mgr.create(vault_id, vault_key_hex)
-            # Remove the local name binding so raw key material is not
-            # reachable from this scope after create() returns.  The
-            # underlying string object is released when its reference
-            # count reaches zero (CPython) or when the GC next runs.
-            del vault_key_hex
-        except KeyMetadataError as exc:
+            vault_key_bytes: bytes = bytes.fromhex(vault_key_hex)
+
+            # 2 & 3. Generate salt and derive ephemeral Master Key
+            salt_hex: str = pwd_mgr.generate_salt()
+            master_key: bytes = pwd_mgr.derive_master_key(password, salt_hex)
+
+            # 4 & 5. Encrypt the Vault Key with AES-256-GCM
+            nonce: bytes = enc_mgr.generate_nonce()
+            ciphertext: bytes = enc_mgr.encrypt_vault_key(
+                vault_key=vault_key_bytes,
+                master_key=master_key,
+                nonce=nonce,
+            )
+
+            # 6. Base64-encode for JSON storage
+            encrypted_vault_key_b64: str = enc_mgr.encode_for_storage(ciphertext)
+            nonce_b64: str = enc_mgr.encode_for_storage(nonce)
+
+            # 7. Persist key.json (ciphertext + nonce only)
+            key_mgr.create(
+                vault_id=vault_id,
+                vault_key_hex=vault_key_hex,
+                encrypted_vault_key=encrypted_vault_key_b64,
+                nonce=nonce_b64,
+            )
+
+            # 8. Write password_meta.json with the salt used in step 3
+            pwd_mgr.write_metadata(vault_id, salt_hex)
+
+        except (KeyMetadataError, VaultKeyEncryptionError, InvalidKdfParamsError,
+                MissingSaltError) as exc:
             raise VaultCreationError(
-                f"Failed to write key.json for vault '{vault_id}': {exc.message}",
+                f"Failed to write key material for vault '{vault_id}': {exc.message}",
                 detail=exc.detail,
             ) from exc
+        finally:
+            # Explicitly release sensitive local variable bindings.
+            # CPython's reference counting means del is typically immediate.
+            # We use individual try/except NameError guards because an
+            # exception raised before a binding was created would cause
+            # NameError on the bare 'del' if we tried to delete all at once.
+            #
+            # NOTE: locals() called inside 'finally' does NOT include names
+            # from the 'try' block once the try block has exited, so we
+            # cannot use locals().get() here.  Individual del with NameError
+            # guards is the correct pattern.
+            try:
+                del vault_key_hex
+            except NameError:
+                pass
+            try:
+                del vault_key_bytes
+            except NameError:
+                pass
+            try:
+                del master_key
+            except NameError:
+                pass
+            try:
+                del salt_hex
+            except NameError:
+                pass
+            try:
+                del nonce
+            except NameError:
+                pass
+            try:
+                del ciphertext
+            except NameError:
+                pass
 
     def _read_manifest(
         self, manifest_path: Path, vault_dir_name: str
@@ -539,35 +617,3 @@ class VaultManager:
                 ),
             ) from exc
 
-    def _write_password_metadata(
-        self, vault_root: Path, vault_id: str, password: str
-    ) -> None:
-        """
-        Generate a per-vault Argon2id salt and write ``password_meta.json``.
-
-        Sequence
-        --------
-        1. Instantiate :class:`~app.security.password_manager.PasswordManager`
-           scoped to ``vault_root``.
-        2. Generate a cryptographically secure random salt (OS CSPRNG).
-        3. Persist the salt and KDF parameters to ``password_meta.json``.
-
-        The password and any derived Master Key are **never** stored on disk.
-        Only the salt and algorithm parameters are written.
-
-        Re-wraps any :class:`~app.core.exceptions.InvalidKdfParamsError` or
-        :class:`~app.core.exceptions.MissingSaltError` as a
-        :class:`~app.core.exceptions.VaultCreationError` so that
-        :meth:`create` exposes a single, consistent failure type.
-        """
-        from app.core.exceptions import MissingSaltError  # local to avoid circular
-
-        pwd_mgr = PasswordManager(vault_root)
-        try:
-            salt_hex: str = pwd_mgr.generate_salt()
-            pwd_mgr.write_metadata(vault_id, salt_hex)
-        except (InvalidKdfParamsError, MissingSaltError) as exc:
-            raise VaultCreationError(
-                f"Failed to write password_meta.json for vault '{vault_id}': {exc.message}",
-                detail=exc.detail,
-            ) from exc

@@ -161,20 +161,23 @@ class KeyManager:
 
         return vault_key_hex
 
-    def create(self, vault_id: str, vault_key_hex: str) -> KeyMetadata:
+    def create(
+        self,
+        vault_id: str,
+        vault_key_hex: str,
+        encrypted_vault_key: str,
+        nonce: str,
+    ) -> KeyMetadata:
         """
         Write a fresh ``key.json`` to the vault root.
 
-        Constructs a :class:`~app.security.models.KeyMetadata`, serialises
-        it to disk, and returns the metadata object for the caller's
-        inspection.
+        Constructs a :class:`~app.security.models.KeyMetadata` with the
+        AES-256-GCM-wrapped Vault Key, serialises it to disk, and returns
+        the metadata object for the caller's inspection.
 
-        The raw ``vault_key_hex`` is **not** stored in the JSON file at
-        this milestone.  The ``"[PENDING_ENCRYPTION]"`` sentinel is written
-        instead, until Master-Key wrapping is implemented.  The parameter
-        is accepted now so that the public interface does not change when
-        wrapping is added: the caller will pass the raw key and this method
-        will wrap it before persisting.
+        The raw ``vault_key_hex`` is accepted so that the caller's naming
+        convention is unambiguous — callers must still discard the raw key
+        immediately after this call.
 
         Parameters
         ----------
@@ -182,8 +185,14 @@ class KeyManager:
             UUID4 string used in log and error messages.
         vault_key_hex:
             The raw Vault Key produced by :meth:`generate_vault_key`.
-            Currently unused for storage; reserved for the wrapping
-            milestone.
+            Accepted here for interface symmetry; the raw bytes must be
+            discarded by the caller immediately after this method returns.
+        encrypted_vault_key:
+            Base64-encoded AES-256-GCM ciphertext of the Vault Key,
+            produced by
+            :class:`~app.security.encryption.EncryptionManager`.
+        nonce:
+            Base64-encoded 12-byte nonce used during encryption.
 
         Returns
         -------
@@ -201,7 +210,10 @@ class KeyManager:
             self._key_path,
         )
 
-        metadata: KeyMetadata = KeyMetadata.create()
+        metadata: KeyMetadata = KeyMetadata.create(
+            encrypted_vault_key=encrypted_vault_key,
+            nonce=nonce,
+        )
 
         try:
             metadata.write(self._key_path)
@@ -372,6 +384,7 @@ class KeyManager:
             "status": metadata.status,
             "encrypted_vault_key": metadata.encrypted_vault_key,
             "key_id": metadata.key_id,
+            "nonce": metadata.nonce,
         }
 
         for field_name, value in required_fields.items():

@@ -271,3 +271,96 @@ class InvalidKdfParamsError(PasswordError):
     further cryptographic operations until the vault is re-initialised or
     repaired.
     """
+
+
+# ---------------------------------------------------------------------------
+# Encryption errors
+# ---------------------------------------------------------------------------
+
+
+class EncryptionError(CipherixError):
+    """
+    Base class for all AES-256-GCM encryption and decryption errors.
+
+    Catch this in places where you want to handle any encryption failure
+    without distinguishing between encrypt, decrypt, nonce, or corruption
+    failures.
+    """
+
+
+class VaultKeyEncryptionError(EncryptionError):
+    """
+    Raised when AES-256-GCM encryption of the Vault Key fails.
+
+    Examples
+    --------
+    * The ``master_key`` or ``vault_key`` supplied to
+      :meth:`~app.security.encryption.EncryptionManager.encrypt_vault_key`
+      is not exactly 32 bytes.
+    * The ``nonce`` is not exactly 12 bytes.
+    * The underlying cryptographic operation raises an unexpected error.
+
+    Routes should map this to ``HTTP 500 Internal Server Error``.  The
+    Vault Key has **not** been stored when this exception is raised.
+    """
+
+
+class VaultKeyDecryptionError(EncryptionError):
+    """
+    Raised when AES-256-GCM decryption of the Vault Key fails.
+
+    The most common cause is an incorrect password (which produces a wrong
+    Master Key and therefore a GCM authentication tag mismatch).
+
+    Examples
+    --------
+    * The GCM authentication tag does not verify (wrong password, tampered
+      ``key.json``, or wrong nonce).
+    * The ciphertext stored in ``key.json`` is too short to be valid.
+    * A ``key.json`` field that should contain Base64 contains garbage.
+
+    Routes should map this to ``HTTP 401 Unauthorized`` (wrong password)
+    or ``HTTP 500 Internal Server Error`` (structural corruption).  In
+    either case **no plaintext Vault Key bytes are exposed**.
+    """
+
+
+class InvalidNonceError(EncryptionError):
+    """
+    Raised when the nonce stored in or supplied to
+    :class:`~app.security.encryption.EncryptionManager` has the wrong
+    length or is otherwise unusable.
+
+    AES-256-GCM requires exactly 12 bytes (96 bits) per NIST SP 800-38D.
+    Any other length is rejected before the cryptographic operation runs.
+
+    Examples
+    --------
+    * The ``nonce`` field in ``key.json`` decodes from Base64 to a byte
+      string that is not exactly 12 bytes (corrupt file).
+    * A nonce produced by a non-standard source is passed directly.
+
+    Routes should map this to ``HTTP 500 Internal Server Error`` and treat
+    the vault as structurally corrupt.
+    """
+
+
+class CorruptedVaultKeyError(EncryptionError):
+    """
+    Raised when ``key.json`` is present and parseable but the encrypted
+    Vault Key envelope fails structural validation before any decryption is
+    attempted.
+
+    Examples
+    --------
+    * ``encrypted_vault_key`` in ``key.json`` is still the legacy sentinel
+      ``"[PENDING_ENCRYPTION]"`` — the vault was created before AES-256-GCM
+      wrapping was implemented and has never been migrated.
+    * ``encrypted_vault_key`` decodes to fewer bytes than the minimum valid
+      AES-256-GCM ciphertext (1 plaintext byte + 16-byte authentication tag).
+    * The ``algorithm`` field in ``key.json`` is not ``"AES-256-GCM"``.
+
+    Routes should map this to ``HTTP 500 Internal Server Error`` and treat
+    the vault as requiring re-initialisation or migration.
+    """
+
