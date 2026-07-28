@@ -30,6 +30,10 @@ class CreateVaultRequest(BaseModel):
     Pydantic trims leading/trailing whitespace via ``str.strip()`` in
     the validator *before* the length check runs, so a name of ``"  ab  "``
     is normalised to ``"ab"`` and then rejected for being too short.
+
+    The ``password`` field is used solely to initialise the Argon2id key
+    derivation for this vault.  It is **never** echoed in any response,
+    logged in plaintext, or stored on disk.
     """
 
     name: str = Field(
@@ -38,6 +42,14 @@ class CreateVaultRequest(BaseModel):
         max_length=50,
         description="Human-readable vault name (3–50 characters after trimming).",
         examples=["My Private Notes", "Work Projects"],
+    )
+    password: str = Field(
+        ...,
+        min_length=8,
+        description=(
+            "Vault password used to derive the Master Key via Argon2id. "
+            "Minimum 8 characters.  Never stored or logged."
+        ),
     )
 
     @field_validator("name", mode="before")

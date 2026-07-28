@@ -105,7 +105,7 @@ class VaultService:
 
         manifest = VaultManifest.create(vault_id=vault_id, name=request.name)
 
-        self._manager.create(vault_id=vault_id, manifest=manifest)
+        self._manager.create(vault_id=vault_id, manifest=manifest, password=request.password)
 
         logger.info("Vault created successfully | id=%s | name=%r", vault_id, request.name)
 

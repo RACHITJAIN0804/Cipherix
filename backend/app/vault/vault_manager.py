@@ -17,9 +17,10 @@ Vault layout on disk
         ├── encrypted/      # future: AES-encrypted file blobs
         ├── metadata/       # future: per-file metadata records
         ├── temp/           # staging area for in-progress operations
-        ├── manifest.json   # vault identity & status (written by VaultManifest)
-        ├── security.json   # cryptographic algorithm & init state (written by SecurityMetadataManager)
-        └── key.json        # key metadata & wrapped Vault Key (written by KeyManager)
+        ├── manifest.json        # vault identity & status (written by VaultManifest)
+        ├── security.json        # cryptographic algorithm & init state (written by SecurityMetadataManager)
+        ├── key.json             # key metadata & wrapped Vault Key (written by KeyManager)
+        └── password_meta.json  # Argon2id salt & KDF parameters (written by PasswordManager)
 
 Design decisions
 ----------------
@@ -39,6 +40,7 @@ import shutil
 from pathlib import Path
 
 from app.core.exceptions import (
+    InvalidKdfParamsError,
     KeyMetadataError,
     SecurityMetadataError,
     VaultAlreadyExistsError,
@@ -49,6 +51,7 @@ from app.core.exceptions import (
 )
 from app.core.logger import get_logger
 from app.security.key_manager import KeyManager
+from app.security.password_manager import PasswordManager
 from app.vault.manifest import VaultManifest
 from app.vault.security_manager import SecurityMetadataManager
 
@@ -77,10 +80,14 @@ class VaultManager:
     # Public API
     # ------------------------------------------------------------------
 
-    def create(self, vault_id: str, manifest: VaultManifest) -> Path:
+    def create(
+        self,
+        vault_id: str,
+        manifest: VaultManifest,
+        password: str,
+    ) -> Path:
         """
-        Scaffold the vault directory tree, write ``manifest.json``,
-        ``security.json``, and ``key.json``.
+        Scaffold the vault directory tree and write all metadata files.
 
         Creation sequence
         -----------------
@@ -91,6 +98,9 @@ class VaultManager:
         4. Write ``security.json`` (cryptographic algorithm and init state).
         5. Generate a secure random Vault Key and write ``key.json``
            (key metadata; raw key material is discarded immediately).
+        6. Generate a per-vault Argon2id salt and write
+           ``password_meta.json`` (salt + KDF parameters; password and
+           derived Master Key are never stored).
 
         Parameters
         ----------
@@ -99,6 +109,11 @@ class VaultManager:
         manifest:
             Pre-built :class:`~app.vault.manifest.VaultManifest` to
             serialise as ``manifest.json`` inside the vault root.
+        password:
+            The user's chosen vault password.  Used solely to generate and
+            validate the Argon2id salt written to ``password_meta.json``.
+            The password and any derived Master Key are **never** stored on
+            disk.
 
         Returns
         -------
@@ -111,8 +126,8 @@ class VaultManager:
             If a directory already exists at the target path.
         VaultCreationError
             If any filesystem error occurs during creation (directory
-            creation, manifest write, security metadata write, or key
-            metadata write).
+            creation, manifest write, security metadata write, key
+            metadata write, or password metadata write).
         """
         vault_root = self._base / vault_id
 
@@ -123,6 +138,7 @@ class VaultManager:
         self._write_manifest(vault_root, manifest, vault_id)
         self._write_security_metadata(vault_root, vault_id)
         self._write_key_metadata(vault_root, vault_id)
+        self._write_password_metadata(vault_root, vault_id, password)
 
         logger.info("Vault %r scaffolded at %s", manifest.name, vault_root)
         return vault_root
@@ -521,4 +537,37 @@ class VaultManager:
                     f"Vault '{vault_dir_name}' has a malformed or unreadable "
                     f"manifest.json and will be skipped."
                 ),
+            ) from exc
+
+    def _write_password_metadata(
+        self, vault_root: Path, vault_id: str, password: str
+    ) -> None:
+        """
+        Generate a per-vault Argon2id salt and write ``password_meta.json``.
+
+        Sequence
+        --------
+        1. Instantiate :class:`~app.security.password_manager.PasswordManager`
+           scoped to ``vault_root``.
+        2. Generate a cryptographically secure random salt (OS CSPRNG).
+        3. Persist the salt and KDF parameters to ``password_meta.json``.
+
+        The password and any derived Master Key are **never** stored on disk.
+        Only the salt and algorithm parameters are written.
+
+        Re-wraps any :class:`~app.core.exceptions.InvalidKdfParamsError` or
+        :class:`~app.core.exceptions.MissingSaltError` as a
+        :class:`~app.core.exceptions.VaultCreationError` so that
+        :meth:`create` exposes a single, consistent failure type.
+        """
+        from app.core.exceptions import MissingSaltError  # local to avoid circular
+
+        pwd_mgr = PasswordManager(vault_root)
+        try:
+            salt_hex: str = pwd_mgr.generate_salt()
+            pwd_mgr.write_metadata(vault_id, salt_hex)
+        except (InvalidKdfParamsError, MissingSaltError) as exc:
+            raise VaultCreationError(
+                f"Failed to write password_meta.json for vault '{vault_id}': {exc.message}",
+                detail=exc.detail,
             ) from exc

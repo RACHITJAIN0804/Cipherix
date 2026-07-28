@@ -196,3 +196,78 @@ class KeyMetadataError(VaultError):
     encryption posture is indeterminate until the file is repaired or
     the vault is re-initialised.
     """
+
+
+# ---------------------------------------------------------------------------
+# Password / key-derivation errors
+# ---------------------------------------------------------------------------
+
+
+class PasswordError(CipherixError):
+    """Base class for all password and key-derivation errors."""
+
+
+class InvalidPasswordError(PasswordError):
+    """
+    Raised when a password supplied to
+    :class:`~app.security.password_manager.PasswordManager` is empty,
+    contains only whitespace, or otherwise fails pre-derivation validation.
+
+    This is a *client input* error — the user provided an unusable password.
+    Routes should map this to ``HTTP 422 Unprocessable Entity`` or
+    ``HTTP 400 Bad Request``.
+
+    Examples
+    --------
+    * Password is an empty string.
+    * Password is a string of only spaces or control characters.
+
+    .. note::
+        This exception is **not** raised when a password is merely *wrong*
+        (i.e. produces a Master Key that does not match the expected key).
+        Wrong-password failures are signalled by a ``False`` return value
+        from :meth:`~app.security.password_manager.PasswordManager.verify_password`
+        or by an AES-GCM authentication tag mismatch (future milestone).
+    """
+
+
+class MissingSaltError(PasswordError):
+    """
+    Raised when ``password_meta.json`` is absent from a vault directory,
+    or when the ``salt`` field within it is empty, null, or not valid
+    hexadecimal.
+
+    Every Cipherix vault that has been initialised with a password must
+    contain a ``password_meta.json`` file that records the per-vault salt
+    and Argon2id parameters.  Without the salt, the Master Key cannot be
+    re-derived and the vault cannot be unlocked.
+
+    Examples
+    --------
+    * ``password_meta.json`` does not exist (vault created before this
+      milestone, or file was deleted).
+    * The ``"salt"`` key is present but its value is ``null`` or ``""``.
+    * The ``"salt"`` value is not valid hexadecimal.
+    """
+
+
+class InvalidKdfParamsError(PasswordError):
+    """
+    Raised when the Argon2id KDF parameters stored in
+    ``password_meta.json`` are structurally invalid or cannot be used
+    for key derivation.
+
+    Examples
+    --------
+    * A required field (``time_cost``, ``memory_cost``, ``parallelism``,
+      ``hash_len``) is missing from the ``"kdf"`` object.
+    * ``time_cost`` is zero or negative (Argon2id requires at least 1).
+    * ``memory_cost`` is below the Argon2id minimum of 8 KiB.
+    * ``hash_len`` is less than 4 bytes.
+    * The ``"kdf"`` object itself is absent from ``password_meta.json``.
+    * The file exists but cannot be written (I/O error during initialisation).
+
+    Callers should treat this as a corrupt-vault signal and prevent any
+    further cryptographic operations until the vault is re-initialised or
+    repaired.
+    """
