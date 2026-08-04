@@ -392,6 +392,125 @@ class EncryptionManager:
 
         return vault_key
 
+    def encrypt_bytes(
+        self,
+        plaintext: bytes,
+        vault_key: bytes,
+        nonce: bytes,
+    ) -> bytes:
+        """
+        Encrypt arbitrary plaintext bytes with a Vault Key using AES-256-GCM.
+
+        Unlike :meth:`encrypt_vault_key`, this method does **not** validate
+        the length of ``plaintext`` — it may be any non-negative number of
+        bytes, making it suitable for encrypting documents of any size.
+
+        Parameters
+        ----------
+        plaintext:
+            Raw bytes to encrypt (e.g. the content of an uploaded file).
+        vault_key:
+            Raw 32-byte (256-bit) Vault Key.
+        nonce:
+            12-byte nonce produced by :meth:`generate_nonce`.  Must be
+            fresh and unique for every (vault_key, document) pair.
+
+        Returns
+        -------
+        bytes
+            AES-256-GCM ciphertext with the 128-bit GCM authentication tag
+            appended.  Total length = ``len(plaintext) + 16`` bytes.
+
+        Raises
+        ------
+        VaultKeyEncryptionError
+            If ``vault_key`` is not 32 bytes, or ``nonce`` is not 12 bytes.
+        """
+        self._validate_key_bytes(vault_key, "vault_key")
+        self._validate_nonce(nonce)
+
+        logger.debug(
+            "Encrypting document bytes (algorithm=%s, plaintext_bytes=%d)",
+            ALGORITHM_LABEL,
+            len(plaintext),
+        )
+
+        try:
+            ciphertext: bytes = AESGCM(vault_key).encrypt(nonce, plaintext, None)
+        except ValueError as exc:
+            raise VaultKeyEncryptionError(
+                f"Document encryption failed: {exc}",
+                detail="AES-256-GCM document encryption could not complete.",
+            ) from exc
+
+        logger.info(
+            "Document encrypted (algorithm=%s, ciphertext_bytes=%d)",
+            ALGORITHM_LABEL,
+            len(ciphertext),
+        )
+        return ciphertext
+
+    def decrypt_bytes(
+        self,
+        ciphertext: bytes,
+        vault_key: bytes,
+        nonce: bytes,
+    ) -> bytes:
+        """
+        Decrypt AES-256-GCM ciphertext produced by :meth:`encrypt_bytes`.
+
+        Parameters
+        ----------
+        ciphertext:
+            Encrypted bytes including the appended 16-byte GCM tag.
+        vault_key:
+            Raw 32-byte Vault Key used during encryption.
+        nonce:
+            Raw 12-byte nonce used during encryption.
+
+        Returns
+        -------
+        bytes
+            Decrypted plaintext bytes.
+
+        Raises
+        ------
+        VaultKeyDecryptionError
+            If the GCM authentication tag does not verify (wrong key, wrong
+            nonce, tampered data) or if the ciphertext is too short.
+        VaultKeyEncryptionError
+            If ``vault_key`` is not 32 bytes or ``nonce`` is not 12 bytes.
+        """
+        self._validate_key_bytes(vault_key, "vault_key")
+        self._validate_nonce(nonce)
+        self._validate_ciphertext(ciphertext)
+
+        try:
+            plaintext: bytes = AESGCM(vault_key).decrypt(nonce, ciphertext, None)
+        except InvalidTag:
+            logger.warning(
+                "Document decryption failed: GCM authentication tag mismatch."
+            )
+            raise VaultKeyDecryptionError(
+                "Document decryption failed: authentication tag mismatch.",
+                detail=(
+                    "The GCM authentication tag did not verify.  The document "
+                    "blob may be corrupt, or the wrong Vault Key was supplied."
+                ),
+            )
+        except Exception as exc:
+            raise VaultKeyDecryptionError(
+                f"Document decryption failed unexpectedly: {type(exc).__name__}",
+                detail="An unexpected error occurred during document decryption.",
+            ) from exc
+
+        logger.info(
+            "Document decrypted (algorithm=%s, plaintext_bytes=%d)",
+            ALGORITHM_LABEL,
+            len(plaintext),
+        )
+        return plaintext
+
     def encode_for_storage(self, data: bytes) -> str:
         """
         Base64-encode raw bytes for safe storage in ``key.json``.

@@ -3,3 +3,5 @@ uvicorn[standard]
 pydantic
 pydantic-settings
 python-dotenv
+argon2-cffi
+cryptography

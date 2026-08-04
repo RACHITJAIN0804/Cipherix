@@ -364,3 +364,95 @@ class CorruptedVaultKeyError(EncryptionError):
     the vault as requiring re-initialisation or migration.
     """
 
+
+# ---------------------------------------------------------------------------
+# Document errors
+# ---------------------------------------------------------------------------
+
+
+class DocumentError(CipherixError):
+    """
+    Base class for all document-related errors.
+
+    Catch this in places where you want to handle any document operation
+    failure without distinguishing between specific subtypes.
+    """
+
+
+class VaultLockedError(DocumentError):
+    """
+    Raised when an operation is attempted on a vault that is currently locked.
+
+    All document operations (upload, list, delete) require an unlocked vault
+    so that the Vault Key can be derived and used for encryption/decryption.
+
+    Routes should map this to ``HTTP 423 Locked`` or ``HTTP 403 Forbidden``
+    to give the client a clear signal that they need to unlock the vault first.
+    """
+
+
+class DocumentNotFoundError(DocumentError):
+    """
+    Raised when a requested document does not exist in the vault.
+
+    Examples
+    --------
+    * ``GET /vaults/{vault_id}/documents/{document_id}`` — document does
+      not exist.
+    * ``DELETE /vaults/{vault_id}/documents/{document_id}`` — trying to
+      delete a document that has already been deleted or never uploaded.
+
+    Routes should map this to ``HTTP 404 Not Found``.
+    """
+
+
+class DocumentEncryptionError(DocumentError):
+    """
+    Raised when AES-256-GCM encryption of a document fails.
+
+    Examples
+    --------
+    * The Vault Key could not be decrypted (wrong password or corrupt
+      ``key.json``).
+    * The underlying AES-GCM operation raised an unexpected error.
+
+    Routes should map this to ``HTTP 500 Internal Server Error``.  The
+    document has **not** been stored when this exception is raised.
+    """
+
+
+class InvalidUploadError(DocumentError):
+    """
+    Raised when the uploaded file fails validation before any filesystem
+    or cryptographic work is attempted.
+
+    Examples
+    --------
+    * No file was included in the multipart request.
+    * The original filename is absent, empty, or contains path-traversal
+      sequences (e.g. ``../../etc/passwd``).
+    * The filename contains characters not permitted by the filesystem
+      policy (e.g. null bytes, leading dots beyond a normal hidden-file).
+    * The file content is empty (zero-byte upload).
+
+    Routes should map this to ``HTTP 422 Unprocessable Entity`` or
+    ``HTTP 400 Bad Request``.
+    """
+
+
+class DocumentStorageError(DocumentError):
+    """
+    Raised when the filesystem cannot write, read, or delete a document's
+    encrypted content or metadata file.
+
+    Examples
+    --------
+    * Permission denied when writing ``encrypted/<document_id>.bin``.
+    * Permission denied when writing ``metadata/<document_id>.json``.
+    * Disk full during an upload.
+    * OS-level I/O error on the metadata directory.
+
+    Routes should map this to ``HTTP 500 Internal Server Error``.
+    """
+
+
