@@ -126,6 +126,7 @@ Extensibility notes
 """
 
 import base64
+import hashlib
 import os
 
 from cryptography.exceptions import InvalidTag
@@ -578,6 +579,42 @@ class EncryptionManager:
                     f"as Base64: {exc}.  The file may be corrupt."
                 ),
             ) from exc
+
+    def compute_sha256(self, data: bytes) -> str:
+        """
+        Return the hex-encoded SHA-256 digest of ``data``.
+
+        Used to produce an integrity fingerprint of encrypted document blobs
+        immediately after encryption.  Only ciphertext is ever passed here —
+        plaintext documents are never hashed directly.
+
+        Parameters
+        ----------
+        data:
+            Raw bytes to hash.  For document integrity, this must be the
+            AES-256-GCM ciphertext (including the 16-byte GCM tag), never
+            the plaintext.
+
+        Returns
+        -------
+        str
+            Lowercase hex string of the 256-bit (32-byte) SHA-256 digest.
+            Example: ``"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"``.
+
+        Extensibility
+        -------------
+        * **Algorithm agility**: add an ``algorithm`` parameter defaulting to
+          ``"sha256"`` and forward it to :func:`hashlib.new`.  Callers store
+          the algorithm name alongside the hash so future readers know which
+          function to use for verification.
+        * **Streaming**: replace the single ``hashlib.sha256(data)`` call with
+          a loop that feeds chunks of a file object so large blobs do not need
+          to be loaded fully into memory.
+        * **Blockchain notarization**: the returned hex digest is exactly the
+          value you would publish to a smart contract or an anchoring service
+          (e.g. OpenTimestamps) — no transformation needed.
+        """
+        return hashlib.sha256(data).hexdigest()
 
     def validate_envelope(
         self,

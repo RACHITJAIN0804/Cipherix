@@ -1,7 +1,8 @@
 """
 services/document_service.py
 -----------------------------
-Business-logic layer for document upload, listing, deletion, and download.
+Business-logic layer for document upload, listing, deletion, download,
+and integrity verification.
 
 :class:`DocumentService` sits between the API route (HTTP concerns) and
 the storage/cryptography layers.  Its responsibilities are:
@@ -14,8 +15,10 @@ the storage/cryptography layers.  Its responsibilities are:
 3. **Orchestrate** decryption: read the ciphertext blob, read the metadata
    sidecar, unwrap the Vault Key, decrypt in memory — never writing plaintext
    to disk.
-4. **Compose** Pydantic response objects from storage dataclasses.
-5. **Translate** domain exceptions into a form the route layer can act on.
+4. **Verify integrity**: read the encrypted blob, recompute its SHA-256 hash,
+   compare against the stored hash.  No password or key material required.
+5. **Compose** Pydantic response objects from storage dataclasses.
+6. **Translate** domain exceptions into a form the route layer can act on.
 
 This layer intentionally knows nothing about FastAPI, HTTP status codes,
 or JSON serialisation.  Those concerns belong to the route.
@@ -28,21 +31,29 @@ Filename sanitisation policy
   filesystem path (the UUID document_id is used instead).
 """
 
+import hmac
 import re
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 
 from app.core.exceptions import (
     CipherixError,
+    CorruptedDocumentError,
     DocumentEncryptionError,
     DocumentNotFoundError,
+    IntegrityVerificationError,
     InvalidUploadError,
+    MissingIntegrityMetadataError,
     VaultLockedError,
     VaultNotFoundError,
 )
 from app.core.logger import get_logger
-from app.schemas.document import DocumentListResponse, DocumentResponse
+from app.schemas.document import (
+    DocumentListResponse,
+    DocumentResponse,
+    VerifyIntegrityResponse,
+)
 from app.security.encryption import EncryptionManager
 from app.security.key_manager import KeyManager
 from app.security.password_manager import PasswordManager
@@ -162,15 +173,14 @@ class DocumentService:
         vault_key: bytes = self._unwrap_vault_key(vault_root, vault_id, password)
 
         try:
-            # --- Step 6 & 7: Generate nonce, encrypt ---
             nonce: bytes = self._enc_mgr.generate_nonce()
             ciphertext: bytes = self._enc_mgr.encrypt_bytes(
                 plaintext=file_bytes,
                 vault_key=vault_key,
                 nonce=nonce,
             )
-
             nonce_b64: str = self._enc_mgr.encode_for_storage(nonce)
+            sha256_ciphertext: str = self._enc_mgr.compute_sha256(ciphertext)
 
         except CipherixError:
             # Re-raise typed domain errors without wrapping.
@@ -202,14 +212,16 @@ class DocumentService:
             mime_type=mime_type,
             size=len(file_bytes),
             nonce=nonce_b64,
+            sha256_ciphertext=sha256_ciphertext,
         )
 
         doc_mgr.write_metadata(metadata=metadata, vault_id=vault_id)
 
         logger.info(
-            "Document upload complete | vault_id=%s | document_id=%s",
+            "Document upload complete | vault_id=%s | document_id=%s | sha256=%s",
             vault_id,
             document_id,
+            sha256_ciphertext[:16] + "...",
         )
 
         return self._metadata_to_response(metadata)
@@ -394,10 +406,134 @@ class DocumentService:
 
         return plaintext, metadata
 
+    def verify_document(
+        self,
+        vault_id: str,
+        document_id: str,
+    ) -> VerifyIntegrityResponse:
+        """
+        Verify the integrity of a stored encrypted document.
+
+        Reads the encrypted blob from disk, recomputes its SHA-256 hash,
+        and compares it against the hash recorded at upload time.  No password
+        or Vault Key is required — this check operates entirely on ciphertext.
+
+        Flow
+        ----
+        1. Assert the vault exists (need not be unlocked).
+        2. Read the metadata sidecar; raise :class:`MissingIntegrityMetadataError`
+           if ``sha256_ciphertext`` is absent (document predates this milestone).
+        3. Read the encrypted blob; raise :class:`CorruptedDocumentError` if
+           the file is missing or unreadable.
+        4. Recompute ``sha256(ciphertext)`` via :class:`EncryptionManager`.
+        5. Compare with stored hash using :func:`hmac.compare_digest` to
+           prevent timing-oracle attacks.
+        6. Raise :class:`IntegrityVerificationError` on mismatch.
+        7. Return :class:`~app.schemas.document.VerifyIntegrityResponse`.
+
+        Parameters
+        ----------
+        vault_id:
+            UUID4 identifying the vault containing the document.
+        document_id:
+            UUID4 identifying the document to verify.
+
+        Returns
+        -------
+        VerifyIntegrityResponse
+            ``{"verified": True, "document_id": ..., "checked_at": ...}``
+
+        Raises
+        ------
+        VaultNotFoundError
+            If the vault directory does not exist.
+        DocumentNotFoundError
+            If the metadata sidecar does not exist.
+        MissingIntegrityMetadataError
+            If the metadata has no ``sha256_ciphertext`` field (document
+            uploaded before this milestone).
+        CorruptedDocumentError
+            If the encrypted blob file is missing or cannot be read.
+        IntegrityVerificationError
+            If the recomputed hash does not match the stored hash.
+        """
+        vault_root = self._assert_vault_exists(vault_id)
+
+        doc_mgr = DocumentManager(vault_root)
+
+        metadata: DocumentMetadata = doc_mgr.read_metadata(document_id, vault_id)
+
+        if not metadata.sha256_ciphertext:
+            raise MissingIntegrityMetadataError(
+                f"Document '{document_id}' has no integrity hash recorded.",
+                detail=(
+                    "This document was uploaded before integrity verification was "
+                    "introduced.  Re-upload the document to generate a baseline hash."
+                ),
+            )
+
+        try:
+            ciphertext: bytes = doc_mgr.read_blob(document_id, vault_id)
+        except DocumentNotFoundError as exc:
+            raise CorruptedDocumentError(
+                f"Encrypted blob missing for document '{document_id}' "
+                f"in vault '{vault_id}' during integrity check.",
+                detail=(
+                    "The metadata sidecar exists but the encrypted blob file does not. "
+                    "The document may have been partially deleted or is corrupt."
+                ),
+            ) from exc
+        except Exception as exc:
+            raise CorruptedDocumentError(
+                f"Cannot read encrypted blob for document '{document_id}': {exc}",
+                detail=f"OS error reading encrypted blob: {exc}",
+            ) from exc
+
+        computed_hash: str = self._enc_mgr.compute_sha256(ciphertext)
+        stored_hash: str = metadata.sha256_ciphertext
+
+        logger.debug(
+            "Integrity check | vault_id=%s | document_id=%s | stored=%s | computed=%s",
+            vault_id,
+            document_id,
+            stored_hash[:16] + "...",
+            computed_hash[:16] + "...",
+        )
+
+        if not hmac.compare_digest(computed_hash, stored_hash):
+            logger.warning(
+                "Integrity check FAILED | vault_id=%s | document_id=%s",
+                vault_id,
+                document_id,
+            )
+            raise IntegrityVerificationError(
+                f"Integrity check failed for document '{document_id}' "
+                f"in vault '{vault_id}': hash mismatch.",
+                detail=(
+                    "The SHA-256 hash of the stored encrypted document does not match "
+                    "the hash recorded at upload time.  The document may have been "
+                    "tampered with or corrupted after upload."
+                ),
+            )
+
+        checked_at = datetime.now(UTC).isoformat()
+
+        logger.info(
+            "Integrity check PASSED | vault_id=%s | document_id=%s | checked_at=%s",
+            vault_id,
+            document_id,
+            checked_at,
+        )
+
+        return VerifyIntegrityResponse(
+            verified=True,
+            document_id=document_id,
+            checked_at=checked_at,
+        )
+
     # ------------------------------------------------------------------
     # Private: vault state helpers
     # ------------------------------------------------------------------
-
 
     def _vault_root(self, vault_id: str) -> Path:
         """Return the vault root directory path for a given vault_id."""

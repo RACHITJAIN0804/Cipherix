@@ -31,15 +31,23 @@ from fastapi.responses import Response, StreamingResponse
 from app.core.config import settings
 from app.core.exceptions import (
     CipherixError,
+    CorruptedDocumentError,
     DocumentEncryptionError,
     DocumentNotFoundError,
     DocumentStorageError,
+    IntegrityError,
+    IntegrityVerificationError,
     InvalidUploadError,
+    MissingIntegrityMetadataError,
     VaultLockedError,
     VaultNotFoundError,
 )
 from app.core.logger import get_logger
-from app.schemas.document import DocumentListResponse, DocumentResponse
+from app.schemas.document import (
+    DocumentListResponse,
+    DocumentResponse,
+    VerifyIntegrityResponse,
+)
 from app.services.document_service import DocumentService
 
 logger = get_logger(__name__)
@@ -73,7 +81,7 @@ def _get_document_service() -> DocumentService:
 # ---------------------------------------------------------------------------
 
 
-def _map_document_exception(exc: Exception, vault_id: str) -> None:
+def _map_document_exception(exc: Exception) -> None:
     """
     Map a domain exception to the appropriate :class:`HTTPException`.
 
@@ -98,6 +106,16 @@ def _map_document_exception(exc: Exception, vault_id: str) -> None:
     if isinstance(exc, InvalidUploadError):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.detail
+        ) from exc
+
+    # IntegrityVerificationError and MissingIntegrityMetadataError both extend
+    # IntegrityError and both map to 409 Conflict.
+    if isinstance(exc, IntegrityError):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.detail) from exc
+
+    if isinstance(exc, CorruptedDocumentError):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=exc.detail
         ) from exc
 
     if isinstance(exc, (DocumentEncryptionError, DocumentStorageError)):
@@ -171,7 +189,52 @@ async def upload_document(
         )
         return response
     except Exception as exc:  # noqa: BLE001
-        _map_document_exception(exc, vault_id)
+        _map_document_exception(exc)
+
+
+@router.get(
+    "/{vault_id}/documents/{document_id}/verify",
+    response_model=VerifyIntegrityResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Verify encrypted document integrity",
+    description=(
+        "Recompute the SHA-256 hash of the stored encrypted blob and compare "
+        "it against the hash recorded at upload time.  No password is required "
+        "— this check operates entirely on ciphertext and never decrypts. "
+        "Returns ``{\"verified\": true}`` on success.  Returns HTTP 409 if the "
+        "hash does not match or if the document predates integrity verification."
+    ),
+    responses={
+        200: {"description": "Integrity verified — hash matches."},
+        404: {"description": "Vault or document not found."},
+        409: {"description": "Hash mismatch or missing integrity metadata."},
+        500: {"description": "Blob unreadable or storage failure."},
+    },
+)
+async def verify_document_integrity(
+    vault_id: str,
+    document_id: str,
+    service: DocumentService = Depends(_get_document_service),
+) -> VerifyIntegrityResponse:
+    """
+    ``GET /vaults/{vault_id}/documents/{document_id}/verify`` — integrity check.
+
+    No Vault Key or password is needed.  The check reads the ciphertext from
+    disk, recomputes its SHA-256 hash, and compares with the stored hash.
+    """
+    try:
+        result = service.verify_document(
+            vault_id=vault_id,
+            document_id=document_id,
+        )
+        logger.info(
+            "GET /vaults/%s/documents/%s/verify PASSED",
+            vault_id,
+            document_id,
+        )
+        return result
+    except Exception as exc:  # noqa: BLE001
+        _map_document_exception(exc)
 
 
 @router.get(
@@ -204,7 +267,7 @@ async def list_documents(
         )
         return result
     except Exception as exc:  # noqa: BLE001
-        _map_document_exception(exc, vault_id)
+        _map_document_exception(exc)
 
 
 @router.get(
@@ -272,7 +335,7 @@ async def download_document(
             },
         )
     except Exception as exc:  # noqa: BLE001
-        _map_document_exception(exc, vault_id)
+        _map_document_exception(exc)
 
 
 @router.delete(
@@ -305,4 +368,4 @@ async def delete_document(
         )
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except Exception as exc:  # noqa: BLE001
-        _map_document_exception(exc, vault_id)
+        _map_document_exception(exc)

@@ -456,3 +456,75 @@ class DocumentStorageError(DocumentError):
     """
 
 
+# ---------------------------------------------------------------------------
+# Integrity errors
+# ---------------------------------------------------------------------------
+
+
+class IntegrityError(DocumentError):
+    """Base class for all document integrity verification errors."""
+
+
+class IntegrityVerificationError(IntegrityError):
+    """
+    Raised when the SHA-256 hash of a stored encrypted document does not match
+    the hash recorded in its metadata sidecar at upload time.
+
+    This signals that the encrypted blob has been **modified or corrupted**
+    after it was written.  The modification could be:
+
+    * External tampering (an attacker or unauthorized process overwrote the file).
+    * Silent data corruption (storage layer bit-rot, incomplete write, etc.).
+    * A bug in a write path that clobbered the file.
+
+    Note that this exception says nothing about whether the *plaintext* is
+    intact — only that the ciphertext on disk differs from what was stored.
+    AES-GCM would also detect such corruption at decryption time, but this
+    check is faster (no password or Vault Key required) and can be run as a
+    standalone health check.
+
+    Extensibility
+    -------------
+    * **Digital signatures**: store a Ed25519 signature of the hash alongside
+      it so that tampering by the server itself can be detected by the client.
+    * **Blockchain notarization**: publish ``sha256_ciphertext`` to an
+      immutable ledger at upload time; verification compares the current hash
+      against the on-chain record rather than the local metadata.
+    * **Audit history**: emit an audit event here so every failed verification
+      is permanently recorded with vault, document, timestamp, and both hashes.
+
+    Routes should map this to ``HTTP 409 Conflict`` or ``HTTP 422 Unprocessable
+    Entity`` to indicate that the resource exists but its integrity cannot be
+    confirmed.
+    """
+
+
+class MissingIntegrityMetadataError(IntegrityError):
+    """
+    Raised when a document's metadata sidecar does not contain a
+    ``sha256_ciphertext`` field.
+
+    This happens when a document was uploaded before integrity hashing was
+    introduced (i.e. before this milestone).  The document may be perfectly
+    valid, but it cannot be verified because no baseline hash was recorded.
+
+    Routes should map this to ``HTTP 409 Conflict`` with a message explaining
+    that the document predates integrity verification and must be re-uploaded
+    to generate a baseline hash.
+    """
+
+
+class CorruptedDocumentError(IntegrityError):
+    """
+    Raised when a document's encrypted blob cannot be read or is structurally
+    invalid during an integrity verification attempt.
+
+    This is distinct from :class:`IntegrityVerificationError`:
+
+    * ``CorruptedDocumentError`` — the file cannot even be *read* cleanly
+      (missing, zero-byte, or OS-level I/O failure).
+    * ``IntegrityVerificationError`` — the file was read successfully but
+      its hash does not match the stored hash.
+
+    Routes should map this to ``HTTP 500 Internal Server Error``.
+    """

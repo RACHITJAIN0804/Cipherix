@@ -54,8 +54,8 @@ Extensibility notes
   remain unchanged.
 * **Document versioning** — add a ``versions/`` subdirectory alongside
   ``encrypted/``; archive old blobs there on re-upload.
-* **Integrity** — add a ``sha256`` field to the metadata JSON and verify it
-  on read in :meth:`read_blob`.
+* **Integrity** — ``sha256_ciphertext`` is stored in the metadata JSON and
+  verified on demand via the ``GET /verify`` endpoint.
 * **Cloud backends** — swap the ``Path.write_bytes`` / ``Path.read_bytes``
   calls for SDK calls to S3, GCS, or Azure Blob.  The service layer does
   not change.
@@ -65,7 +65,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Optional
 
 from app.core.exceptions import DocumentNotFoundError, DocumentStorageError
 from app.core.logger import get_logger
@@ -127,6 +127,13 @@ class DocumentMetadata:
         Base64-encoded 12-byte AES-GCM nonce prepended to every blob.
         Stored here (not in the blob itself) so the decryption path can
         read the nonce without parsing the binary format.
+    sha256_ciphertext:
+        Lowercase hex SHA-256 digest of the **ciphertext** blob, computed
+        immediately after AES-256-GCM encryption at upload time.  ``None``
+        for documents uploaded before integrity verification was introduced.
+        This field is the basis for the ``GET /verify`` endpoint and is
+        the value that would be published to a blockchain anchor or
+        digital-signature scheme.  Plaintext is never hashed.
     """
 
     document_id: str
@@ -136,6 +143,7 @@ class DocumentMetadata:
     uploaded_at: str
     nonce: str
     encryption_version: str = field(default=ENCRYPTION_VERSION)
+    sha256_ciphertext: Optional[str] = field(default=None)
 
     # ------------------------------------------------------------------
     # Factory helpers
@@ -149,6 +157,7 @@ class DocumentMetadata:
         mime_type: str,
         size: int,
         nonce: str,
+        sha256_ciphertext: str,
     ) -> "DocumentMetadata":
         """
         Build a fresh :class:`DocumentMetadata` for a document being stored *now*.
@@ -166,6 +175,9 @@ class DocumentMetadata:
             Plaintext byte length of the uploaded file.
         nonce:
             Base64-encoded 12-byte AES-GCM nonce used for this document.
+        sha256_ciphertext:
+            Lowercase hex SHA-256 digest of the ciphertext blob, computed
+            immediately after AES-256-GCM encryption.
         """
         return cls(
             document_id=document_id,
@@ -173,6 +185,7 @@ class DocumentMetadata:
             mime_type=mime_type,
             size=size,
             nonce=nonce,
+            sha256_ciphertext=sha256_ciphertext,
             uploaded_at=datetime.now(UTC).isoformat(),
         )
 

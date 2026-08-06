@@ -115,3 +115,54 @@ class DocumentListResponse(BaseModel):
         default_factory=list,
         description="Document metadata entries, sorted by upload time descending.",
     )
+
+
+# ---------------------------------------------------------------------------
+# Integrity verification response
+# ---------------------------------------------------------------------------
+
+
+class VerifyIntegrityResponse(BaseModel):
+    """
+    Response returned by ``GET /vaults/{vault_id}/documents/{document_id}/verify``.
+
+    A successful response indicates that the SHA-256 hash of the stored
+    encrypted blob matches the hash recorded at upload time.  This means the
+    ciphertext has not been modified or corrupted since it was written.
+
+    The stored hash (``sha256_ciphertext``) is intentionally **not** included
+    in the response to avoid giving attackers a reference value they could use
+    to craft a replacement blob.
+
+    Extensibility
+    -------------
+    * **Digital signature**: add a ``signature`` field containing an Ed25519
+      signature of the hash so clients can verify it independently.
+    * **Algorithm field**: add ``hash_algorithm: str = "sha256"`` for
+      future algorithm agility.
+    * **Blockchain anchor**: add ``blockchain_tx_id: str | None`` for an
+      optional reference to an on-chain notarization record.
+    * **Audit trail**: this response shape is the canonical record format for
+      an append-only integrity audit log.
+    """
+
+    verified: bool = Field(
+        ...,
+        description=(
+            "``true`` when the stored hash matches the recomputed hash. "
+            "This field is always ``true`` in a 200 response — a mismatch "
+            "raises an error rather than returning ``false``."
+        ),
+    )
+    document_id: str = Field(
+        ...,
+        description="UUID4 of the document that was verified.",
+        examples=["550e8400-e29b-41d4-a716-446655440000"],
+    )
+    checked_at: str = Field(
+        ...,
+        description="UTC ISO-8601 timestamp at which verification was performed.",
+        examples=["2026-08-06T08:00:00.000000+00:00"],
+    )
+
+    model_config = {"from_attributes": True}
