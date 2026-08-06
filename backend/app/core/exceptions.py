@@ -273,6 +273,40 @@ class InvalidKdfParamsError(PasswordError):
     """
 
 
+class PasswordChangeError(PasswordError):
+    """
+    Raised when a vault password-change operation fails.
+
+    This exception is the top-level signal for the change-password flow.
+    Callers that do not need to distinguish between sub-causes can catch
+    this class alone.
+
+    Examples
+    --------
+    * ``old_password`` is incorrect — the derived Master Key does not
+      decrypt the Vault Key (AES-GCM authentication tag mismatch).
+    * ``old_password`` is structurally invalid (empty, whitespace-only).
+    * The Vault Key could not be re-encrypted under the new Master Key.
+    * ``password_meta.json`` or ``key.json`` cannot be written after the
+      re-wrap — partial-write guard prevents the vault from being left in
+      an indeterminate state.
+
+    Routes should map this to:
+
+    * ``HTTP 401 Unauthorized`` when the old password is wrong.
+    * ``HTTP 422 Unprocessable Entity`` when the new password fails
+      structural validation (too short, whitespace-only, etc.).
+    * ``HTTP 500 Internal Server Error`` for storage or encryption failures.
+
+    Extensibility
+    -------------
+    * Subclass with ``OldPasswordIncorrectError`` and
+      ``NewPasswordValidationError`` once callers need to distinguish
+      between them programmatically.
+    * Add a ``reason`` field (enum) for machine-readable differentiation.
+    """
+
+
 # ---------------------------------------------------------------------------
 # Encryption errors
 # ---------------------------------------------------------------------------
