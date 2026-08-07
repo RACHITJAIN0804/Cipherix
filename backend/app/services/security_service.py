@@ -1,4 +1,4 @@
-﻿"""
+"""
 services/security_service.py
 ------------------------------
 Business-logic layer for vault security operations.
@@ -86,11 +86,15 @@ from app.core.exceptions import (
     VaultNotFoundError,
 )
 from app.core.logger import get_logger
-from app.schemas.security import ChangePasswordResponse
+from app.schemas.security import (
+    ChangePasswordResponse,
+    RecoverySeedResponse,
+    VerifySeedResponse,
+)
 from app.security.encryption import EncryptionManager
 from app.security.key_manager import KeyManager
-from app.security.models import KeyMetadata
 from app.security.password_manager import PasswordManager
+from app.security.recovery import RecoveryManager
 from app.vault.manifest import VaultManifest
 
 logger = get_logger(__name__)
@@ -311,6 +315,119 @@ class SecurityService:
                     del locals()[key_var]
                 except KeyError:
                     pass
+
+    # ------------------------------------------------------------------
+    # Recovery seed
+    # ------------------------------------------------------------------
+
+    def generate_recovery_seed(
+        self,
+        vault_id: str,
+    ) -> RecoverySeedResponse:
+        """
+        Generate a BIP-39 24-word recovery seed for a vault.
+
+        The seed is generated, returned in the response, and **never**
+        written to disk.  Only the seed fingerprint (SHA-256 prefix) is
+        stored in ``recovery_meta.json`` so future verification calls can
+        confirm a candidate seed without access to the plaintext.
+
+        Parameters
+        ----------
+        vault_id:
+            UUID4 identifying the target vault.
+
+        Returns
+        -------
+        RecoverySeedResponse
+            Contains the plaintext seed (shown once, then discarded),
+            the algorithm label, word count, and generation timestamp.
+
+        Raises
+        ------
+        VaultNotFoundError
+            If the vault directory does not exist.
+        VaultLockedError
+            If the vault is not in the ``unlocked`` state.
+        OSError
+            If ``recovery_meta.json`` cannot be written.
+        """
+        vault_root = self._assert_vault_unlocked(vault_id)
+        recovery_mgr = RecoveryManager(vault_root)
+
+        seed: str = recovery_mgr.generate_seed(vault_id)
+        fingerprint: str = recovery_mgr.compute_fingerprint(seed)
+        metadata = recovery_mgr.write_metadata(
+            vault_id=vault_id,
+            seed_fingerprint=fingerprint,
+        )
+
+        logger.info(
+            "Recovery seed generation complete | vault_id=%s | algorithm=%s",
+            vault_id,
+            metadata.algorithm,
+        )
+
+        return RecoverySeedResponse(
+            vault_id=vault_id,
+            seed=seed,
+            algorithm=metadata.algorithm,
+            word_count=len(seed.split()),
+            created_at=metadata.created_at,
+        )
+
+    def verify_recovery_seed(
+        self,
+        vault_id: str,
+        candidate_seed: str,
+    ) -> VerifySeedResponse:
+        """
+        Validate a candidate recovery seed against the stored fingerprint.
+
+        Verification does **not** grant access to any key material.  It only
+        confirms that the candidate is the same seed that was generated for
+        this vault.  Actual vault recovery is a future milestone.
+
+        Parameters
+        ----------
+        vault_id:
+            UUID4 identifying the target vault.
+        candidate_seed:
+            The recovery seed provided by the user.
+
+        Returns
+        -------
+        VerifySeedResponse
+            ``valid=True`` if the seed is a valid BIP-39 mnemonic that
+            matches the stored fingerprint; ``False`` if the fingerprint
+            does not match.
+
+        Raises
+        ------
+        VaultNotFoundError
+            If the vault directory does not exist.
+        InvalidRecoverySeedError
+            If the candidate fails BIP-39 structural validation.
+        RecoveryMetadataMissingError
+            If no recovery seed has been generated for this vault.
+        UnsupportedRecoveryVersionError
+            If the stored ``recovery_version`` is not supported.
+        """
+        vault_root = self._assert_vault_exists(vault_id)
+        recovery_mgr = RecoveryManager(vault_root)
+
+        valid: bool = recovery_mgr.validate_seed(
+            candidate=candidate_seed,
+            vault_id=vault_id,
+        )
+
+        logger.info(
+            "Recovery seed verification | vault_id=%s | valid=%s",
+            vault_id,
+            valid,
+        )
+
+        return VerifySeedResponse(vault_id=vault_id, valid=valid)
 
     # ------------------------------------------------------------------
     # Private helpers

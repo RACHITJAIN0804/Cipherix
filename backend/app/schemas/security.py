@@ -1,4 +1,4 @@
-﻿"""
+"""
 schemas/security.py
 -------------------
 Pydantic models for the public API contract of security operations.
@@ -82,6 +82,115 @@ class ChangePasswordResponse(BaseModel):
         ...,
         description="UTC ISO-8601 timestamp at which the re-wrap completed.",
         examples=["2026-08-06T08:00:00.000000+00:00"],
+    )
+
+    model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# Recovery seed — generation
+# ---------------------------------------------------------------------------
+
+
+class RecoverySeedResponse(BaseModel):
+    """
+    Returned by ``POST /vaults/{vault_id}/recovery-seed`` (HTTP 201).
+
+    This is the **only** API response that contains the plaintext recovery
+    seed.  It is returned exactly once, immediately after generation.  It
+    is never stored server-side and cannot be retrieved again.
+
+    The client is responsible for displaying the seed to the user and
+    instructing them to write it down and store it securely.
+
+    Attributes
+    ----------
+    vault_id:
+        UUID4 of the vault for which the seed was generated.
+    seed:
+        Space-separated 24-word BIP-39 mnemonic.  Present only in this
+        response — never stored, never logged.
+    algorithm:
+        The generation standard used (``"BIP39-24-SHA256"``).
+    word_count:
+        Number of words in the mnemonic (always 24).
+    created_at:
+        UTC ISO-8601 timestamp of generation.
+    """
+
+    vault_id: str = Field(
+        ...,
+        description="UUID4 of the vault for which the recovery seed was generated.",
+        examples=["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
+    )
+    seed: str = Field(
+        ...,
+        description=(
+            "24-word BIP-39 recovery mnemonic.  Write this down and store it securely.  "
+            "It will NOT be shown again."
+        ),
+    )
+    algorithm: str = Field(
+        ...,
+        description="Mnemonic generation algorithm.",
+        examples=["BIP39-24-SHA256"],
+    )
+    word_count: int = Field(
+        ...,
+        description="Number of words in the mnemonic.",
+        examples=[24],
+    )
+    created_at: str = Field(
+        ...,
+        description="UTC ISO-8601 timestamp at which the seed was generated.",
+    )
+
+    model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# Recovery seed — verification
+# ---------------------------------------------------------------------------
+
+
+class VerifySeedRequest(BaseModel):
+    """
+    Request payload for ``POST /vaults/{vault_id}/recovery-seed/verify``.
+
+    The seed is used only to compute and compare a fingerprint.  It is
+    never stored or logged.
+    """
+
+    seed: str = Field(
+        ...,
+        min_length=20,
+        description=(
+            "Space-separated 24-word BIP-39 mnemonic to validate against the "
+            "vault's stored fingerprint.  Never stored or logged."
+        ),
+    )
+
+
+class VerifySeedResponse(BaseModel):
+    """
+    Returned by ``POST /vaults/{vault_id}/recovery-seed/verify`` (HTTP 200).
+
+    A ``valid=True`` result confirms only that the seed is a valid BIP-39
+    mnemonic AND that its fingerprint matches the stored fingerprint.  It
+    does not grant access to any key material — actual vault recovery is a
+    future milestone.
+    """
+
+    vault_id: str = Field(
+        ...,
+        description="UUID4 of the vault against which the seed was verified.",
+    )
+    valid: bool = Field(
+        ...,
+        description=(
+            "``True`` if the seed is a valid BIP-39 mnemonic and its fingerprint "
+            "matches the vault's stored fingerprint.  ``False`` otherwise."
+        ),
     )
 
     model_config = {"from_attributes": True}

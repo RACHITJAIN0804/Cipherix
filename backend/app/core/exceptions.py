@@ -562,3 +562,62 @@ class CorruptedDocumentError(IntegrityError):
 
     Routes should map this to ``HTTP 500 Internal Server Error``.
     """
+
+
+# ---------------------------------------------------------------------------
+# Recovery seed errors
+# ---------------------------------------------------------------------------
+
+
+class RecoveryError(CipherixError):
+    """Base class for all recovery seed errors."""
+
+
+class InvalidRecoverySeedError(RecoveryError):
+    """
+    Raised when a candidate recovery seed fails BIP-39 validation.
+
+    Examples
+    --------
+    * The mnemonic has the wrong number of words (not 24).
+    * One or more words are not in the BIP-39 English wordlist.
+    * The embedded BIP-39 checksum does not verify.
+
+    Routes should map this to ``HTTP 422 Unprocessable Entity``.
+    """
+
+
+class InvalidSeedChecksumError(RecoveryError):
+    """
+    Raised when a structurally valid BIP-39 mnemonic's fingerprint does
+    not match the fingerprint stored in ``recovery_meta.json``.
+
+    This means the seed passed BIP-39 validation but is not the seed that
+    was generated for this specific vault.
+
+    Routes should map this to ``HTTP 401 Unauthorized``.
+    """
+
+
+class UnsupportedRecoveryVersionError(RecoveryError):
+    """
+    Raised when ``recovery_meta.json`` contains a ``recovery_version``
+    value that this version of Cipherix does not recognise.
+
+    This signals that the vault was created or migrated by a newer version
+    of the application and the current version cannot safely handle it.
+
+    Routes should map this to ``HTTP 422 Unprocessable Entity``.
+    """
+
+
+class RecoveryMetadataMissingError(RecoveryError):
+    """
+    Raised when ``recovery_meta.json`` is absent from a vault directory.
+
+    This means no recovery seed has been generated for this vault yet.
+
+    Routes should map this to ``HTTP 404 Not Found`` or
+    ``HTTP 409 Conflict`` (the resource exists but recovery is not
+    configured).
+    """
