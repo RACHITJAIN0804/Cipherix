@@ -189,10 +189,6 @@ class SecurityService:
         """
         vault_root = self._assert_vault_unlocked(vault_id)
 
-        old_master_key: bytes | None = None
-        new_master_key: bytes | None = None
-        vault_key: bytes | None = None
-
         try:
             pwd_mgr = PasswordManager(vault_root)
             key_mgr = KeyManager(vault_root)
@@ -348,14 +344,6 @@ class SecurityService:
                 f"Unexpected error during password change for vault '{vault_id}': {exc}",
                 detail="An unexpected error occurred during the password change operation.",
             ) from exc
-
-        finally:
-            # Discard both Master Keys and the Vault Key immediately.
-            for key_var in ("old_master_key", "new_master_key", "vault_key"):
-                try:
-                    del locals()[key_var]
-                except KeyError:
-                    pass
 
     # ------------------------------------------------------------------
     # Recovery seed
