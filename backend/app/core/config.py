@@ -2,7 +2,7 @@ from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -50,6 +50,24 @@ class Settings(BaseSettings):
     DATABASE_DIR: Path = BASE_DIR / "database"
     DOCS_DIR: Path = BASE_DIR / "docs"
     SCRIPTS_DIR: Path = BASE_DIR / "scripts"
+
+    # SQLite database filename — relative to DATABASE_DIR.
+    # Override via DATABASE_FILENAME env var to point at a different file
+    # (e.g. "cipherix_test.db" in tests).
+    database_filename: str = "cipherix.db"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def database_url(self) -> str:
+        """
+        SQLAlchemy-compatible SQLite URL built from DATABASE_DIR and filename.
+
+        Uses three slashes for a relative path from the DB file's perspective.
+        The path is absolute so SQLAlchemy opens the same file regardless of
+        the process working directory.
+        """
+        db_path = self.DATABASE_DIR / self.database_filename
+        return f"sqlite:///{db_path}"
 
 
 @lru_cache

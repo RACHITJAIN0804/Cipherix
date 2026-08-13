@@ -621,3 +621,54 @@ class RecoveryMetadataMissingError(RecoveryError):
     ``HTTP 409 Conflict`` (the resource exists but recovery is not
     configured).
     """
+
+
+# ---------------------------------------------------------------------------
+# Database errors
+# ---------------------------------------------------------------------------
+
+
+class DatabaseError(CipherixError):
+    """
+    Base class for all SQLite / SQLAlchemy persistence errors.
+
+    Catch this in places where you want to handle any database failure
+    without distinguishing between specific subtypes (e.g. record not
+    found vs. constraint violation vs. connection error).
+    """
+
+
+class VaultRecordNotFoundError(DatabaseError):
+    """
+    Raised when a ``Vault`` row is absent from the SQLite database.
+
+    This is distinct from :class:`VaultNotFoundError` (which signals that
+    the vault *directory* is missing).  A vault can exist on the filesystem
+    but be absent from the DB (e.g. after a failed DB commit at creation
+    time).
+
+    Routes should map this to ``HTTP 404 Not Found``.
+    """
+
+
+class DocumentRecordNotFoundError(DatabaseError):
+    """
+    Raised when a ``Document`` row is absent from the SQLite database.
+
+    This is distinct from :class:`DocumentNotFoundError` (which signals
+    that the encrypted blob or metadata sidecar file is missing).
+
+    Routes should map this to ``HTTP 404 Not Found``.
+    """
+
+
+class SecurityMetadataRecordNotFoundError(DatabaseError):
+    """
+    Raised when a ``SecurityMetadata`` row is absent from the SQLite database.
+
+    This is the DB-layer equivalent of
+    :class:`SecurityMetadataNotFoundError` (which signals that
+    ``security.json`` is missing from disk).
+
+    Routes should map this to ``HTTP 404 Not Found``.
+    """

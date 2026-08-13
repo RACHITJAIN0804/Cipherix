@@ -27,6 +27,7 @@ the Vault Key is unwrapped.
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile, status
 from fastapi.responses import Response, StreamingResponse
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.exceptions import (
@@ -43,6 +44,7 @@ from app.core.exceptions import (
     VaultNotFoundError,
 )
 from app.core.logger import get_logger
+from app.database import get_db
 from app.schemas.document import (
     DocumentListResponse,
     DocumentResponse,
@@ -164,6 +166,7 @@ async def upload_document(
         description="Vault unlock password used to derive the Master Key.",
     ),
     service: DocumentService = Depends(_get_document_service),
+    db: Session = Depends(get_db),
 ) -> DocumentResponse:
     """
     ``POST /vaults/{vault_id}/documents`` — encrypt and store a document.
@@ -181,6 +184,7 @@ async def upload_document(
             filename=file.filename or "",
             content_type=file.content_type,
             file_bytes=file_bytes,
+            db=db,
         )
         logger.info(
             "POST /vaults/%s/documents succeeded | document_id=%s",
@@ -357,10 +361,11 @@ async def delete_document(
     vault_id: str,
     document_id: str,
     service: DocumentService = Depends(_get_document_service),
+    db: Session = Depends(get_db),
 ) -> Response:
     """``DELETE /vaults/{vault_id}/documents/{document_id}`` — delete a document."""
     try:
-        service.delete_document(vault_id=vault_id, document_id=document_id)
+        service.delete_document(vault_id=vault_id, document_id=document_id, db=db)
         logger.info(
             "DELETE /vaults/%s/documents/%s succeeded",
             vault_id,

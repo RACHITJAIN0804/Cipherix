@@ -11,7 +11,29 @@ Its responsibilities are:
    (e.g. business rules that depend on runtime state).
 2. **Orchestrate** domain objects — generate the vault ID, build the
    manifest, call the manager, compose the response.
-3. **Translate** domain exceptions into a form the route layer can act on.
+3. **Persist** application metadata in SQLite via the injected session.
+4. **Translate** domain exceptions into a form the route layer can act on.
+
+Filesystem / SQLite separation
+--------------------------------
+The filesystem (VaultManager) is the authoritative source of truth for
+vault structure and cryptographic files.  SQLite stores application
+metadata that enables future search, reporting, and cross-vault queries
+without scanning the filesystem.
+
+Transaction safety
+------------------
+Vault creation:
+    1. Filesystem scaffolding (VaultManager.create).
+    2. DB INSERT (Vault + SecurityMetadata).
+    3. DB COMMIT.
+    → On DB commit failure: shutil.rmtree(vault_root) to leave no orphan.
+
+Vault deletion:
+    1. Filesystem deletion (VaultManager.delete_vault).
+    2. DB DELETE of the Vault row (CASCADE removes Documents + SecurityMetadata).
+    3. DB COMMIT.
+    → On DB failure: log the orphaned DB record; the filesystem is already clean.
 
 This layer intentionally knows nothing about FastAPI, HTTP status codes,
 or JSON serialisation.  Those concerns belong to the route.
@@ -19,19 +41,28 @@ or JSON serialisation.  Those concerns belong to the route.
 Dependency injection
 --------------------
 The service receives a :class:`~app.vault.vault_manager.VaultManager`
-via its constructor, which makes it straightforward to swap in a fake
-manager during unit testing.
+via its constructor and an optional :class:`~sqlalchemy.orm.Session` per
+method call.  Passing ``db=None`` disables DB persistence (useful in tests
+that focus on filesystem behaviour only).
 """
 
+import shutil
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
+from pathlib import Path
+
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from app.core.exceptions import (
+    VaultCreationError,
     VaultError,
     VaultStateError,
     VaultValidationError,
 )
 from app.core.logger import get_logger
+from app.database.models import SecurityMetadata as SecurityMetadataRecord
+from app.database.models import Vault as VaultRecord
 from app.schemas.vault import (
     CreateVaultRequest,
     VaultResponse,
@@ -69,22 +100,34 @@ class VaultService:
     # Public API
     # ------------------------------------------------------------------
 
-    def create_vault(self, request: CreateVaultRequest) -> VaultResponse:
+    def create_vault(
+        self,
+        request: CreateVaultRequest,
+        db: Session | None = None,
+    ) -> VaultResponse:
         """
-        Create a new vault and return its serialised representation.
+        Create a new vault, persist metadata to SQLite, and return its
+        serialised representation.
 
         Flow
         ----
         1. Run additional business-rule validation on the request.
         2. Generate a collision-free UUID4 vault identifier.
         3. Build a :class:`~app.vault.manifest.VaultManifest`.
-        4. Delegate filesystem scaffolding to :class:`~app.vault.vault_manager.VaultManager`.
-        5. Compose and return a :class:`~app.schemas.vault.VaultResponse`.
+        4. Delegate filesystem scaffolding to
+           :class:`~app.vault.vault_manager.VaultManager`.
+        5. If ``db`` is provided: INSERT Vault + SecurityMetadata rows.
+           On DB failure, remove the newly created filesystem tree.
+        6. Compose and return a :class:`~app.schemas.vault.VaultResponse`.
 
         Parameters
         ----------
         request:
             A Pydantic-validated :class:`~app.schemas.vault.CreateVaultRequest`.
+        db:
+            SQLAlchemy session.  When provided, a Vault record and a
+            SecurityMetadata record are inserted and committed.  When
+            ``None``, DB persistence is skipped (e.g. in filesystem-only tests).
 
         Returns
         -------
@@ -96,16 +139,60 @@ class VaultService:
         VaultValidationError
             If the request violates a business rule not captured by Pydantic.
         VaultCreationError
-            If the filesystem scaffolding fails.
+            If the filesystem scaffolding or DB insert fails.
         """
         self._validate(request)
 
         vault_id: str = str(uuid.uuid4())
-        logger.info("Initiating vault creation | name=%r | id=%s", request.name, vault_id)
+        logger.info(
+            "Initiating vault creation | name=%r | id=%s", request.name, vault_id
+        )
 
         manifest = VaultManifest.create(vault_id=vault_id, name=request.name)
 
-        self._manager.create(vault_id=vault_id, manifest=manifest, password=request.password)
+        # --- Step 4: Filesystem scaffolding ---
+        vault_root: Path = self._manager.create(
+            vault_id=vault_id, manifest=manifest, password=request.password
+        )
+
+        # --- Step 5: DB persistence ---
+        if db is not None:
+            try:
+                self._insert_vault_records(
+                    db=db,
+                    vault_id=vault_id,
+                    name=request.name,
+                    vault_root=vault_root,
+                )
+            except SQLAlchemyError as exc:
+                # DB commit failed after filesystem creation succeeded.
+                # Clean up the filesystem tree to avoid an orphaned vault.
+                logger.error(
+                    "DB insert failed after vault created on disk — "
+                    "rolling back filesystem | vault_id=%s | error=%s",
+                    vault_id,
+                    exc,
+                )
+                try:
+                    shutil.rmtree(vault_root)
+                    logger.info(
+                        "Filesystem cleanup successful | vault_id=%s", vault_id
+                    )
+                except OSError as fs_exc:
+                    logger.error(
+                        "Filesystem cleanup FAILED after DB rollback "
+                        "| vault_id=%s | error=%s",
+                        vault_id,
+                        fs_exc,
+                    )
+                raise VaultCreationError(
+                    f"Failed to persist vault '{vault_id}' to the database: {exc}",
+                    detail=(
+                        "The vault was created on the filesystem but could not be "
+                        "recorded in the database.  The vault directory has been "
+                        "removed to keep the system consistent.  Please retry."
+                    ),
+                ) from exc
 
         logger.info("Vault created successfully | id=%s | name=%r", vault_id, request.name)
 
@@ -116,7 +203,7 @@ class VaultService:
             status=manifest.status,
         )
 
-    def delete_vault(self, vault_id: str) -> None:
+    def delete_vault(self, vault_id: str, db: Session | None = None) -> None:
         """
         Permanently delete an existing vault and all of its contents.
 
@@ -125,12 +212,17 @@ class VaultService:
         1. Validate that ``vault_id`` is a well-formed UUID4 string.
         2. Delegate filesystem removal to
            :meth:`~app.vault.vault_manager.VaultManager.delete_vault`.
-        3. Log success or re-raise a typed domain exception on failure.
+        3. If ``db`` is provided: DELETE the Vault row (CASCADE removes
+           all Document and SecurityMetadata rows).
+        4. Log success or re-raise a typed domain exception on failure.
 
         Parameters
         ----------
         vault_id:
             The UUID4 string that identifies the vault to delete.
+        db:
+            SQLAlchemy session.  When provided, the Vault DB record is
+            deleted and committed after filesystem deletion.
 
         Raises
         ------
@@ -150,11 +242,34 @@ class VaultService:
         try:
             self._manager.delete_vault(vault_id)
         except VaultError:
-            # Let the route layer map the specific subclass to an HTTP status.
-            # Re-raise immediately; the manager already records the detail at
-            # DEBUG level, so we add one structured WARNING/ERROR here.
             logger.warning("Vault deletion did not complete | vault_id=%s", vault_id)
             raise
+
+        # --- DB cleanup (non-blocking) ---
+        if db is not None:
+            try:
+                record = db.get(VaultRecord, vault_id)
+                if record is not None:
+                    db.delete(record)
+                    db.commit()
+                    logger.debug(
+                        "Vault DB record deleted | vault_id=%s", vault_id
+                    )
+                else:
+                    logger.warning(
+                        "Vault deleted from filesystem but no DB record found "
+                        "| vault_id=%s",
+                        vault_id,
+                    )
+            except SQLAlchemyError as exc:
+                db.rollback()
+                # Filesystem is already gone; log the orphaned DB record.
+                logger.error(
+                    "Failed to delete vault DB record after filesystem deletion "
+                    "| vault_id=%s | error=%s",
+                    vault_id,
+                    exc,
+                )
 
         logger.info("Vault deleted successfully | vault_id=%s", vault_id)
 
@@ -162,12 +277,9 @@ class VaultService:
         """
         Return a summary of every valid vault, sorted newest-first.
 
-        Flow
-        ----
-        1. Delegate discovery to :meth:`~app.vault.vault_manager.VaultManager.list_vaults`.
-        2. For each returned manifest, convert to :class:`~app.schemas.vault.VaultSummary`.
-        3. Skip any vault whose manifest is corrupt (log a warning, continue).
-        4. Sort by ``created_at`` descending (newest first).
+        Reads from the filesystem (source of truth) rather than the DB to
+        ensure the listing reflects actual vault structure even if the DB
+        is temporarily out of sync.
 
         Returns
         -------
@@ -189,8 +301,6 @@ class VaultService:
                     )
                 )
             except (ValueError, TypeError) as exc:
-                # A VaultManifest read succeeded but contained an
-                # unparseable created_at or other field.  Treat as corrupt.
                 logger.warning(
                     "Skipping vault with invalid manifest data | "
                     "vault_id=%s | error=%s",
@@ -275,7 +385,100 @@ class VaultService:
         )
 
     # ------------------------------------------------------------------
-    # Private helpers
+    # Private: DB helpers
+    # ------------------------------------------------------------------
+
+    def _insert_vault_records(
+        self,
+        db: Session,
+        vault_id: str,
+        name: str,
+        vault_root: Path,
+    ) -> None:
+        """
+        Read the key + password metadata files that VaultManager just wrote
+        and insert the corresponding Vault + SecurityMetadata DB rows in a
+        single atomic transaction.
+
+        This method must be called AFTER VaultManager.create() has
+        successfully written all JSON files to disk.  It reads those files
+        to populate the SecurityMetadata columns, ensuring the DB record
+        mirrors the on-disk state.
+
+        Parameters
+        ----------
+        db:
+            An open SQLAlchemy session (not yet committed).
+        vault_id:
+            UUID4 string identifying the new vault.
+        name:
+            Human-readable vault name from the create request.
+        vault_root:
+            Absolute path to the vault root directory on disk.
+
+        Raises
+        ------
+        SQLAlchemyError
+            Propagated from the ORM add/commit on any DB error.
+        """
+        import json
+
+        from app.security.kdf_params import KdfParams
+
+        now = datetime.now(UTC)
+
+        # --- Read key.json ---
+        key_json_path = vault_root / "key.json"
+        key_data: dict = json.loads(key_json_path.read_text(encoding="utf-8"))
+
+        # --- Read password_meta.json ---
+        pwd_meta_path = vault_root / "password_meta.json"
+        pwd_data: dict = json.loads(pwd_meta_path.read_text(encoding="utf-8"))
+        kdf_params = KdfParams.from_dict(pwd_data.get("kdf", {}))
+        salt_hex: str = pwd_data.get("salt", "")
+
+        # Insert Vault row.
+        vault_record = VaultRecord(
+            id=vault_id,
+            name=name,
+            status="locked",
+            security_version="1.0",
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(vault_record)
+
+        # Insert SecurityMetadata row.
+        # encrypted_vault_key stores CIPHERTEXT — never plaintext.
+        # salt and nonce are not secret; they are required for future
+        # Master Key re-derivation and AES-GCM decryption respectively.
+        security_record = SecurityMetadataRecord(
+            vault_id=vault_id,
+            key_version=key_data.get("key_version", "1"),
+            encryption_algorithm=key_data.get("algorithm", "AES-256-GCM"),
+            encrypted_vault_key=key_data.get("encrypted_vault_key", ""),
+            nonce=key_data.get("nonce", ""),
+            salt=salt_hex,
+            argon2_time_cost=kdf_params.time_cost,
+            argon2_memory_cost=kdf_params.memory_cost,
+            argon2_parallelism=kdf_params.parallelism,
+            argon2_hash_len=kdf_params.hash_len,
+            recovery_version=None,
+            seed_fingerprint=None,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(security_record)
+
+        db.commit()
+
+        logger.info(
+            "Vault + SecurityMetadata DB records inserted | vault_id=%s",
+            vault_id,
+        )
+
+    # ------------------------------------------------------------------
+    # Private: state transition helpers
     # ------------------------------------------------------------------
 
     def _transition_vault_state(
@@ -355,18 +558,11 @@ class VaultService:
         """
         Enforce business rules that Pydantic alone cannot express.
 
-        Pydantic handles structural validation (types, lengths, patterns).
-        This method handles *semantic* validation that may depend on
-        application-level rules or future runtime state (e.g. "a vault
-        with this name already exists for this user").
-
         Raises
         ------
         VaultValidationError
             On any business-rule violation.
         """
-        # Belt-and-suspenders guard: Pydantic already strips whitespace,
-        # but we re-check here so the service layer is correct in isolation.
         if not request.name or not request.name.strip():
             raise VaultValidationError(
                 "Vault name must not be empty.",
@@ -376,9 +572,6 @@ class VaultService:
     def _validate_vault_id(self, vault_id: str) -> None:
         """
         Ensure ``vault_id`` is a valid UUID string before touching the filesystem.
-
-        Catching a malformed ID early prevents any path-traversal risk and
-        gives the caller a meaningful 400 instead of a cryptic 404.
 
         Raises
         ------

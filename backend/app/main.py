@@ -27,6 +27,7 @@ from app.core.config import settings
 from app.core.constants import APP_DESCRIPTION, APP_VERSION
 from app.core.logger import configure_logging, get_logger
 from app.api.router import api_router
+from app.database import init_db
 
 # ---------------------------------------------------------------------------
 # Bootstrap logging before anything else so that all subsequent imports
@@ -58,6 +59,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings.app_env,
         settings.debug,
     )
+
+    # Ensure SQLite tables exist.  In production, Alembic migrations are
+    # the canonical migration path; init_db() is a safety net that creates
+    # tables on a fresh install or in development without requiring a manual
+    # ``alembic upgrade head`` step.
+    init_db()
+
     yield
     # ---- Shutdown ----
     logger.info("Shutting down %s. Goodbye.", settings.app_name)

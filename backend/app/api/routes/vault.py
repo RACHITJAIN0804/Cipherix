@@ -29,6 +29,7 @@ status codes.  Any new exception type only needs to be added here.
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.exceptions import (
@@ -41,6 +42,7 @@ from app.core.exceptions import (
     VaultValidationError,
 )
 from app.core.logger import get_logger
+from app.database import get_db
 from app.schemas.vault import (
     CreateVaultRequest,
     VaultResponse,
@@ -219,6 +221,7 @@ def _map_state_exception(
 async def create_vault(
     request: CreateVaultRequest,
     service: VaultService = Depends(_get_vault_service),
+    db: Session = Depends(get_db),
 ) -> VaultResponse:
     """
     ``POST /vaults`` — create a new vault.
@@ -229,6 +232,8 @@ async def create_vault(
         Pydantic-validated vault creation payload.
     service:
         Injected :class:`~app.services.vault_service.VaultService` instance.
+    db:
+        Injected SQLAlchemy session for DB metadata persistence.
 
     Returns
     -------
@@ -243,7 +248,7 @@ async def create_vault(
         For unexpected filesystem or server errors.
     """
     try:
-        response = service.create_vault(request)
+        response = service.create_vault(request, db=db)
         logger.info("POST /vaults succeeded | vault_id=%s", response.vault_id)
         return response
 
@@ -339,6 +344,7 @@ async def list_vaults(
 async def delete_vault(
     vault_id: str,
     service: VaultService = Depends(_get_vault_service),
+    db: Session = Depends(get_db),
 ) -> Response:
     """
     ``DELETE /vaults/{vault_id}`` — permanently delete a vault.
@@ -349,6 +355,8 @@ async def delete_vault(
         UUID4 string that identifies the vault to remove.
     service:
         Injected :class:`~app.services.vault_service.VaultService` instance.
+    db:
+        Injected SQLAlchemy session for DB record deletion.
 
     Returns
     -------
@@ -367,7 +375,7 @@ async def delete_vault(
         If the OS cannot remove the directory tree.
     """
     try:
-        service.delete_vault(vault_id)
+        service.delete_vault(vault_id, db=db)
         logger.info("DELETE /vaults/%s succeeded", vault_id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 

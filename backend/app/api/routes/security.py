@@ -20,6 +20,7 @@ response.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.exceptions import (
@@ -33,6 +34,7 @@ from app.core.exceptions import (
     VaultNotFoundError,
 )
 from app.core.logger import get_logger
+from app.database import get_db
 from app.schemas.security import (
     ChangePasswordRequest,
     ChangePasswordResponse,
@@ -153,6 +155,7 @@ async def change_password(
     vault_id: str,
     payload: ChangePasswordRequest,
     service: SecurityService = Depends(_get_security_service),
+    db: Session = Depends(get_db),
 ) -> ChangePasswordResponse:
     """
     ``POST /vaults/{vault_id}/change-password`` — rewrap the Vault Key.
@@ -166,6 +169,7 @@ async def change_password(
             vault_id=vault_id,
             old_password=payload.old_password,
             new_password=payload.new_password,
+            db=db,
         )
         logger.info(
             "POST /vaults/%s/change-password succeeded | changed_at=%s",
@@ -198,6 +202,7 @@ async def change_password(
 async def generate_recovery_seed(
     vault_id: str,
     service: SecurityService = Depends(_get_security_service),
+    db: Session = Depends(get_db),
 ) -> RecoverySeedResponse:
     """
     ``POST /vaults/{vault_id}/recovery-seed`` — generate and return the seed.
@@ -207,7 +212,7 @@ async def generate_recovery_seed(
     plaintext seed is never written to disk or logged.
     """
     try:
-        result = service.generate_recovery_seed(vault_id=vault_id)
+        result = service.generate_recovery_seed(vault_id=vault_id, db=db)
         logger.info(
             "POST /vaults/%s/recovery-seed succeeded | word_count=%d",
             vault_id,

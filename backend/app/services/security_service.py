@@ -78,6 +78,9 @@ Future compatibility
 from datetime import UTC, datetime
 from pathlib import Path
 
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
 from app.core.exceptions import (
     CipherixError,
     PasswordChangeError,
@@ -86,6 +89,7 @@ from app.core.exceptions import (
     VaultNotFoundError,
 )
 from app.core.logger import get_logger
+from app.database.models import SecurityMetadata as SecurityMetadataRecord
 from app.schemas.security import (
     ChangePasswordResponse,
     RecoverySeedResponse,
@@ -93,6 +97,7 @@ from app.schemas.security import (
 )
 from app.security.encryption import EncryptionManager
 from app.security.key_manager import KeyManager
+from app.security.models import KeyMetadata
 from app.security.password_manager import PasswordManager
 from app.security.recovery import RecoveryManager
 from app.vault.manifest import VaultManifest
@@ -129,6 +134,7 @@ class SecurityService:
         vault_id: str,
         old_password: str,
         new_password: str,
+        db: Session | None = None,
     ) -> ChangePasswordResponse:
         """
         Change the vault password by re-wrapping the Vault Key.
@@ -265,6 +271,41 @@ class SecurityService:
 
             changed_at: str = datetime.now(UTC).isoformat()
 
+            # --- Step 14: Update DB SecurityMetadata record ---
+            # This is non-atomic with the disk writes (disk goes first).
+            # If DB update fails, log a warning: the vault is still usable
+            # (the disk files are authoritative) but the DB record is stale.
+            # The stale record will be reconciled on the next password change.
+            if db is not None:
+                try:
+                    sec_record = db.get(SecurityMetadataRecord, vault_id)
+                    if sec_record is not None:
+                        sec_record.encrypted_vault_key = new_encrypted_vault_key_b64
+                        sec_record.nonce = new_nonce_b64
+                        sec_record.salt = new_salt_hex
+                        sec_record.updated_at = datetime.now(UTC)
+                        db.commit()
+                        logger.info(
+                            "SecurityMetadata DB record updated after password change "
+                            "| vault_id=%s",
+                            vault_id,
+                        )
+                    else:
+                        logger.warning(
+                            "SecurityMetadata DB record not found after password change "
+                            "— DB may be out of sync | vault_id=%s",
+                            vault_id,
+                        )
+                except SQLAlchemyError as db_exc:
+                    db.rollback()
+                    logger.warning(
+                        "Failed to update SecurityMetadata DB record after password change "
+                        "— disk files are current; DB record is stale "
+                        "| vault_id=%s | error=%s",
+                        vault_id,
+                        db_exc,
+                    )
+
             logger.info(
                 "Password change complete — Vault Key rewrapped | vault_id=%s | changed_at=%s",
                 vault_id,
@@ -323,6 +364,7 @@ class SecurityService:
     def generate_recovery_seed(
         self,
         vault_id: str,
+        db: Session | None = None,
     ) -> RecoverySeedResponse:
         """
         Generate a BIP-39 24-word recovery seed for a vault.
@@ -367,6 +409,38 @@ class SecurityService:
             vault_id,
             metadata.algorithm,
         )
+
+        # Update DB SecurityMetadata with the seed fingerprint and version.
+        # seed_fingerprint is the first 16 hex chars of SHA-256(seed) — safe to store.
+        # The plaintext seed is NEVER written here.
+        if db is not None:
+            try:
+                sec_record = db.get(SecurityMetadataRecord, vault_id)
+                if sec_record is not None:
+                    sec_record.seed_fingerprint = fingerprint
+                    sec_record.recovery_version = metadata.recovery_version
+                    sec_record.updated_at = datetime.now(UTC)
+                    db.commit()
+                    logger.info(
+                        "SecurityMetadata DB record updated with seed fingerprint "
+                        "| vault_id=%s",
+                        vault_id,
+                    )
+                else:
+                    logger.warning(
+                        "SecurityMetadata DB record not found during recovery seed update "
+                        "| vault_id=%s",
+                        vault_id,
+                    )
+            except SQLAlchemyError as db_exc:
+                db.rollback()
+                logger.warning(
+                    "Failed to update SecurityMetadata DB record with seed fingerprint "
+                    "— disk file is current; DB record is stale "
+                    "| vault_id=%s | error=%s",
+                    vault_id,
+                    db_exc,
+                )
 
         return RecoverySeedResponse(
             vault_id=vault_id,

@@ -12,19 +12,43 @@ the storage/cryptography layers.  Its responsibilities are:
 2. **Orchestrate** the encryption pipeline: unwrap the Vault Key from
    ``key.json``, generate a nonce, encrypt the plaintext bytes, write the
    ciphertext blob, write the metadata sidecar.
-3. **Orchestrate** decryption: read the ciphertext blob, read the metadata
+3. **Persist** document metadata in SQLite.
+4. **Orchestrate** decryption: read the ciphertext blob, read the metadata
    sidecar, unwrap the Vault Key, decrypt in memory — never writing plaintext
    to disk.
-4. **Verify integrity**: read the encrypted blob, recompute its SHA-256 hash,
+5. **Verify integrity**: read the encrypted blob, recompute its SHA-256 hash,
    compare against the stored hash.  No password or key material required.
-5. **Compose** Pydantic response objects from storage dataclasses.
-6. **Translate** domain exceptions into a form the route layer can act on.
+6. **Compose** Pydantic response objects from storage dataclasses.
+7. **Translate** domain exceptions into a form the route layer can act on.
 
 This layer intentionally knows nothing about FastAPI, HTTP status codes,
 or JSON serialisation.  Those concerns belong to the route.
 
+Filesystem / SQLite separation
+--------------------------------
+Encrypted blobs remain on the filesystem (``encrypted/*.bin``).
+JSON metadata sidecars remain on the filesystem (``metadata/*.json``).
+SQLite stores the application metadata index (document record with
+filename, MIME type, size, hash, encryption version, and encrypted path).
+
+Transaction safety
+------------------
+Upload:
+    1. Write encrypted blob to disk.
+    2. Write JSON sidecar to disk.
+    3. INSERT Document row in DB.
+    4. COMMIT.
+    → On DB commit failure: delete both the blob and sidecar, then re-raise.
+
+Deletion:
+    1. DELETE Document DB row.
+    2. COMMIT.
+    3. Delete blob + sidecar from disk.
+    → On DB failure: do not touch the filesystem; raise.
+    → On filesystem failure after DB commit: log orphaned files; already removed from DB.
+
 Filename sanitisation policy
------------------------------
+------------------------------
 * The filename must be non-empty after stripping whitespace.
 * Path-traversal sequences are rejected outright.
 * The sanitised name is stored in metadata; it is never used as a
@@ -37,11 +61,15 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
 from app.core.exceptions import (
     CipherixError,
     CorruptedDocumentError,
     DocumentEncryptionError,
     DocumentNotFoundError,
+    DocumentStorageError,
     IntegrityVerificationError,
     InvalidUploadError,
     MissingIntegrityMetadataError,
@@ -49,6 +77,7 @@ from app.core.exceptions import (
     VaultNotFoundError,
 )
 from app.core.logger import get_logger
+from app.database.models import Document as DocumentRecord
 from app.schemas.document import (
     DocumentListResponse,
     DocumentResponse,
@@ -102,6 +131,7 @@ class DocumentService:
         filename: str,
         content_type: str | None,
         file_bytes: bytes,
+        db: Session | None = None,
     ) -> DocumentResponse:
         """
         Encrypt and store a document inside a vault.
@@ -117,7 +147,9 @@ class DocumentService:
         7. Encrypt the plaintext bytes with AES-256-GCM.
         8. Write the ciphertext blob to ``encrypted/<doc_id>.bin``.
         9. Write the metadata sidecar to ``metadata/<doc_id>.json``.
-        10. Return the document metadata as a Pydantic response object.
+        10. If ``db`` is provided: INSERT a Document record in SQLite.
+            On DB failure, clean up both filesystem files.
+        11. Return the document metadata as a Pydantic response object.
 
         Parameters
         ----------
@@ -133,6 +165,9 @@ class DocumentService:
             if absent (falls back to ``"application/octet-stream"``).
         file_bytes:
             Raw bytes of the uploaded file.
+        db:
+            SQLAlchemy session.  When provided, a Document record is
+            inserted and committed after the filesystem write.
 
         Returns
         -------
@@ -183,7 +218,6 @@ class DocumentService:
             sha256_ciphertext: str = self._enc_mgr.compute_sha256(ciphertext)
 
         except CipherixError:
-            # Re-raise typed domain errors without wrapping.
             raise
         except Exception as exc:
             raise DocumentEncryptionError(
@@ -191,16 +225,15 @@ class DocumentService:
                 detail="An unexpected error occurred during document encryption.",
             ) from exc
         finally:
-            # Release Vault Key bytes from local scope as soon as possible.
             try:
                 del vault_key
             except NameError:
                 pass
 
-        # --- Steps 8 & 9: Persist ---
+        # --- Steps 8 & 9: Persist to filesystem ---
         doc_mgr = DocumentManager(vault_root)
 
-        doc_mgr.write_blob(
+        blob_path = doc_mgr.write_blob(
             document_id=document_id,
             ciphertext=ciphertext,
             vault_id=vault_id,
@@ -215,7 +248,53 @@ class DocumentService:
             sha256_ciphertext=sha256_ciphertext,
         )
 
-        doc_mgr.write_metadata(metadata=metadata, vault_id=vault_id)
+        meta_path = doc_mgr.write_metadata(metadata=metadata, vault_id=vault_id)
+
+        # --- Step 10: DB persistence ---
+        if db is not None:
+            # Relative encrypted path stored in DB so the record stays valid
+            # if the vault base directory is relocated.
+            encrypted_rel_path = f"encrypted/{document_id}.bin"
+            try:
+                self._insert_document_record(
+                    db=db,
+                    document_id=document_id,
+                    vault_id=vault_id,
+                    original_filename=safe_filename,
+                    mime_type=mime_type,
+                    size=len(file_bytes),
+                    encrypted_path=encrypted_rel_path,
+                    integrity_hash=sha256_ciphertext,
+                    encryption_version=metadata.encryption_version,
+                )
+            except SQLAlchemyError as exc:
+                # DB commit failed after both filesystem files were written.
+                # Clean up to keep the system consistent.
+                logger.error(
+                    "DB insert failed after document written to disk — "
+                    "rolling back filesystem | vault_id=%s | document_id=%s | error=%s",
+                    vault_id,
+                    document_id,
+                    exc,
+                )
+                for cleanup_path in (blob_path, meta_path):
+                    try:
+                        if cleanup_path.is_file():
+                            cleanup_path.unlink()
+                    except OSError as fs_exc:
+                        logger.error(
+                            "Filesystem cleanup FAILED | path=%s | error=%s",
+                            cleanup_path,
+                            fs_exc,
+                        )
+                raise DocumentStorageError(
+                    f"Failed to persist document '{document_id}' to the database: {exc}",
+                    detail=(
+                        "The document was encrypted and written to disk but could not "
+                        "be recorded in the database.  The filesystem files have been "
+                        "removed.  Please retry the upload."
+                    ),
+                ) from exc
 
         logger.info(
             "Document upload complete | vault_id=%s | document_id=%s | sha256=%s",
@@ -270,12 +349,25 @@ class DocumentService:
             documents=documents,
         )
 
-    def delete_document(self, vault_id: str, document_id: str) -> None:
+    def delete_document(
+        self,
+        vault_id: str,
+        document_id: str,
+        db: Session | None = None,
+    ) -> None:
         """
-        Delete a document's encrypted blob and metadata sidecar.
+        Delete a document's encrypted blob, metadata sidecar, and DB record.
 
         The vault must exist but need not be unlocked — deletion does not
         require decrypting the file.
+
+        Transaction ordering
+        --------------------
+        1. DELETE the DB record first (so the system sees the document as
+           gone before the files are removed).
+        2. Delete blob + sidecar from the filesystem.
+        → On DB failure: raise immediately; do not touch the filesystem.
+        → On filesystem failure after DB delete: log the orphaned files.
 
         Parameters
         ----------
@@ -283,6 +375,9 @@ class DocumentService:
             UUID4 identifying the vault containing the document.
         document_id:
             UUID4 identifying the document to delete.
+        db:
+            SQLAlchemy session.  When provided, the Document DB record is
+            deleted before filesystem files are removed.
 
         Raises
         ------
@@ -295,6 +390,42 @@ class DocumentService:
         """
         vault_root = self._assert_vault_exists(vault_id)
 
+        # --- Step 1: DB deletion (before filesystem) ---
+        if db is not None:
+            try:
+                record = db.get(DocumentRecord, document_id)
+                if record is not None:
+                    db.delete(record)
+                    db.commit()
+                    logger.debug(
+                        "Document DB record deleted | vault_id=%s | document_id=%s",
+                        vault_id,
+                        document_id,
+                    )
+                else:
+                    logger.warning(
+                        "Document DB record not found during delete "
+                        "| vault_id=%s | document_id=%s",
+                        vault_id,
+                        document_id,
+                    )
+            except SQLAlchemyError as exc:
+                db.rollback()
+                logger.error(
+                    "DB deletion failed | vault_id=%s | document_id=%s | error=%s",
+                    vault_id,
+                    document_id,
+                    exc,
+                )
+                raise DocumentStorageError(
+                    f"Failed to delete document '{document_id}' DB record: {exc}",
+                    detail=(
+                        "The document database record could not be removed.  "
+                        "The encrypted file has NOT been deleted to maintain consistency."
+                    ),
+                ) from exc
+
+        # --- Step 2: Filesystem deletion ---
         doc_mgr = DocumentManager(vault_root)
         doc_mgr.delete_document(document_id=document_id, vault_id=vault_id)
 
@@ -532,6 +663,77 @@ class DocumentService:
         )
 
     # ------------------------------------------------------------------
+    # Private: DB helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _insert_document_record(
+        db: Session,
+        document_id: str,
+        vault_id: str,
+        original_filename: str,
+        mime_type: str,
+        size: int,
+        encrypted_path: str,
+        integrity_hash: str | None,
+        encryption_version: str,
+    ) -> None:
+        """
+        Insert a Document record in SQLite.
+
+        Called after both the encrypted blob and the JSON sidecar have been
+        successfully written to the filesystem.
+
+        Parameters
+        ----------
+        db:
+            Open SQLAlchemy session.
+        document_id:
+            UUID4 string identifying the document.
+        vault_id:
+            UUID4 string identifying the parent vault.
+        original_filename:
+            Sanitised original filename.
+        mime_type:
+            MIME type string.
+        size:
+            Plaintext byte size of the uploaded file.
+        encrypted_path:
+            Relative path from the vault root to the ``.bin`` blob
+            (e.g. ``"encrypted/<document_id>.bin"``).
+        integrity_hash:
+            Lowercase hex SHA-256 digest of the ciphertext, or ``None``.
+        encryption_version:
+            Algorithm/version label (e.g. ``"AES-256-GCM-v1"``).
+
+        Raises
+        ------
+        SQLAlchemyError
+            Propagated from the ORM add/commit on any DB error.
+        """
+        now = datetime.now(UTC)
+        record = DocumentRecord(
+            id=document_id,
+            vault_id=vault_id,
+            original_filename=original_filename,
+            mime_type=mime_type,
+            size=size,
+            encrypted_path=encrypted_path,
+            integrity_hash=integrity_hash,
+            encryption_version=encryption_version,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(record)
+        db.commit()
+
+        logger.info(
+            "Document DB record inserted | vault_id=%s | document_id=%s",
+            vault_id,
+            document_id,
+        )
+
+    # ------------------------------------------------------------------
     # Private: vault state helpers
     # ------------------------------------------------------------------
 
@@ -648,7 +850,7 @@ class DocumentService:
             master_key = pwd_mgr.derive_master_key(password, salt_hex)
 
             key_mgr = KeyManager(vault_root)
-            key_meta: KeyMetadata = key_mgr.read(vault_id)
+            key_meta = key_mgr.read(vault_id)
 
             ct_bytes = self._enc_mgr.decode_from_storage(
                 key_meta.encrypted_vault_key, "encrypted_vault_key"

@@ -6,3 +6,6 @@ argon2-cffi==23.1.0
 cryptography==44.0.3
 python-multipart==0.0.20
 mnemonic==0.21
+sqlalchemy>=2.0.37
+alembic==1.14.0
+aiosqlite==0.20.0
