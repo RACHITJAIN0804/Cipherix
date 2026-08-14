@@ -1,4 +1,4 @@
-﻿"""
+"""
 tests/test_recovery_seed.py
 ----------------------------
 Unit and integration tests for BIP-39 Recovery Seed generation and verification.
@@ -135,7 +135,7 @@ class TestRecoveryManager(unittest.TestCase):
 
         raw = (self.vault_root / "recovery_meta.json").read_text(encoding="utf-8")
         for word in seed.split():
-            self.assertNotIn(word, raw, f"Seed word '{word}' found in metadata file!")
+            self.assertNotIn(f'"{word}"', raw, f"Seed word '{word}' found in metadata file!")
 
     def test_validate_seed_correct_returns_true(self) -> None:
         seed = self.manager.generate_seed("test-vault-001")

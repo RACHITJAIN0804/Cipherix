@@ -31,6 +31,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from app.api.dependencies import get_current_user, get_db, get_user_vault
 from app.core.config import settings
 from app.core.exceptions import (
     CipherixError,
@@ -42,7 +43,7 @@ from app.core.exceptions import (
     VaultValidationError,
 )
 from app.core.logger import get_logger
-from app.database import get_db
+from app.database.models import User, Vault
 from app.schemas.vault import (
     CreateVaultRequest,
     VaultResponse,
@@ -215,11 +216,13 @@ def _map_state_exception(
     responses={
         201: {"description": "Vault created successfully."},
         400: {"description": "Invalid request payload or business-rule violation."},
+        401: {"description": "Missing, expired, or invalid JWT token."},
         500: {"description": "Unexpected server error during vault creation."},
     },
 )
 async def create_vault(
     request: CreateVaultRequest,
+    current_user: User = Depends(get_current_user),
     service: VaultService = Depends(_get_vault_service),
     db: Session = Depends(get_db),
 ) -> VaultResponse:
@@ -230,6 +233,8 @@ async def create_vault(
     ----------
     request:
         Pydantic-validated vault creation payload.
+    current_user:
+        Authenticated user row.
     service:
         Injected :class:`~app.services.vault_service.VaultService` instance.
     db:
@@ -239,17 +244,10 @@ async def create_vault(
     -------
     VaultResponse
         Metadata of the newly created vault, with HTTP 201.
-
-    Raises
-    ------
-    HTTPException(400)
-        For validation failures or business-rule violations.
-    HTTPException(500)
-        For unexpected filesystem or server errors.
     """
     try:
-        response = service.create_vault(request, db=db)
-        logger.info("POST /vaults succeeded | vault_id=%s", response.vault_id)
+        response = service.create_vault(request, user_id=current_user.id, db=db)
+        logger.info("POST /vaults succeeded | vault_id=%s | user_id=%s", response.vault_id, current_user.id)
         return response
 
     except VaultValidationError as exc:
@@ -281,37 +279,32 @@ async def create_vault(
     status_code=status.HTTP_200_OK,
     summary="List all vaults",
     description=(
-        "Return a summary of every valid vault on disk, sorted by creation "
-        "date descending (newest first). Returns an empty list if no vaults "
-        "exist. Vaults with malformed or missing manifest.json are silently "
-        "skipped and logged server-side."
+        "Return a summary of every valid vault on disk belonging to the "
+        "authenticated user, sorted by creation date descending (newest first). "
+        "Returns an empty list if no vaults exist for this user."
     ),
     responses={
         200: {"description": "List of vault summaries (may be empty)."},
+        401: {"description": "Missing, expired, or invalid JWT token."},
         500: {"description": "Unexpected server error during vault discovery."},
     },
 )
 async def list_vaults(
+    current_user: User = Depends(get_current_user),
     service: VaultService = Depends(_get_vault_service),
+    db: Session = Depends(get_db),
 ) -> list[VaultSummary]:
     """
-    ``GET /vaults`` — list all vaults.
+    ``GET /vaults`` — list all vaults belonging to the authenticated user.
 
     Returns
     -------
     list[VaultSummary]
         Zero or more vault summaries ordered newest-first.
-        An empty list is a valid, non-error response.
-
-    Raises
-    ------
-    HTTPException(500)
-        Only for unexpected server-level failures — not for missing or
-        corrupt individual vaults (those are skipped gracefully).
     """
     try:
-        vaults = service.list_vaults()
-        logger.info("GET /vaults succeeded | count=%d", len(vaults))
+        vaults = service.list_vaults(user_id=current_user.id, db=db)
+        logger.info("GET /vaults succeeded | count=%d | user_id=%s", len(vaults), current_user.id)
         return vaults
 
     except CipherixError as exc:
@@ -329,54 +322,28 @@ async def list_vaults(
     summary="Permanently delete a vault",
     description=(
         "Permanently and recursively delete the vault identified by ``vault_id``. "
-        "The entire vault directory — including its manifest, encrypted data, "
-        "metadata, and temp folders — is removed from disk. "
         "This action is **irreversible**."
     ),
     responses={
         204: {"description": "Vault deleted successfully. No body is returned."},
         400: {"description": "Invalid vault_id format (not a UUID)."},
-        404: {"description": "Vault with the given ID does not exist."},
-        409: {"description": "Vault exists but has an invalid structure (no manifest.json)."},
+        401: {"description": "Missing, expired, or invalid JWT token."},
+        404: {"description": "Vault with the given ID does not exist or is not owned."},
         500: {"description": "Filesystem error prevented vault deletion."},
     },
 )
 async def delete_vault(
     vault_id: str,
+    vault: Vault = Depends(get_user_vault),
     service: VaultService = Depends(_get_vault_service),
     db: Session = Depends(get_db),
 ) -> Response:
     """
     ``DELETE /vaults/{vault_id}`` — permanently delete a vault.
-
-    Parameters
-    ----------
-    vault_id:
-        UUID4 string that identifies the vault to remove.
-    service:
-        Injected :class:`~app.services.vault_service.VaultService` instance.
-    db:
-        Injected SQLAlchemy session for DB record deletion.
-
-    Returns
-    -------
-    Response
-        HTTP 204 No Content on success.
-
-    Raises
-    ------
-    HTTPException(400)
-        If ``vault_id`` is not a valid UUID.
-    HTTPException(404)
-        If no vault with that ID exists on disk.
-    HTTPException(409)
-        If the vault directory exists but lacks ``manifest.json``.
-    HTTPException(500)
-        If the OS cannot remove the directory tree.
     """
     try:
-        service.delete_vault(vault_id, db=db)
-        logger.info("DELETE /vaults/%s succeeded", vault_id)
+        service.delete_vault(vault.id, db=db)
+        logger.info("DELETE /vaults/%s succeeded", vault.id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     except VaultValidationError as exc:
@@ -387,7 +354,7 @@ async def delete_vault(
         ) from exc
 
     except VaultNotFoundError as exc:
-        logger.warning("Vault deletion failed: not found | vault_id=%s", vault_id)
+        logger.warning("Vault deletion failed: not found | vault_id=%s", vault.id)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=exc.detail,
@@ -396,7 +363,7 @@ async def delete_vault(
     except VaultManifestError as exc:
         logger.error(
             "Vault deletion aborted: corrupt structure | vault_id=%s | %s",
-            vault_id,
+            vault.id,
             exc.detail,
         )
         raise HTTPException(
@@ -407,7 +374,7 @@ async def delete_vault(
     except VaultDeletionError as exc:
         logger.error(
             "Vault deletion failed: OS error | vault_id=%s | %s",
-            vault_id,
+            vault.id,
             exc.detail,
         )
         raise HTTPException(
@@ -416,7 +383,6 @@ async def delete_vault(
         ) from exc
 
     except CipherixError as exc:
-        # Final safety net for any other unforeseen domain error.
         logger.error("Unexpected domain error during deletion | %s", exc.detail)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -430,58 +396,32 @@ async def delete_vault(
     status_code=status.HTTP_200_OK,
     summary="Lock a vault",
     description=(
-        "Transition the vault identified by ``vault_id`` to the ``locked`` state "
-        "by updating the ``status`` field in its ``manifest.json``. "
-        "No encryption is performed — this is a pure state-flag update. "
-        "Returns HTTP 409 if the vault is already locked."
+        "Transition the vault identified by ``vault_id`` to the ``locked`` state."
     ),
     responses={
         200: {"description": "Vault is now locked."},
         400: {"description": "Invalid vault_id format (not a UUID)."},
-        404: {"description": "Vault with the given ID does not exist."},
+        401: {"description": "Missing, expired, or invalid JWT token."},
+        404: {"description": "Vault with the given ID does not exist or is not owned."},
         409: {"description": "Vault is already locked, or has an invalid structure."},
         500: {"description": "Filesystem error prevented the status update."},
     },
 )
 async def lock_vault(
     vault_id: str,
+    vault: Vault = Depends(get_user_vault),
     service: VaultService = Depends(_get_vault_service),
     db: Session = Depends(get_db),
 ) -> VaultStateResponse:
     """
     ``POST /vaults/{vault_id}/lock`` — transition a vault to locked state.
-
-    Parameters
-    ----------
-    vault_id:
-        UUID4 string that identifies the vault to lock.
-    service:
-        Injected :class:`~app.services.vault_service.VaultService` instance.
-    db:
-        Injected SQLAlchemy session for DB status sync.
-
-    Returns
-    -------
-    VaultStateResponse
-        Confirmation that the vault is now locked, with HTTP 200.
-
-    Raises
-    ------
-    HTTPException(400)
-        If ``vault_id`` is not a valid UUID.
-    HTTPException(404)
-        If no vault with that ID exists on disk.
-    HTTPException(409)
-        If the vault is already locked, or lacks a valid ``manifest.json``.
-    HTTPException(500)
-        If the OS cannot write the updated manifest.
     """
     try:
         return _handle_state_transition(
-            "lock", vault_id, service.lock_vault(vault_id, db=db)
+            "lock", vault.id, service.lock_vault(vault.id, db=db)
         )
     except Exception as exc:  # noqa: BLE001
-        _map_state_exception("lock", vault_id, exc)
+        _map_state_exception("lock", vault.id, exc)
 
 
 @router.post(
@@ -490,56 +430,30 @@ async def lock_vault(
     status_code=status.HTTP_200_OK,
     summary="Unlock a vault",
     description=(
-        "Transition the vault identified by ``vault_id`` to the ``unlocked`` state "
-        "by updating the ``status`` field in its ``manifest.json``. "
-        "No decryption is performed — this is a pure state-flag update. "
-        "Returns HTTP 409 if the vault is already unlocked."
+        "Transition the vault identified by ``vault_id`` to the ``unlocked`` state."
     ),
     responses={
         200: {"description": "Vault is now unlocked."},
         400: {"description": "Invalid vault_id format (not a UUID)."},
-        404: {"description": "Vault with the given ID does not exist."},
+        401: {"description": "Missing, expired, or invalid JWT token."},
+        404: {"description": "Vault with the given ID does not exist or is not owned."},
         409: {"description": "Vault is already unlocked, or has an invalid structure."},
         500: {"description": "Filesystem error prevented the status update."},
     },
 )
 async def unlock_vault(
     vault_id: str,
+    vault: Vault = Depends(get_user_vault),
     service: VaultService = Depends(_get_vault_service),
     db: Session = Depends(get_db),
 ) -> VaultStateResponse:
     """
     ``POST /vaults/{vault_id}/unlock`` — transition a vault to unlocked state.
-
-    Parameters
-    ----------
-    vault_id:
-        UUID4 string that identifies the vault to unlock.
-    service:
-        Injected :class:`~app.services.vault_service.VaultService` instance.
-    db:
-        Injected SQLAlchemy session for DB status sync.
-
-    Returns
-    -------
-    VaultStateResponse
-        Confirmation that the vault is now unlocked, with HTTP 200.
-
-    Raises
-    ------
-    HTTPException(400)
-        If ``vault_id`` is not a valid UUID.
-    HTTPException(404)
-        If no vault with that ID exists on disk.
-    HTTPException(409)
-        If the vault is already unlocked, or lacks a valid ``manifest.json``.
-    HTTPException(500)
-        If the OS cannot write the updated manifest.
     """
     try:
         return _handle_state_transition(
-            "unlock", vault_id, service.unlock_vault(vault_id, db=db)
+            "unlock", vault.id, service.unlock_vault(vault.id, db=db)
         )
     except Exception as exc:  # noqa: BLE001
-        _map_state_exception("unlock", vault_id, exc)
+        _map_state_exception("unlock", vault.id, exc)
 

@@ -98,6 +98,16 @@ class VaultNotFoundError(VaultError):
     """
 
 
+class VaultAccessDeniedError(VaultError):
+    """
+    Raised when an authenticated user attempts to access a vault that
+    belongs to another user or that they do not own.
+
+    Routes should map this to ``HTTP 404 Not Found`` or ``HTTP 403 Forbidden``
+    to prevent leaking resource existence.
+    """
+
+
 class VaultDeletionError(VaultError):
     """
     Raised when the filesystem cannot remove a vault directory tree

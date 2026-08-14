@@ -22,6 +22,7 @@ response.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.api.dependencies import get_db, get_user_vault
 from app.core.config import settings
 from app.core.exceptions import (
     CipherixError,
@@ -34,7 +35,7 @@ from app.core.exceptions import (
     VaultNotFoundError,
 )
 from app.core.logger import get_logger
-from app.database import get_db
+from app.database.models import Vault
 from app.schemas.security import (
     ChangePasswordRequest,
     ChangePasswordResponse,
@@ -138,14 +139,12 @@ def _map_security_exception(exc: Exception) -> None:
     description=(
         "Change the vault password by re-deriving the Master Key and "
         "re-encrypting (rewrapping) the Vault Key.  The vault must be "
-        "unlocked.  All encrypted documents remain intact — only the "
-        "Vault Key wrapper changes.  Requires both the current and the "
-        "new password in the request body."
+        "unlocked."
     ),
     responses={
         200: {"description": "Password changed and Vault Key rewrapped."},
-        401: {"description": "Old password is incorrect."},
-        404: {"description": "Vault not found."},
+        401: {"description": "Missing/invalid JWT or old password incorrect."},
+        404: {"description": "Vault not found or not owned."},
         422: {"description": "Invalid password format."},
         423: {"description": "Vault is locked."},
         500: {"description": "Encryption or storage failure."},
@@ -154,26 +153,23 @@ def _map_security_exception(exc: Exception) -> None:
 async def change_password(
     vault_id: str,
     payload: ChangePasswordRequest,
+    vault: Vault = Depends(get_user_vault),
     service: SecurityService = Depends(_get_security_service),
     db: Session = Depends(get_db),
 ) -> ChangePasswordResponse:
     """
     ``POST /vaults/{vault_id}/change-password`` — rewrap the Vault Key.
-
-    Decrypts the Vault Key using the old password, then re-encrypts it
-    with a freshly derived Master Key from the new password and a new
-    random salt.  No document is ever decrypted or re-encrypted.
     """
     try:
         result = service.change_password(
-            vault_id=vault_id,
+            vault_id=vault.id,
             old_password=payload.old_password,
             new_password=payload.new_password,
             db=db,
         )
         logger.info(
             "POST /vaults/%s/change-password succeeded | changed_at=%s",
-            vault_id,
+            vault.id,
             result.changed_at,
         )
         return result
@@ -187,35 +183,30 @@ async def change_password(
     status_code=status.HTTP_201_CREATED,
     summary="Generate BIP-39 recovery seed",
     description=(
-        "Generate a 24-word BIP-39 recovery mnemonic for the vault.  "
-        "The vault must be unlocked.  The seed is returned ONCE in this "
-        "response and is never stored server-side.  Write it down immediately "
-        "and store it in a secure physical location."
+        "Generate a 24-word BIP-39 recovery mnemonic for the vault."
     ),
     responses={
         201: {"description": "Recovery seed generated. Returned once — store it safely."},
-        404: {"description": "Vault not found."},
+        401: {"description": "Missing, expired, or invalid JWT token."},
+        404: {"description": "Vault not found or not owned."},
         423: {"description": "Vault is locked."},
         500: {"description": "Seed generation or metadata storage failed."},
     },
 )
 async def generate_recovery_seed(
     vault_id: str,
+    vault: Vault = Depends(get_user_vault),
     service: SecurityService = Depends(_get_security_service),
     db: Session = Depends(get_db),
 ) -> RecoverySeedResponse:
     """
     ``POST /vaults/{vault_id}/recovery-seed`` — generate and return the seed.
-
-    This endpoint has no request body.  The seed is generated server-side
-    from OS CSPRNG entropy and returned in the HTTP 201 response.  The
-    plaintext seed is never written to disk or logged.
     """
     try:
-        result = service.generate_recovery_seed(vault_id=vault_id, db=db)
+        result = service.generate_recovery_seed(vault_id=vault.id, db=db)
         logger.info(
             "POST /vaults/%s/recovery-seed succeeded | word_count=%d",
-            vault_id,
+            vault.id,
             result.word_count,
         )
         return result
@@ -230,12 +221,11 @@ async def generate_recovery_seed(
     summary="Verify recovery seed",
     description=(
         "Verify that a 24-word BIP-39 recovery seed is valid and matches "
-        "the fingerprint stored for this vault.  Returns ``valid: true`` "
-        "or ``valid: false``.  This endpoint does NOT grant access to the "
-        "vault or any key material."
+        "the fingerprint stored for this vault."
     ),
     responses={
         200: {"description": "Verification result (valid or invalid)."},
+        401: {"description": "Missing, expired, or invalid JWT token."},
         404: {"description": "Vault not found or no recovery seed configured."},
         422: {"description": "Seed fails BIP-39 validation or unsupported version."},
         500: {"description": "Internal error."},
@@ -244,25 +234,22 @@ async def generate_recovery_seed(
 async def verify_recovery_seed(
     vault_id: str,
     payload: VerifySeedRequest,
+    vault: Vault = Depends(get_user_vault),
     service: SecurityService = Depends(_get_security_service),
     db: Session = Depends(get_db),
 ) -> VerifySeedResponse:
     """
     ``POST /vaults/{vault_id}/recovery-seed/verify`` — validate a seed.
-
-    Accepts the 24-word mnemonic, checks BIP-39 structure and checksum,
-    then compares the seed fingerprint against the stored metadata.
-    When a DB session is available, the fingerprint is fetched from SQLite.
     """
     try:
         result = service.verify_recovery_seed(
-            vault_id=vault_id,
+            vault_id=vault.id,
             candidate_seed=payload.seed,
             db=db,
         )
         logger.info(
             "POST /vaults/%s/recovery-seed/verify | valid=%s",
-            vault_id,
+            vault.id,
             result.valid,
         )
         return result

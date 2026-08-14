@@ -14,10 +14,13 @@ Place them here so every route module imports from a single location.
 Never put business logic in dependencies — delegate to services.
 """
 
+import uuid
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.exceptions import (
     AuthError,
     ExpiredTokenError,
@@ -27,14 +30,15 @@ from app.core.exceptions import (
 )
 from app.core.logger import get_logger
 from app.database import get_db
-from app.database.models import User
+from app.database.models import User, Vault
 from app.security.jwt_manager import JWTManager
 from app.services.auth_service import AuthService
+from app.vault.vault_manager import VaultManager
 
 logger = get_logger(__name__)
 
 # Re-export get_db so route modules only need to import from this module.
-__all__ = ["get_db", "get_current_user"]
+__all__ = ["get_db", "get_current_user", "get_user_vault"]
 
 # HTTPBearer extracts the ``Authorization: Bearer <token>`` header.
 # ``auto_error=False`` lets us return a custom 401 instead of FastAPI's default.
@@ -119,3 +123,68 @@ def get_current_user(
         )
 
     return user
+
+
+def get_user_vault(
+    vault_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Vault:
+    """
+    FastAPI dependency — authenticate the user and verify vault ownership.
+
+    1. Validate that ``vault_id`` is a valid UUID4 string.
+    2. Retrieve the requested vault from SQLite.
+    3. Verify that the vault belongs to the authenticated user.
+    4. Reject unauthorized access with 404 (prevents leaking existence).
+    5. Return the authorized Vault ORM row.
+
+    Parameters
+    ----------
+    vault_id:
+        UUID4 string from path parameter.
+    current_user:
+        Authenticated User row (from get_current_user).
+    db:
+        Active SQLAlchemy session.
+
+    Returns
+    -------
+    Vault
+        The authorized Vault ORM model instance.
+
+    Raises
+    ------
+    HTTPException(400)
+        If vault_id is not a valid UUID string.
+    HTTPException(404)
+        If the vault does not exist or does not belong to current_user.
+    """
+    try:
+        uuid.UUID(vault_id, version=4)
+    except (ValueError, AttributeError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"'{vault_id}' is not a valid UUID4 string.",
+        )
+
+    vault_record = db.get(Vault, vault_id)
+
+    # Check existence on disk as well
+    vault_root = settings.VAULT_DIR / vault_id
+    if not (vault_root.is_dir() and (vault_root / "manifest.json").is_file()):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Vault with ID '{vault_id}' was not found.",
+        )
+
+    vault_record = db.get(Vault, vault_id)
+    if vault_record is None or (
+        vault_record.user_id is not None and vault_record.user_id != current_user.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Vault with ID '{vault_id}' was not found.",
+        )
+
+    return vault_record

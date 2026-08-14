@@ -103,6 +103,7 @@ class VaultService:
     def create_vault(
         self,
         request: CreateVaultRequest,
+        user_id: str | None = None,
         db: Session | None = None,
     ) -> VaultResponse:
         """
@@ -117,6 +118,7 @@ class VaultService:
         4. Delegate filesystem scaffolding to
            :class:`~app.vault.vault_manager.VaultManager`.
         5. If ``db`` is provided: INSERT Vault + SecurityMetadata rows.
+           Associate the Vault row with ``user_id`` if supplied.
            On DB failure, remove the newly created filesystem tree.
         6. Compose and return a :class:`~app.schemas.vault.VaultResponse`.
 
@@ -124,6 +126,8 @@ class VaultService:
         ----------
         request:
             A Pydantic-validated :class:`~app.schemas.vault.CreateVaultRequest`.
+        user_id:
+            Optional UUID4 string of the authenticated owner.
         db:
             SQLAlchemy session.  When provided, a Vault record and a
             SecurityMetadata record are inserted and committed.  When
@@ -145,7 +149,10 @@ class VaultService:
 
         vault_id: str = str(uuid.uuid4())
         logger.info(
-            "Initiating vault creation | name=%r | id=%s", request.name, vault_id
+            "Initiating vault creation | name=%r | id=%s | user_id=%s",
+            request.name,
+            vault_id,
+            user_id,
         )
 
         manifest = VaultManifest.create(vault_id=vault_id, name=request.name)
@@ -163,6 +170,7 @@ class VaultService:
                     vault_id=vault_id,
                     name=request.name,
                     vault_root=vault_root,
+                    user_id=user_id,
                 )
             except SQLAlchemyError as exc:
                 # DB commit failed after filesystem creation succeeded.
@@ -275,13 +283,21 @@ class VaultService:
 
         logger.info("Vault deleted successfully | vault_id=%s", vault_id)
 
-    def list_vaults(self) -> list[VaultSummary]:
+    def list_vaults(
+        self,
+        user_id: str | None = None,
+        db: Session | None = None,
+    ) -> list[VaultSummary]:
         """
-        Return a summary of every valid vault, sorted newest-first.
+        Return a summary of every valid vault belonging to user_id, sorted newest-first.
 
-        Reads from the filesystem (source of truth) rather than the DB to
-        ensure the listing reflects actual vault structure even if the DB
-        is temporarily out of sync.
+        Parameters
+        ----------
+        user_id:
+            Optional user ID filter. When supplied alongside db, only vaults
+            belonging to this user are returned.
+        db:
+            Optional SQLAlchemy session.
 
         Returns
         -------
@@ -291,8 +307,16 @@ class VaultService:
         """
         raw_manifests = self._manager.list_vaults()
 
+        # If db and user_id are provided, filter by SQLite ownership
+        allowed_vault_ids: set[str] | None = None
+        if db is not None and user_id is not None:
+            user_records = db.query(VaultRecord.id).filter(VaultRecord.user_id == user_id).all()
+            allowed_vault_ids = {r.id for r in user_records}
+
         summaries: list[VaultSummary] = []
         for manifest in raw_manifests:
+            if allowed_vault_ids is not None and manifest.vault_id not in allowed_vault_ids:
+                continue
             try:
                 summaries.append(
                     VaultSummary(
@@ -315,7 +339,7 @@ class VaultService:
             reverse=True,
         )
 
-        logger.info("Listing vaults | count=%d", len(summaries))
+        logger.info("Listing vaults | count=%d | user_id=%s", len(summaries), user_id)
         return summaries
 
     def lock_vault(
@@ -410,6 +434,7 @@ class VaultService:
         vault_id: str,
         name: str,
         vault_root: Path,
+        user_id: str | None = None,
     ) -> None:
         """
         Read the key + password metadata files that VaultManager just wrote
@@ -431,6 +456,8 @@ class VaultService:
             Human-readable vault name from the create request.
         vault_root:
             Absolute path to the vault root directory on disk.
+        user_id:
+            Optional owner user ID string.
 
         Raises
         ------
@@ -459,6 +486,7 @@ class VaultService:
             name=name,
             status="locked",
             security_version="1.0",
+            user_id=user_id,
             created_at=now,
             updated_at=now,
         )

@@ -108,6 +108,12 @@ class Vault(Base):
     security_version: Mapped[str] = mapped_column(
         String(16), nullable=False, default="1.0"
     )
+    user_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -121,6 +127,10 @@ class Vault(Base):
     )
 
     # Relationships
+    user: Mapped[Optional["User"]] = relationship(
+        "User",
+        back_populates="vaults",
+    )
     documents: Mapped[list["Document"]] = relationship(
         "Document",
         back_populates="vault",
@@ -406,6 +416,14 @@ class User(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+    # Relationships
+    vaults: Mapped[list["Vault"]] = relationship(
+        "Vault",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="select",
     )
 
     def __repr__(self) -> str:

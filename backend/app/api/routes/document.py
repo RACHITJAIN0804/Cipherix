@@ -29,6 +29,7 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile,
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.api.dependencies import get_db, get_user_vault
 from app.core.config import settings
 from app.core.exceptions import (
     CipherixError,
@@ -44,7 +45,7 @@ from app.core.exceptions import (
     VaultNotFoundError,
 )
 from app.core.logger import get_logger
-from app.database import get_db
+from app.database.models import Vault
 from app.schemas.document import (
     DocumentListResponse,
     DocumentResponse,
@@ -151,7 +152,8 @@ def _map_document_exception(exc: Exception) -> None:
     ),
     responses={
         201: {"description": "Document encrypted and stored."},
-        404: {"description": "Vault not found."},
+        401: {"description": "Missing, expired, or invalid JWT token."},
+        404: {"description": "Vault not found or not owned."},
         422: {"description": "Invalid filename or empty file."},
         423: {"description": "Vault is locked."},
         500: {"description": "Encryption or storage failure."},
@@ -159,6 +161,7 @@ def _map_document_exception(exc: Exception) -> None:
 )
 async def upload_document(
     vault_id: str,
+    vault: Vault = Depends(get_user_vault),
     file: UploadFile = File(..., description="File to encrypt and store."),
     x_vault_password: str = Header(
         ...,
@@ -170,16 +173,11 @@ async def upload_document(
 ) -> DocumentResponse:
     """
     ``POST /vaults/{vault_id}/documents`` — encrypt and store a document.
-
-    Reads the entire file into memory, delegates encryption and storage to
-    :class:`~app.services.document_service.DocumentService`, and returns
-    the document metadata.  The password is forwarded to the service and is
-    never stored or logged by this handler.
     """
     try:
         file_bytes = await file.read()
         response = service.upload_document(
-            vault_id=vault_id,
+            vault_id=vault.id,
             password=x_vault_password,
             filename=file.filename or "",
             content_type=file.content_type,
@@ -188,7 +186,7 @@ async def upload_document(
         )
         logger.info(
             "POST /vaults/%s/documents succeeded | document_id=%s",
-            vault_id,
+            vault.id,
             response.document_id,
         )
         return response
@@ -203,13 +201,11 @@ async def upload_document(
     summary="Verify encrypted document integrity",
     description=(
         "Recompute the SHA-256 hash of the stored encrypted blob and compare "
-        "it against the hash recorded at upload time.  No password is required "
-        "— this check operates entirely on ciphertext and never decrypts. "
-        "Returns ``{\"verified\": true}`` on success.  Returns HTTP 409 if the "
-        "hash does not match or if the document predates integrity verification."
+        "it against the hash recorded at upload time.  No password is required."
     ),
     responses={
         200: {"description": "Integrity verified — hash matches."},
+        401: {"description": "Missing, expired, or invalid JWT token."},
         404: {"description": "Vault or document not found."},
         409: {"description": "Hash mismatch or missing integrity metadata."},
         500: {"description": "Blob unreadable or storage failure."},
@@ -218,25 +214,22 @@ async def upload_document(
 async def verify_document_integrity(
     vault_id: str,
     document_id: str,
+    vault: Vault = Depends(get_user_vault),
     service: DocumentService = Depends(_get_document_service),
     db: Session = Depends(get_db),
 ) -> VerifyIntegrityResponse:
     """
     ``GET /vaults/{vault_id}/documents/{document_id}/verify`` — integrity check.
-
-    No Vault Key or password is needed.  The check reads the ciphertext from
-    disk, recomputes its SHA-256 hash, and compares with the stored hash.
-    When a DB session is available, the stored hash is fetched from SQLite.
     """
     try:
         result = service.verify_document(
-            vault_id=vault_id,
+            vault_id=vault.id,
             document_id=document_id,
             db=db,
         )
         logger.info(
             "GET /vaults/%s/documents/%s/verify PASSED",
-            vault_id,
+            vault.id,
             document_id,
         )
         return result
@@ -250,27 +243,27 @@ async def verify_document_integrity(
     status_code=status.HTTP_200_OK,
     summary="List documents in a vault",
     description=(
-        "Return metadata for every document stored in the vault.  "
-        "The vault need not be unlocked — listing reads only metadata files, "
-        "not encrypted blobs.  No decryption is performed."
+        "Return metadata for every document stored in the vault."
     ),
     responses={
         200: {"description": "List of document metadata entries."},
-        404: {"description": "Vault not found."},
+        401: {"description": "Missing, expired, or invalid JWT token."},
+        404: {"description": "Vault not found or not owned."},
         500: {"description": "Metadata storage error."},
     },
 )
 async def list_documents(
     vault_id: str,
+    vault: Vault = Depends(get_user_vault),
     service: DocumentService = Depends(_get_document_service),
     db: Session = Depends(get_db),
 ) -> DocumentListResponse:
     """``GET /vaults/{vault_id}/documents`` — list document metadata."""
     try:
-        result = service.list_documents(vault_id, db=db)
+        result = service.list_documents(vault.id, db=db)
         logger.info(
             "GET /vaults/%s/documents succeeded | count=%d",
-            vault_id,
+            vault.id,
             result.count,
         )
         return result
@@ -284,13 +277,11 @@ async def list_documents(
     summary="Download and decrypt a document",
     description=(
         "Decrypt and stream the original file for the document identified by "
-        "``document_id`` inside ``vault_id``.  The vault must be unlocked.  "
-        "The password is used to derive the Master Key, which unwraps the "
-        "Vault Key, which decrypts the document.  Plaintext is never written "
-        "to disk — it lives only in memory for the duration of this request."
+        "``document_id`` inside ``vault_id``.  The vault must be unlocked."
     ),
     responses={
         200: {"description": "Decrypted file content as an octet stream."},
+        401: {"description": "Missing, expired, or invalid JWT token."},
         404: {"description": "Vault or document not found."},
         423: {"description": "Vault is locked."},
         500: {"description": "Decryption or storage failure."},
@@ -300,6 +291,7 @@ async def list_documents(
 async def download_document(
     vault_id: str,
     document_id: str,
+    vault: Vault = Depends(get_user_vault),
     x_vault_password: str = Header(
         ...,
         alias="X-Vault-Password",
@@ -310,26 +302,17 @@ async def download_document(
 ) -> StreamingResponse:
     """
     ``GET /vaults/{vault_id}/documents/{document_id}`` — decrypt and download.
-
-    Delegates decryption to
-    :meth:`~app.services.document_service.DocumentService.download_document`,
-    which returns ``(plaintext_bytes, metadata)``.  The plaintext is wrapped in
-    a :class:`~fastapi.responses.StreamingResponse` so it streams directly to
-    the client without being buffered a second time.
-
-    ``Content-Disposition: attachment`` causes browsers to save the file
-    rather than trying to display it, preserving the original filename.
     """
     try:
         plaintext, metadata = service.download_document(
-            vault_id=vault_id,
+            vault_id=vault.id,
             document_id=document_id,
             password=x_vault_password,
             db=db,
         )
         logger.info(
             "GET /vaults/%s/documents/%s succeeded | filename=%s | bytes=%d",
-            vault_id,
+            vault.id,
             document_id,
             metadata.original_filename,
             len(plaintext),
@@ -354,11 +337,11 @@ async def download_document(
     summary="Delete an encrypted document",
     description=(
         "Permanently delete the encrypted blob and metadata sidecar for the "
-        "document identified by ``document_id`` inside ``vault_id``.  "
-        "The vault need not be unlocked.  This action is **irreversible**."
+        "document identified by ``document_id`` inside ``vault_id``."
     ),
     responses={
         204: {"description": "Document deleted."},
+        401: {"description": "Missing, expired, or invalid JWT token."},
         404: {"description": "Vault or document not found."},
         500: {"description": "Filesystem deletion error."},
     },
@@ -366,15 +349,16 @@ async def download_document(
 async def delete_document(
     vault_id: str,
     document_id: str,
+    vault: Vault = Depends(get_user_vault),
     service: DocumentService = Depends(_get_document_service),
     db: Session = Depends(get_db),
 ) -> Response:
     """``DELETE /vaults/{vault_id}/documents/{document_id}`` — delete a document."""
     try:
-        service.delete_document(vault_id=vault_id, document_id=document_id, db=db)
+        service.delete_document(vault_id=vault.id, document_id=document_id, db=db)
         logger.info(
             "DELETE /vaults/%s/documents/%s succeeded",
-            vault_id,
+            vault.id,
             document_id,
         )
         return Response(status_code=status.HTTP_204_NO_CONTENT)
