@@ -540,3 +540,378 @@ class TestNoSensitiveData:
         fetched = db_session.get(SecurityMetadata, vault.id)
         # BIP-39 24-word seed is hundreds of characters — 16 chars cannot be a seed.
         assert len(fetched.seed_fingerprint) == 16
+
+
+# ---------------------------------------------------------------------------
+# Integration: VaultService → SQLite persistence
+# ---------------------------------------------------------------------------
+
+
+class TestVaultServiceDbIntegration:
+    """
+    Integration tests that exercise VaultService with a real in-memory DB.
+
+    These tests verify the full service→SQLite round-trip for vault creation,
+    lock/unlock state transitions, and deletion.
+    """
+
+    def test_create_vault_persists_vault_record(self, db_session: Session, tmp_path):
+        """VaultService.create_vault should insert a Vault row and SecurityMetadata row."""
+        from app.services.vault_service import VaultService
+        from app.vault.vault_manager import VaultManager
+
+        manager = VaultManager(vault_base_dir=tmp_path)
+        service = VaultService(manager=manager)
+
+        from app.schemas.vault import CreateVaultRequest
+        request = CreateVaultRequest(name="Integration Vault", password="TestPass123!")
+        response = service.create_vault(request, db=db_session)
+
+        # Vault row should exist.
+        vault_row = db_session.get(Vault, response.vault_id)
+        assert vault_row is not None
+        assert vault_row.name == "Integration Vault"
+        assert vault_row.status == "locked"
+
+        # SecurityMetadata row should exist.
+        sec_row = db_session.get(SecurityMetadata, response.vault_id)
+        assert sec_row is not None
+        # Must NOT store the password or plaintext key.
+        assert sec_row.encrypted_vault_key != "TestPass123!"
+        assert sec_row.salt is not None
+
+    def test_create_vault_without_db_leaves_no_db_record(self, tmp_path):
+        """When db=None, create_vault must work (filesystem-only mode)."""
+        from app.services.vault_service import VaultService
+        from app.vault.vault_manager import VaultManager
+        from app.schemas.vault import CreateVaultRequest
+
+        manager = VaultManager(vault_base_dir=tmp_path)
+        service = VaultService(manager=manager)
+
+        request = CreateVaultRequest(name="No DB Vault", password="TestPass123!")
+        response = service.create_vault(request, db=None)
+
+        # Vault directory must exist on disk.
+        assert (tmp_path / response.vault_id).is_dir()
+
+    def test_lock_vault_updates_db_status(self, db_session: Session, tmp_path):
+        """lock_vault should flip the Vault row status from unlocked→locked in SQLite."""
+        from app.services.vault_service import VaultService
+        from app.vault.vault_manager import VaultManager
+        from app.schemas.vault import CreateVaultRequest
+
+        manager = VaultManager(vault_base_dir=tmp_path)
+        service = VaultService(manager=manager)
+
+        request = CreateVaultRequest(name="Lock Test Vault", password="TestPass123!")
+        created = service.create_vault(request, db=db_session)
+        vault_id = created.vault_id
+
+        # Unlock first so we can lock.
+        service.unlock_vault(vault_id, db=db_session)
+        row_after_unlock = db_session.get(Vault, vault_id)
+        assert row_after_unlock.status == "unlocked"
+
+        # Now lock.
+        service.lock_vault(vault_id, db=db_session)
+        db_session.expire(row_after_unlock)
+        row_after_lock = db_session.get(Vault, vault_id)
+        assert row_after_lock.status == "locked"
+
+    def test_unlock_vault_updates_db_status(self, db_session: Session, tmp_path):
+        """unlock_vault should flip the Vault row status from locked→unlocked in SQLite."""
+        from app.services.vault_service import VaultService
+        from app.vault.vault_manager import VaultManager
+        from app.schemas.vault import CreateVaultRequest
+
+        manager = VaultManager(vault_base_dir=tmp_path)
+        service = VaultService(manager=manager)
+
+        request = CreateVaultRequest(name="Unlock Test Vault", password="TestPass123!")
+        created = service.create_vault(request, db=db_session)
+        vault_id = created.vault_id
+
+        row_before = db_session.get(Vault, vault_id)
+        assert row_before.status == "locked"
+
+        service.unlock_vault(vault_id, db=db_session)
+        db_session.expire(row_before)
+        row_after = db_session.get(Vault, vault_id)
+        assert row_after.status == "unlocked"
+
+    def test_delete_vault_removes_db_record(self, db_session: Session, tmp_path):
+        """delete_vault should remove the Vault row (and children via CASCADE)."""
+        from app.services.vault_service import VaultService
+        from app.vault.vault_manager import VaultManager
+        from app.schemas.vault import CreateVaultRequest
+
+        manager = VaultManager(vault_base_dir=tmp_path)
+        service = VaultService(manager=manager)
+
+        request = CreateVaultRequest(name="Delete Test Vault", password="TestPass123!")
+        created = service.create_vault(request, db=db_session)
+        vault_id = created.vault_id
+
+        service.delete_vault(vault_id, db=db_session)
+
+        assert db_session.get(Vault, vault_id) is None
+        assert db_session.get(SecurityMetadata, vault_id) is None
+
+
+# ---------------------------------------------------------------------------
+# Integration: DocumentService → SQLite persistence
+# ---------------------------------------------------------------------------
+
+
+class TestDocumentServiceDbIntegration:
+    """
+    Integration tests that exercise DocumentService with a real in-memory DB.
+
+    These tests verify:
+    - upload_document inserts a Document row in SQLite.
+    - list_documents reads from SQLite when db is provided.
+    - delete_document removes the Document row.
+    - verify_document reads the integrity_hash from SQLite.
+    """
+
+    @pytest.fixture()
+    def _vault_setup(self, db_session: Session, tmp_path):
+        """Create a vault and return (vault_id, service, tmp_path)."""
+        from app.services.vault_service import VaultService
+        from app.vault.vault_manager import VaultManager
+        from app.schemas.vault import CreateVaultRequest
+
+        manager = VaultManager(vault_base_dir=tmp_path)
+        vsvc = VaultService(manager=manager)
+        request = CreateVaultRequest(name="Doc Test Vault", password="DocPass123!")
+        created = vsvc.create_vault(request, db=db_session)
+
+        # Unlock so documents can be uploaded.
+        vsvc.unlock_vault(created.vault_id, db=db_session)
+
+        from app.services.document_service import DocumentService
+        dsvc = DocumentService(vault_base_dir=tmp_path)
+        return created.vault_id, dsvc
+
+    def test_upload_inserts_document_record(
+        self, _vault_setup, db_session: Session
+    ):
+        """upload_document should insert a Document row in SQLite."""
+        vault_id, svc = _vault_setup
+
+        doc_resp = svc.upload_document(
+            vault_id=vault_id,
+            password="DocPass123!",
+            filename="hello.txt",
+            content_type="text/plain",
+            file_bytes=b"Hello, Cipherix!",
+            db=db_session,
+        )
+
+        doc_row = db_session.get(Document, doc_resp.document_id)
+        assert doc_row is not None
+        assert doc_row.original_filename == "hello.txt"
+        assert doc_row.mime_type == "text/plain"
+        assert doc_row.vault_id == vault_id
+        # Integrity hash must be a 64-char SHA-256 hex digest.
+        assert doc_row.integrity_hash is not None
+        assert len(doc_row.integrity_hash) == 64
+        # Ensure no plaintext content is stored.
+        assert doc_row.integrity_hash != "Hello, Cipherix!"
+
+    def test_list_documents_reads_from_sqlite(
+        self, _vault_setup, db_session: Session
+    ):
+        """list_documents(db=...) should return results from the SQLite table."""
+        vault_id, svc = _vault_setup
+
+        # Upload two documents.
+        for i in range(2):
+            svc.upload_document(
+                vault_id=vault_id,
+                password="DocPass123!",
+                filename=f"file{i}.txt",
+                content_type="text/plain",
+                file_bytes=f"content {i}".encode(),
+                db=db_session,
+            )
+
+        result = svc.list_documents(vault_id, db=db_session)
+        assert result.count == 2
+        filenames = {d.original_filename for d in result.documents}
+        assert filenames == {"file0.txt", "file1.txt"}
+
+    def test_list_documents_returns_empty_for_new_vault(
+        self, _vault_setup, db_session: Session
+    ):
+        """list_documents should return an empty list if no documents exist."""
+        vault_id, svc = _vault_setup
+        result = svc.list_documents(vault_id, db=db_session)
+        assert result.count == 0
+        assert result.documents == []
+
+    def test_delete_document_removes_db_record(
+        self, _vault_setup, db_session: Session
+    ):
+        """delete_document should remove the Document row from SQLite."""
+        vault_id, svc = _vault_setup
+
+        doc_resp = svc.upload_document(
+            vault_id=vault_id,
+            password="DocPass123!",
+            filename="bye.txt",
+            content_type="text/plain",
+            file_bytes=b"goodbye",
+            db=db_session,
+        )
+        doc_id = doc_resp.document_id
+        assert db_session.get(Document, doc_id) is not None
+
+        svc.delete_document(vault_id, doc_id, db=db_session)
+        assert db_session.get(Document, doc_id) is None
+
+    def test_verify_document_reads_hash_from_sqlite(
+        self, _vault_setup, db_session: Session
+    ):
+        """verify_document(db=...) should read the hash from SQLite and pass."""
+        vault_id, svc = _vault_setup
+
+        doc_resp = svc.upload_document(
+            vault_id=vault_id,
+            password="DocPass123!",
+            filename="check.txt",
+            content_type="text/plain",
+            file_bytes=b"integrity test",
+            db=db_session,
+        )
+
+        result = svc.verify_document(vault_id, doc_resp.document_id, db=db_session)
+        assert result.verified is True
+        assert result.document_id == doc_resp.document_id
+
+    def test_document_content_not_stored_in_db(
+        self, _vault_setup, db_session: Session
+    ):
+        """The plaintext document content must never appear in any DB column."""
+        vault_id, svc = _vault_setup
+        plaintext = b"super secret content"
+
+        doc_resp = svc.upload_document(
+            vault_id=vault_id,
+            password="DocPass123!",
+            filename="secret.txt",
+            content_type="text/plain",
+            file_bytes=plaintext,
+            db=db_session,
+        )
+
+        doc_row = db_session.get(Document, doc_resp.document_id)
+        # None of the string columns should contain the plaintext.
+        for col in (
+            doc_row.original_filename,
+            doc_row.mime_type,
+            doc_row.encrypted_path,
+            doc_row.integrity_hash,
+            doc_row.encryption_version,
+        ):
+            assert plaintext.decode() not in (col or ""), (
+                f"Plaintext found in DB column: {col!r}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Integration: SecurityService → SQLite (seed fingerprint verification)
+# ---------------------------------------------------------------------------
+
+
+class TestSecurityServiceSeedDbIntegration:
+    """
+    Integration tests for verify_recovery_seed using the SQLite fingerprint path.
+    """
+
+    @pytest.fixture()
+    def _seeded_vault(self, db_session: Session, tmp_path):
+        """Create a vault, generate a recovery seed, and return (vault_id, seed, svc)."""
+        from app.services.vault_service import VaultService
+        from app.vault.vault_manager import VaultManager
+        from app.schemas.vault import CreateVaultRequest
+        from app.services.security_service import SecurityService
+
+        manager = VaultManager(vault_base_dir=tmp_path)
+        vsvc = VaultService(manager=manager)
+        request = CreateVaultRequest(name="Seed DB Test Vault", password="SeedPass123!")
+        created = vsvc.create_vault(request, db=db_session)
+
+        # Unlock the vault (required by generate_recovery_seed).
+        vsvc.unlock_vault(created.vault_id, db=db_session)
+
+        ssvc = SecurityService(vault_base_dir=tmp_path)
+        seed_resp = ssvc.generate_recovery_seed(vault_id=created.vault_id, db=db_session)
+        return created.vault_id, seed_resp.seed, ssvc
+
+    def test_verify_correct_seed_against_sqlite(
+        self, _seeded_vault, db_session: Session
+    ):
+        """verify_recovery_seed(db=...) should return valid=True for the correct seed."""
+        vault_id, seed, svc = _seeded_vault
+        result = svc.verify_recovery_seed(vault_id, seed, db=db_session)
+        assert result.valid is True
+
+    def test_verify_wrong_seed_against_sqlite(
+        self, _seeded_vault, db_session: Session, tmp_path
+    ):
+        """verify_recovery_seed(db=...) should return valid=False for a different seed."""
+        from mnemonic import Mnemonic
+        import os
+
+        vault_id, _correct_seed, svc = _seeded_vault
+
+        # Generate a different valid BIP-39 seed.
+        mnemo = Mnemonic("english")
+        wrong_seed = mnemo.to_mnemonic(os.urandom(32))
+
+        result = svc.verify_recovery_seed(vault_id, wrong_seed, db=db_session)
+        assert result.valid is False
+
+    def test_verify_seed_raises_for_invalid_bip39(
+        self, _seeded_vault, db_session: Session
+    ):
+        """verify_recovery_seed(db=...) should raise InvalidRecoverySeedError for garbage."""
+        from app.core.exceptions import InvalidRecoverySeedError
+
+        vault_id, _seed, svc = _seeded_vault
+
+        with pytest.raises(InvalidRecoverySeedError):
+            svc.verify_recovery_seed(vault_id, "this is not a valid seed", db=db_session)
+
+    def test_seed_fingerprint_persisted_in_sqlite(
+        self, _seeded_vault, db_session: Session
+    ):
+        """After generate_recovery_seed, the SecurityMetadata row must have a fingerprint."""
+        vault_id, _seed, _svc = _seeded_vault
+
+        sec_row = db_session.get(SecurityMetadata, vault_id)
+        assert sec_row is not None
+        assert sec_row.seed_fingerprint is not None
+        # Fingerprint is always exactly 16 hex chars.
+        assert len(sec_row.seed_fingerprint) == 16
+        assert all(c in "0123456789abcdef" for c in sec_row.seed_fingerprint)
+
+    def test_seed_itself_not_stored_in_sqlite(
+        self, _seeded_vault, db_session: Session
+    ):
+        """The plaintext 24-word seed must never appear in any DB column."""
+        vault_id, seed, _svc = _seeded_vault
+
+        sec_row = db_session.get(SecurityMetadata, vault_id)
+        # The full seed phrase must not appear in any column.
+        for col in (
+            sec_row.encrypted_vault_key,
+            sec_row.nonce,
+            sec_row.salt,
+            sec_row.seed_fingerprint,
+        ):
+            assert seed not in (col or ""), (
+                f"Plaintext seed found in DB column: {col!r}"
+            )

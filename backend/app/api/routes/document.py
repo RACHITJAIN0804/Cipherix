@@ -219,17 +219,20 @@ async def verify_document_integrity(
     vault_id: str,
     document_id: str,
     service: DocumentService = Depends(_get_document_service),
+    db: Session = Depends(get_db),
 ) -> VerifyIntegrityResponse:
     """
     ``GET /vaults/{vault_id}/documents/{document_id}/verify`` — integrity check.
 
     No Vault Key or password is needed.  The check reads the ciphertext from
     disk, recomputes its SHA-256 hash, and compares with the stored hash.
+    When a DB session is available, the stored hash is fetched from SQLite.
     """
     try:
         result = service.verify_document(
             vault_id=vault_id,
             document_id=document_id,
+            db=db,
         )
         logger.info(
             "GET /vaults/%s/documents/%s/verify PASSED",
@@ -260,10 +263,11 @@ async def verify_document_integrity(
 async def list_documents(
     vault_id: str,
     service: DocumentService = Depends(_get_document_service),
+    db: Session = Depends(get_db),
 ) -> DocumentListResponse:
     """``GET /vaults/{vault_id}/documents`` — list document metadata."""
     try:
-        result = service.list_documents(vault_id)
+        result = service.list_documents(vault_id, db=db)
         logger.info(
             "GET /vaults/%s/documents succeeded | count=%d",
             vault_id,
@@ -302,6 +306,7 @@ async def download_document(
         description="Vault unlock password used to derive the Master Key.",
     ),
     service: DocumentService = Depends(_get_document_service),
+    db: Session = Depends(get_db),
 ) -> StreamingResponse:
     """
     ``GET /vaults/{vault_id}/documents/{document_id}`` — decrypt and download.
@@ -320,6 +325,7 @@ async def download_document(
             vault_id=vault_id,
             document_id=document_id,
             password=x_vault_password,
+            db=db,
         )
         logger.info(
             "GET /vaults/%s/documents/%s succeeded | filename=%s | bytes=%d",

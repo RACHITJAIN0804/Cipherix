@@ -446,6 +446,7 @@ async def delete_vault(
 async def lock_vault(
     vault_id: str,
     service: VaultService = Depends(_get_vault_service),
+    db: Session = Depends(get_db),
 ) -> VaultStateResponse:
     """
     ``POST /vaults/{vault_id}/lock`` — transition a vault to locked state.
@@ -456,6 +457,8 @@ async def lock_vault(
         UUID4 string that identifies the vault to lock.
     service:
         Injected :class:`~app.services.vault_service.VaultService` instance.
+    db:
+        Injected SQLAlchemy session for DB status sync.
 
     Returns
     -------
@@ -474,7 +477,9 @@ async def lock_vault(
         If the OS cannot write the updated manifest.
     """
     try:
-        return _handle_state_transition("lock", vault_id, service.lock_vault(vault_id))
+        return _handle_state_transition(
+            "lock", vault_id, service.lock_vault(vault_id, db=db)
+        )
     except Exception as exc:  # noqa: BLE001
         _map_state_exception("lock", vault_id, exc)
 
@@ -501,6 +506,7 @@ async def lock_vault(
 async def unlock_vault(
     vault_id: str,
     service: VaultService = Depends(_get_vault_service),
+    db: Session = Depends(get_db),
 ) -> VaultStateResponse:
     """
     ``POST /vaults/{vault_id}/unlock`` — transition a vault to unlocked state.
@@ -511,6 +517,8 @@ async def unlock_vault(
         UUID4 string that identifies the vault to unlock.
     service:
         Injected :class:`~app.services.vault_service.VaultService` instance.
+    db:
+        Injected SQLAlchemy session for DB status sync.
 
     Returns
     -------
@@ -529,7 +537,9 @@ async def unlock_vault(
         If the OS cannot write the updated manifest.
     """
     try:
-        return _handle_state_transition("unlock", vault_id, service.unlock_vault(vault_id))
+        return _handle_state_transition(
+            "unlock", vault_id, service.unlock_vault(vault_id, db=db)
+        )
     except Exception as exc:  # noqa: BLE001
         _map_state_exception("unlock", vault_id, exc)
 

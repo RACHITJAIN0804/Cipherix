@@ -84,6 +84,7 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import (
     CipherixError,
     PasswordChangeError,
+    RecoveryMetadataMissingError,
     VaultKeyDecryptionError,
     VaultLockedError,
     VaultNotFoundError,
@@ -442,6 +443,7 @@ class SecurityService:
         self,
         vault_id: str,
         candidate_seed: str,
+        db: Session | None = None,
     ) -> VerifySeedResponse:
         """
         Validate a candidate recovery seed against the stored fingerprint.
@@ -450,12 +452,19 @@ class SecurityService:
         confirms that the candidate is the same seed that was generated for
         this vault.  Actual vault recovery is a future milestone.
 
+        When ``db`` is provided, the seed fingerprint is compared against the
+        value stored in the SQLite ``security_metadata`` table, falling back
+        to the on-disk ``recovery_meta.json`` file when ``db`` is ``None``.
+
         Parameters
         ----------
         vault_id:
             UUID4 identifying the target vault.
         candidate_seed:
             The recovery seed provided by the user.
+        db:
+            SQLAlchemy session.  When provided, the stored seed fingerprint
+            and recovery version are fetched from SQLite.
 
         Returns
         -------
@@ -478,10 +487,30 @@ class SecurityService:
         vault_root = self._assert_vault_exists(vault_id)
         recovery_mgr = RecoveryManager(vault_root)
 
-        valid: bool = recovery_mgr.validate_seed(
-            candidate=candidate_seed,
-            vault_id=vault_id,
-        )
+        if db is not None:
+            # Validate BIP-39 structure / checksum first, then compare
+            # fingerprint against the SQLite record.
+            sec_record = db.get(SecurityMetadataRecord, vault_id)
+            if sec_record is None or sec_record.seed_fingerprint is None:
+                raise RecoveryMetadataMissingError(
+                    f"No recovery seed fingerprint found in SQLite for vault '{vault_id}'.",
+                    detail=(
+                        "No recovery seed has been generated for this vault. "
+                        "Generate a recovery seed first."
+                    ),
+                )
+
+            # Validate BIP-39 structure of the candidate seed.
+            recovery_mgr.validate_seed_format(candidate_seed)
+
+            # Compute fingerprint of the candidate and compare.
+            candidate_fingerprint: str = recovery_mgr.compute_fingerprint(candidate_seed)
+            valid: bool = candidate_fingerprint == sec_record.seed_fingerprint
+        else:
+            valid = recovery_mgr.validate_seed(
+                candidate=candidate_seed,
+                vault_id=vault_id,
+            )
 
         logger.info(
             "Recovery seed verification | vault_id=%s | valid=%s",

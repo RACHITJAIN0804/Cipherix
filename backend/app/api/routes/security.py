@@ -245,17 +245,20 @@ async def verify_recovery_seed(
     vault_id: str,
     payload: VerifySeedRequest,
     service: SecurityService = Depends(_get_security_service),
+    db: Session = Depends(get_db),
 ) -> VerifySeedResponse:
     """
     ``POST /vaults/{vault_id}/recovery-seed/verify`` — validate a seed.
 
     Accepts the 24-word mnemonic, checks BIP-39 structure and checksum,
     then compares the seed fingerprint against the stored metadata.
+    When a DB session is available, the fingerprint is fetched from SQLite.
     """
     try:
         result = service.verify_recovery_seed(
             vault_id=vault_id,
             candidate_seed=payload.seed,
+            db=db,
         )
         logger.info(
             "POST /vaults/%s/recovery-seed/verify | valid=%s",

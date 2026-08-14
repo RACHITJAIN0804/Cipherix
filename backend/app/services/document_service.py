@@ -269,7 +269,9 @@ class DocumentService:
                 )
             except SQLAlchemyError as exc:
                 # DB commit failed after both filesystem files were written.
-                # Clean up to keep the system consistent.
+                # Roll back the DB transaction, then clean up the filesystem
+                # files to keep the system consistent.
+                db.rollback()
                 logger.error(
                     "DB insert failed after document written to disk — "
                     "rolling back filesystem | vault_id=%s | document_id=%s | error=%s",
@@ -305,17 +307,26 @@ class DocumentService:
 
         return self._metadata_to_response(metadata)
 
-    def list_documents(self, vault_id: str) -> DocumentListResponse:
+    def list_documents(
+        self, vault_id: str, db: Session | None = None
+    ) -> DocumentListResponse:
         """
         Return metadata for all documents stored in a vault.
 
         The vault must exist but need not be unlocked — listing metadata
         does not require decrypting any files.
 
+        When ``db`` is provided, document metadata is queried from SQLite
+        rather than scanned from the filesystem ``metadata/`` directory.  The
+        filesystem path is still validated as a fallback source of truth.
+
         Parameters
         ----------
         vault_id:
             UUID4 identifying the target vault.
+        db:
+            SQLAlchemy session.  When provided, document metadata is fetched
+            from the SQLite ``documents`` table.
 
         Returns
         -------
@@ -332,13 +343,44 @@ class DocumentService:
         """
         vault_root = self._assert_vault_exists(vault_id)
 
+        if db is not None:
+            from app.database.models import Document as DocumentRecord  # local to avoid circular import risk
+
+            db_docs = (
+                db.query(DocumentRecord)
+                .filter(DocumentRecord.vault_id == vault_id)
+                .order_by(DocumentRecord.created_at.desc())
+                .all()
+            )
+            documents = [
+                DocumentResponse(
+                    document_id=rec.id,
+                    original_filename=rec.original_filename,
+                    mime_type=rec.mime_type,
+                    size=rec.size,
+                    uploaded_at=rec.created_at,
+                    encryption_version=rec.encryption_version,
+                )
+                for rec in db_docs
+            ]
+            logger.info(
+                "Document listing (SQLite) | vault_id=%s | count=%d",
+                vault_id,
+                len(documents),
+            )
+            return DocumentListResponse(
+                vault_id=vault_id,
+                count=len(documents),
+                documents=documents,
+            )
+
         doc_mgr = DocumentManager(vault_root)
         all_metadata = doc_mgr.list_metadata(vault_id)
 
         documents = [self._metadata_to_response(m) for m in all_metadata]
 
         logger.info(
-            "Document listing | vault_id=%s | count=%d",
+            "Document listing (filesystem) | vault_id=%s | count=%d",
             vault_id,
             len(documents),
         )
@@ -440,6 +482,7 @@ class DocumentService:
         vault_id: str,
         document_id: str,
         password: str,
+        db: Session | None = None,
     ) -> tuple[bytes, DocumentMetadata]:
         """
         Decrypt and return a document's plaintext bytes and metadata.
@@ -450,7 +493,10 @@ class DocumentService:
         Flow
         ----
         1. Assert the vault exists and is unlocked.
-        2. Read the metadata sidecar to get the stored nonce and MIME type.
+        2. Read the document metadata.  When ``db`` is provided, the metadata
+           is fetched from the SQLite ``documents`` table and the encrypted
+           blob path is resolved from the stored relative path.  When ``db``
+           is ``None``, the filesystem ``metadata/*.json`` sidecar is used.
         3. Assert the encrypted blob exists on disk.
         4. Unwrap the Vault Key (Argon2id + AES-GCM key-unwrap).
         5. Decrypt the blob in memory using the Vault Key and stored nonce.
@@ -465,6 +511,10 @@ class DocumentService:
         password:
             The vault's unlock password used to re-derive the Master Key
             and decrypt the Vault Key.  Never stored or logged.
+        db:
+            SQLAlchemy session.  When provided, document metadata (nonce,
+            filename, MIME type) is read from SQLite instead of from the
+            JSON sidecar on disk.
 
         Returns
         -------
@@ -492,8 +542,24 @@ class DocumentService:
 
         doc_mgr = DocumentManager(vault_root)
 
-        # Read metadata first so we have the nonce before touching the blob.
-        metadata: DocumentMetadata = doc_mgr.read_metadata(document_id, vault_id)
+        if db is not None:
+            from app.database.models import Document as DocumentRecord  # local import
+
+            db_record = db.get(DocumentRecord, document_id)
+            if db_record is None or db_record.vault_id != vault_id:
+                raise DocumentNotFoundError(
+                    f"Document '{document_id}' not found in vault '{vault_id}'.",
+                    detail=(
+                        f"No document record found for document_id '{document_id}' "
+                        f"in vault '{vault_id}'."
+                    ),
+                )
+            # Read the nonce from the JSON sidecar (it is not stored in the DB).
+            metadata: DocumentMetadata = doc_mgr.read_metadata(document_id, vault_id)
+        else:
+            # Read metadata first so we have the nonce before touching the blob.
+            metadata = doc_mgr.read_metadata(document_id, vault_id)
+
         ciphertext: bytes = doc_mgr.read_blob(document_id, vault_id)
 
         logger.info(
@@ -541,6 +607,7 @@ class DocumentService:
         self,
         vault_id: str,
         document_id: str,
+        db: Session | None = None,
     ) -> VerifyIntegrityResponse:
         """
         Verify the integrity of a stored encrypted document.
@@ -549,11 +616,16 @@ class DocumentService:
         and compares it against the hash recorded at upload time.  No password
         or Vault Key is required — this check operates entirely on ciphertext.
 
+        When ``db`` is provided, the stored hash is fetched from the SQLite
+        ``documents`` table.  Otherwise the JSON metadata sidecar is used.
+
         Flow
         ----
         1. Assert the vault exists (need not be unlocked).
-        2. Read the metadata sidecar; raise :class:`MissingIntegrityMetadataError`
-           if ``sha256_ciphertext`` is absent (document predates this milestone).
+        2. Obtain the stored hash.  When ``db`` is provided, look up the
+           ``integrity_hash`` column in SQLite.  Otherwise read the metadata
+           sidecar; raise :class:`MissingIntegrityMetadataError` if
+           ``sha256_ciphertext`` is absent.
         3. Read the encrypted blob; raise :class:`CorruptedDocumentError` if
            the file is missing or unreadable.
         4. Recompute ``sha256(ciphertext)`` via :class:`EncryptionManager`.
@@ -568,6 +640,9 @@ class DocumentService:
             UUID4 identifying the vault containing the document.
         document_id:
             UUID4 identifying the document to verify.
+        db:
+            SQLAlchemy session.  When provided, the stored hash is fetched
+            from the SQLite ``documents`` table.
 
         Returns
         -------
@@ -581,8 +656,7 @@ class DocumentService:
         DocumentNotFoundError
             If the metadata sidecar does not exist.
         MissingIntegrityMetadataError
-            If the metadata has no ``sha256_ciphertext`` field (document
-            uploaded before this milestone).
+            If the document has no stored hash.
         CorruptedDocumentError
             If the encrypted blob file is missing or cannot be read.
         IntegrityVerificationError
@@ -592,16 +666,38 @@ class DocumentService:
 
         doc_mgr = DocumentManager(vault_root)
 
-        metadata: DocumentMetadata = doc_mgr.read_metadata(document_id, vault_id)
+        if db is not None:
+            from app.database.models import Document as DocumentRecord  # local import
 
-        if not metadata.sha256_ciphertext:
-            raise MissingIntegrityMetadataError(
-                f"Document '{document_id}' has no integrity hash recorded.",
-                detail=(
-                    "This document was uploaded before integrity verification was "
-                    "introduced.  Re-upload the document to generate a baseline hash."
-                ),
-            )
+            db_record = db.get(DocumentRecord, document_id)
+            if db_record is None or db_record.vault_id != vault_id:
+                raise DocumentNotFoundError(
+                    f"Document '{document_id}' not found in vault '{vault_id}'.",
+                    detail=(
+                        f"No document record found for document_id '{document_id}' "
+                        f"in vault '{vault_id}'."
+                    ),
+                )
+            stored_hash: str | None = db_record.integrity_hash
+            if not stored_hash:
+                raise MissingIntegrityMetadataError(
+                    f"Document '{document_id}' has no integrity hash in SQLite.",
+                    detail=(
+                        "This document was uploaded before integrity verification was "
+                        "introduced.  Re-upload the document to generate a baseline hash."
+                    ),
+                )
+        else:
+            metadata: DocumentMetadata = doc_mgr.read_metadata(document_id, vault_id)
+            if not metadata.sha256_ciphertext:
+                raise MissingIntegrityMetadataError(
+                    f"Document '{document_id}' has no integrity hash recorded.",
+                    detail=(
+                        "This document was uploaded before integrity verification was "
+                        "introduced.  Re-upload the document to generate a baseline hash."
+                    ),
+                )
+            stored_hash = metadata.sha256_ciphertext
 
         try:
             ciphertext: bytes = doc_mgr.read_blob(document_id, vault_id)
@@ -621,7 +717,6 @@ class DocumentService:
             ) from exc
 
         computed_hash: str = self._enc_mgr.compute_sha256(ciphertext)
-        stored_hash: str = metadata.sha256_ciphertext
 
         logger.debug(
             "Integrity check | vault_id=%s | document_id=%s | stored=%s | computed=%s",

@@ -1,4 +1,4 @@
-﻿"""
+"""
 security/recovery.py
 ---------------------
 BIP-39 Recovery Seed generation and metadata management for Cipherix.
@@ -330,6 +330,47 @@ class RecoveryManager:
             :_FINGERPRINT_HEX_LEN
         ]
 
+    def validate_seed_format(self, candidate: str) -> None:
+        """
+        Validate the BIP-39 structural format of a candidate seed.
+
+        Checks that the seed has the correct word count, all words are in
+        the BIP-39 English wordlist, and the embedded checksum is valid.
+        Does **not** compare against any stored fingerprint.
+
+        Parameters
+        ----------
+        candidate:
+            The seed presented by the user (any case, any whitespace layout).
+
+        Raises
+        ------
+        InvalidRecoverySeedError
+            If the candidate fails BIP-39 structural validation (wrong number
+            of words, a word not in the wordlist, or invalid checksum).
+        """
+        normalised: str = " ".join(candidate.lower().split())
+        words = normalised.split()
+
+        if len(words) != SEED_WORD_COUNT:
+            raise InvalidRecoverySeedError(
+                f"Recovery seed has {len(words)} words; expected {SEED_WORD_COUNT}.",
+                detail=(
+                    f"A valid recovery seed must contain exactly {SEED_WORD_COUNT} "
+                    "words from the BIP-39 English wordlist."
+                ),
+            )
+
+        if not self._mnemo.check(normalised):
+            raise InvalidRecoverySeedError(
+                "Recovery seed failed BIP-39 validation.",
+                detail=(
+                    "The seed words are not a valid BIP-39 mnemonic.  One or more "
+                    "words may not be in the BIP-39 English wordlist, or the "
+                    "embedded checksum is incorrect."
+                ),
+            )
+
     def validate_seed(self, candidate: str, vault_id: str) -> bool:
         """
         Validate a candidate seed against the stored fingerprint.
@@ -371,27 +412,9 @@ class RecoveryManager:
             :data:_SUPPORTED_VERSIONS.
         """
         # Stage 1 — BIP-39 structural validation
+        self.validate_seed_format(candidate)
+
         normalised: str = " ".join(candidate.lower().split())
-        words = normalised.split()
-
-        if len(words) != SEED_WORD_COUNT:
-            raise InvalidRecoverySeedError(
-                f"Recovery seed has {len(words)} words; expected {SEED_WORD_COUNT}.",
-                detail=(
-                    f"A valid recovery seed must contain exactly {SEED_WORD_COUNT} "
-                    "words from the BIP-39 English wordlist."
-                ),
-            )
-
-        if not self._mnemo.check(normalised):
-            raise InvalidRecoverySeedError(
-                "Recovery seed failed BIP-39 validation.",
-                detail=(
-                    "The seed words are not a valid BIP-39 mnemonic.  One or more "
-                    "words may not be in the BIP-39 English wordlist, or the "
-                    "embedded checksum is incorrect."
-                ),
-            )
 
         # Stage 2 — fingerprint comparison against stored metadata
         metadata: RecoveryMetadata = self.read_metadata(vault_id)

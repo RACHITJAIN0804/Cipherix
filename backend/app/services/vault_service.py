@@ -166,7 +166,9 @@ class VaultService:
                 )
             except SQLAlchemyError as exc:
                 # DB commit failed after filesystem creation succeeded.
-                # Clean up the filesystem tree to avoid an orphaned vault.
+                # Roll back the DB transaction first, then clean up the filesystem
+                # tree to avoid leaving an orphaned vault on disk.
+                db.rollback()
                 logger.error(
                     "DB insert failed after vault created on disk — "
                     "rolling back filesystem | vault_id=%s | error=%s",
@@ -316,7 +318,9 @@ class VaultService:
         logger.info("Listing vaults | count=%d", len(summaries))
         return summaries
 
-    def lock_vault(self, vault_id: str) -> VaultStateResponse:
+    def lock_vault(
+        self, vault_id: str, db: Session | None = None
+    ) -> VaultStateResponse:
         """
         Transition a vault to the locked state.
 
@@ -327,6 +331,10 @@ class VaultService:
         ----------
         vault_id:
             UUID4 string that identifies the vault to lock.
+        db:
+            SQLAlchemy session.  When provided, the Vault DB record's
+            ``status`` and ``updated_at`` columns are updated after the
+            filesystem manifest is written.
 
         Returns
         -------
@@ -348,9 +356,12 @@ class VaultService:
             vault_id,
             target_status=_STATUS_LOCKED,
             current_label="locked",
+            db=db,
         )
 
-    def unlock_vault(self, vault_id: str) -> VaultStateResponse:
+    def unlock_vault(
+        self, vault_id: str, db: Session | None = None
+    ) -> VaultStateResponse:
         """
         Transition a vault to the unlocked state.
 
@@ -361,6 +372,10 @@ class VaultService:
         ----------
         vault_id:
             UUID4 string that identifies the vault to unlock.
+        db:
+            SQLAlchemy session.  When provided, the Vault DB record's
+            ``status`` and ``updated_at`` columns are updated after the
+            filesystem manifest is written.
 
         Returns
         -------
@@ -382,6 +397,7 @@ class VaultService:
             vault_id,
             target_status=_STATUS_UNLOCKED,
             current_label="unlocked",
+            db=db,
         )
 
     # ------------------------------------------------------------------
@@ -486,6 +502,7 @@ class VaultService:
         vault_id: str,
         target_status: str,
         current_label: str,
+        db: Session | None = None,
     ) -> VaultStateResponse:
         """
         Core implementation shared by :meth:`lock_vault` and :meth:`unlock_vault`.
@@ -498,7 +515,10 @@ class VaultService:
            vault is already in ``target_status``.
         4. Delegate the status write to
            :meth:`~app.vault.vault_manager.VaultManager.update_vault_status`.
-        5. Log the operation and return a :class:`VaultStateResponse`.
+        5. If ``db`` is provided: update the Vault DB row's ``status`` and
+           ``updated_at``.  A DB failure is logged but does not roll back the
+           filesystem change — the manifest on disk is authoritative.
+        6. Log the operation and return a :class:`VaultStateResponse`.
 
         Parameters
         ----------
@@ -509,6 +529,8 @@ class VaultService:
         current_label:
             Human-readable label for the target state, used in error messages
             and log output (e.g. ``"locked"``, ``"unlocked"``).
+        db:
+            Optional SQLAlchemy session.  When provided, syncs the Vault row.
 
         Returns
         -------
@@ -551,6 +573,36 @@ class VaultService:
         logger.info(
             "Vault %s successfully | vault_id=%s", current_label, vault_id
         )
+
+        # Sync the Vault DB row status.  A DB failure here is non-fatal:
+        # the filesystem manifest is the authoritative state; a stale DB
+        # record will be reconciled on the next operation.
+        if db is not None:
+            try:
+                vault_record = db.get(VaultRecord, vault_id)
+                if vault_record is not None:
+                    vault_record.status = target_status
+                    vault_record.updated_at = datetime.now(UTC)
+                    db.commit()
+                    logger.debug(
+                        "Vault DB status synced | vault_id=%s | status=%s",
+                        vault_id,
+                        target_status,
+                    )
+                else:
+                    logger.warning(
+                        "Vault DB record not found during status sync "
+                        "| vault_id=%s",
+                        vault_id,
+                    )
+            except SQLAlchemyError as exc:
+                db.rollback()
+                logger.warning(
+                    "Failed to sync Vault DB status — disk manifest is current; "
+                    "DB record is stale | vault_id=%s | error=%s",
+                    vault_id,
+                    exc,
+                )
 
         return VaultStateResponse(vault_id=vault_id, status=target_status)
 
