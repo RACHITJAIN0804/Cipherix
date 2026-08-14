@@ -672,3 +672,86 @@ class SecurityMetadataRecordNotFoundError(DatabaseError):
 
     Routes should map this to ``HTTP 404 Not Found``.
     """
+
+
+# ---------------------------------------------------------------------------
+# Authentication / authorisation errors
+# ---------------------------------------------------------------------------
+
+
+class AuthError(CipherixError):
+    """
+    Base class for all authentication and authorisation errors.
+
+    Catch this in places where you want to handle any auth failure without
+    distinguishing between specific subtypes (e.g. wrong password vs. expired
+    token vs. inactive account).
+    """
+
+
+class UserAlreadyExistsError(AuthError):
+    """
+    Raised when a registration attempt uses an identifier (username or email)
+    that is already taken by an existing user.
+
+    Routes should map this to ``HTTP 409 Conflict``.
+    """
+
+
+class UserNotFoundError(AuthError):
+    """
+    Raised when a login or lookup operation references a user ID or username
+    that does not exist in the database.
+
+    Routes should map this to ``HTTP 401 Unauthorized`` (for login flows,
+    to avoid leaking whether the account exists) or ``HTTP 404 Not Found``
+    (for admin lookup flows where the existence is not sensitive).
+    """
+
+
+class InvalidCredentialsError(AuthError):
+    """
+    Raised when a user supplies a valid username but an incorrect password.
+
+    The message must **never** distinguish between "user not found" and
+    "wrong password" to prevent user enumeration attacks.
+
+    Routes should map this to ``HTTP 401 Unauthorized``.
+    """
+
+
+class InactiveUserError(AuthError):
+    """
+    Raised when an authentication attempt succeeds (correct credentials) but
+    the user account has ``is_active = False``.
+
+    Routes should map this to ``HTTP 403 Forbidden``.
+    """
+
+
+class TokenError(AuthError):
+    """
+    Base class for all JWT token validation errors.
+
+    Catch this to handle any token problem without distinguishing between
+    expired, malformed, or invalid-signature failures.
+    """
+
+
+class ExpiredTokenError(TokenError):
+    """
+    Raised when a JWT has passed its ``exp`` (expiration) claim.
+
+    Routes should map this to ``HTTP 401 Unauthorized`` with a body that
+    tells the client to refresh its token.
+    """
+
+
+class InvalidTokenError(TokenError):
+    """
+    Raised when a JWT fails signature verification, has malformed structure,
+    contains unexpected or missing claims, or has the wrong ``type`` claim
+    (e.g. a refresh token presented where an access token is required).
+
+    Routes should map this to ``HTTP 401 Unauthorized``.
+    """

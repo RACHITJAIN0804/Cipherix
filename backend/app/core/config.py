@@ -56,6 +56,26 @@ class Settings(BaseSettings):
     # (e.g. "cipherix_test.db" in tests).
     database_filename: str = "cipherix.db"
 
+    # ----------------------------------------------------------------
+    # JWT / authentication
+    # ----------------------------------------------------------------
+
+    # Secret used to sign JWTs.  MUST be overridden in production via the
+    # JWT_SECRET_KEY environment variable.  The default is intentionally
+    # weak and flagged in the field description.
+    jwt_secret_key: str = Field(
+        default="change_this_jwt_secret_in_production",
+        description="HS256 signing secret for JWTs.  Override in production.",
+    )
+    # HMAC-SHA256 — fast, widely supported, and sufficient for server-side
+    # JWTs where we control both signing and verification.
+    jwt_algorithm: str = Field(default="HS256")
+
+    # Access token lifetime.  Short-lived to limit the blast radius of a
+    # stolen token.  Refresh tokens are longer-lived and separated by type.
+    access_token_expire_minutes: int = Field(default=30)
+    refresh_token_expire_days: int = Field(default=7)
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:

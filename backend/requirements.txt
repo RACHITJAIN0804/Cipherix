@@ -9,3 +9,4 @@ mnemonic==0.21
 sqlalchemy>=2.0.37
 alembic==1.14.0
 aiosqlite==0.20.0
+PyJWT>=2.8.0

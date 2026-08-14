@@ -43,11 +43,13 @@ from datetime import UTC, datetime
 from typing import Optional
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -348,4 +350,66 @@ class SecurityMetadata(Base):
         return (
             f"<SecurityMetadata vault_id={self.vault_id!r} "
             f"algorithm={self.encryption_algorithm!r}>"
+        )
+
+
+class User(Base):
+    """
+    Application user account record.
+
+    One row exists per registered user.  The user UUID is the ``sub`` claim
+    in issued JWTs, so it is stable even if the username changes.
+
+    Security guarantees
+    -------------------
+    * ``password_hash`` stores the Argon2id hash produced by
+      ``argon2.PasswordHasher`` — **never** the plaintext password.
+    * JWT tokens are **not** stored here; they are stateless.
+    * The ``is_active`` flag allows soft-deactivation without deleting the
+      row (preserves audit trails and foreign-key integrity).
+
+    Attributes
+    ----------
+    id:
+        UUID4 string — used as the ``sub`` claim in JWTs.
+    username:
+        Unique login identifier chosen at registration (3–64 characters).
+        Unique constraint enforced at both the service layer and the DB.
+    password_hash:
+        Argon2id hash of the user's password.  Never the plaintext password.
+    is_active:
+        ``True`` by default.  Set to ``False`` to deactivate the account
+        without deleting the row.  Inactive users cannot log in.
+    created_at:
+        UTC timestamp set once at registration; never updated.
+    updated_at:
+        UTC timestamp updated on every profile or password change.
+    """
+
+    __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("username", name="uq_users_username"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    username: Mapped[str] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    # Argon2id hash — NEVER the plaintext password.
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<User id={self.id!r} username={self.username!r} "
+            f"is_active={self.is_active!r}>"
         )
