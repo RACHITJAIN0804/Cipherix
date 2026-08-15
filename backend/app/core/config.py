@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     DATABASE_DIR: Path = BASE_DIR / "database"
     DOCS_DIR: Path = BASE_DIR / "docs"
     SCRIPTS_DIR: Path = BASE_DIR / "scripts"
+    COMPUTER_ACCESS_WORKSPACE_DIR: Path = BASE_DIR / "CIPHERIX_WORKSPACE"
 
     # SQLite database filename — relative to DATABASE_DIR.
     # Override via DATABASE_FILENAME env var to point at a different file

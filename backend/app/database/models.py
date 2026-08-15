@@ -434,9 +434,126 @@ class User(Base):
         cascade="all, delete-orphan",
         lazy="select",
     )
+    computer_access: Mapped[Optional["UserComputerAccess"]] = relationship(
+        "UserComputerAccess",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+        lazy="select",
+    )
 
     def __repr__(self) -> str:
         return (
             f"<User id={self.id!r} username={self.username!r} "
             f"is_active={self.is_active!r}>"
         )
+
+
+class UserComputerAccess(Base):
+    """
+    Tracks per-user computer access toggle permission state.
+
+    Defaults to enabled=False (DISABLED).
+    """
+
+    __tablename__ = "user_computer_access"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    user: Mapped["User"] = relationship("User", back_populates="computer_access")
+
+    def __repr__(self) -> str:
+        return f"<UserComputerAccess user_id={self.user_id!r} enabled={self.enabled!r}>"
+
+
+class ComputerAccessApproval(Base):
+    """
+    Tracks pending and resolved explicit user approval requests for write actions.
+    """
+
+    __tablename__ = "computer_access_approvals"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    parameters_json: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    def __repr__(self) -> str:
+        return f"<ComputerAccessApproval id={self.id!r} user_id={self.user_id!r} action={self.action!r} status={self.status!r}>"
+
+
+class ComputerAccessAuditLog(Base):
+    """
+    Audit log records for computer access operations.
+
+    NEVER stores sensitive parameters, passwords, keys, seeds, or full write contents.
+    """
+
+    __tablename__ = "computer_access_audit_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    vault_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("vaults.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    relative_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    result_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    approval_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    details_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<ComputerAccessAuditLog id={self.id!r} user_id={self.user_id!r} "
+            f"action={self.action!r} result={self.result_status!r}>"
+        )
+

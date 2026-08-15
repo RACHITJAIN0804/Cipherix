@@ -821,3 +821,28 @@ class RAGNoContextError(RAGError):
     propagating this as an HTTP error.
     """
 
+
+class ComputerAccessError(CipherixError):
+    """Base class for all computer access errors."""
+
+
+class ComputerAccessDisabledError(ComputerAccessError):
+    """Raised when computer access is requested while disabled."""
+
+
+class PathGuardError(ComputerAccessError):
+    """Raised when path traversal or unauthorized directory access is detected."""
+
+
+class ActionNotAllowedError(ComputerAccessError):
+    """Raised when an unknown or restricted action is requested."""
+
+
+class ApprovalRequiredError(ComputerAccessError):
+    """Raised when an action requires explicit user approval before execution."""
+
+
+class ActionExecutionError(ComputerAccessError):
+    """Raised when an error occurs during execution of a safe computer action."""
+
+
