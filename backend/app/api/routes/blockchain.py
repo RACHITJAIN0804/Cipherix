@@ -22,6 +22,7 @@ from app.core.exceptions import (
     VaultNotFoundError,
 )
 from app.core.logger import get_logger
+from app.core.rate_limiter import limit_expensive_requests
 from app.database.models import User
 from app.schemas.blockchain import (
     AnchorRequest,
@@ -38,7 +39,7 @@ router = APIRouter(prefix="/blockchain", tags=["Blockchain Integrity"])
 _blockchain_service = BlockchainService()
 
 
-@router.post("/anchor", response_model=AnchorResponse)
+@router.post("/anchor", response_model=AnchorResponse, dependencies=[Depends(limit_expensive_requests)])
 def anchor_document_hash(
     payload: AnchorRequest,
     current_user: User = Depends(get_current_user),

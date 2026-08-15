@@ -30,6 +30,7 @@ from app.core.exceptions import (
     VaultNotFoundError,
 )
 from app.core.logger import get_logger
+from app.core.rate_limiter import limit_expensive_requests
 from app.database.database import get_db
 from app.database.models import User
 from app.schemas.rag import RAGRequest, RAGResponse
@@ -52,6 +53,7 @@ def _get_rag_service() -> RAGService:
     "/query",
     response_model=RAGResponse,
     status_code=status.HTTP_200_OK,
+    dependencies=[Depends(limit_expensive_requests)],
     summary="RAG query — ask a question about your vault documents",
     description=(
         "Retrieval-Augmented Generation: embeds the query, searches the authorized vault, "

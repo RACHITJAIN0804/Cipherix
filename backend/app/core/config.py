@@ -2,7 +2,7 @@ from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -168,6 +168,32 @@ class Settings(BaseSettings):
         default="local-development",
         description="Blockchain network identifier label.",
     )
+
+    # Rate Limiting Settings
+    rate_limit_auth_per_minute: int = Field(
+        default=10,
+        description="Maximum auth requests (login/register) allowed per minute per IP.",
+    )
+    rate_limit_expensive_per_minute: int = Field(
+        default=30,
+        description="Maximum expensive operation requests (RAG/search/upload) per minute per IP.",
+    )
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> "Settings":
+        """Assert that default placeholder secrets are never used in production or staging."""
+        from app.core.exceptions import ConfigurationError
+
+        if self.app_env in (Environment.PRODUCTION, Environment.STAGING):
+            if self.secret_key in ("change_this_in_production", ""):
+                raise ConfigurationError(
+                    "SECRET_KEY must be overridden with a secure secret in production/staging."
+                )
+            if self.jwt_secret_key in ("change_this_jwt_secret_in_production", ""):
+                raise ConfigurationError(
+                    "JWT_SECRET_KEY must be overridden with a secure secret in production/staging."
+                )
+        return self
 
 
     @computed_field  # type: ignore[prop-decorator]

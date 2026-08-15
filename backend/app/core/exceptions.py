@@ -866,4 +866,13 @@ class BlockchainVerificationError(BlockchainError):
     """Raised when document integrity fails verification against the recorded blockchain anchor."""
 
 
+class RateLimitExceededError(CipherixError):
+    """Raised when client exceeds rate limit for an endpoint or resource."""
+
+
+class ConfigurationError(CipherixError):
+    """Raised when application configuration settings are invalid or insecure."""
+
+
+
 

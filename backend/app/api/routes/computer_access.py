@@ -27,6 +27,7 @@ from app.core.exceptions import (
     PathGuardError,
 )
 from app.core.logger import get_logger
+from app.core.rate_limiter import limit_expensive_requests
 from app.database.models import ComputerAccessAuditLog, User, Vault
 from app.schemas.computer_access import (
     AccessStatusResponse,
@@ -82,7 +83,7 @@ def toggle_computer_access(
     )
 
 
-@router.post("/action", response_model=ActionResponse)
+@router.post("/action", response_model=ActionResponse, dependencies=[Depends(limit_expensive_requests)])
 def execute_computer_action(
     payload: ActionRequest,
     current_user: User = Depends(get_current_user),

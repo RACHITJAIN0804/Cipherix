@@ -16,6 +16,7 @@ from app.core.exceptions import (
     VaultValidationError,
 )
 from app.core.logger import get_logger
+from app.core.rate_limiter import limit_expensive_requests
 from app.database.database import get_db
 from app.database.models import User
 from app.schemas.search import SearchRequest, SearchResponse
@@ -34,6 +35,7 @@ def _get_search_service() -> SearchService:
     "",
     response_model=SearchResponse,
     status_code=status.HTTP_200_OK,
+    dependencies=[Depends(limit_expensive_requests)],
     summary="Semantic vector search inside an authorized vault",
     description=(
         "Execute natural language vector similarity search over text chunks "

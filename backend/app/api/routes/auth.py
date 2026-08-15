@@ -38,6 +38,7 @@ from app.core.exceptions import (
     VaultNotFoundError,
 )
 from app.core.logger import get_logger
+from app.core.rate_limiter import limit_auth_requests
 from app.database import get_db
 from app.database.models import User
 from app.schemas.auth import (
@@ -119,6 +120,7 @@ def _map_auth_exception(exc: Exception) -> None:
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user account",
+    dependencies=[Depends(limit_auth_requests)],
 )
 async def register(
     payload: RegisterRequest,
@@ -135,6 +137,7 @@ async def register(
     response_model=TokenResponse,
     status_code=status.HTTP_200_OK,
     summary="Log in and obtain JWT tokens",
+    dependencies=[Depends(limit_auth_requests)],
 )
 async def login(
     payload: LoginRequest,
