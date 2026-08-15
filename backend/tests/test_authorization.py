@@ -34,10 +34,6 @@ from app.database.models import Base, User
 from app.main import create_app
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
 
 @pytest.fixture(scope="function")
 def in_memory_engine(tmp_path, monkeypatch):
@@ -83,10 +79,6 @@ def client(db_session: Session):
     app.dependency_overrides.clear()
 
 
-# ---------------------------------------------------------------------------
-# Helper functions
-# ---------------------------------------------------------------------------
-
 
 def _register_and_login(client, username: str, password: str = "password123") -> str:
     client.post("/api/v1/auth/register", json={"username": username, "password": password})
@@ -98,10 +90,6 @@ def _auth_header(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-# ---------------------------------------------------------------------------
-# Authorization test suite
-# ---------------------------------------------------------------------------
-
 
 class TestVaultOwnershipAndIsolation:
     def test_user_a_creates_and_lists_vault(self, client):
@@ -109,23 +97,20 @@ class TestVaultOwnershipAndIsolation:
         token_a = _register_and_login(client, "user_a")
         token_b = _register_and_login(client, "user_b")
 
-        # User A creates vault
         create_resp = client.post(
-            "/api/v1/auth/../vaults/",
+            "/api/v1/vaults/",
             headers=_auth_header(token_a),
             json={"name": "Vault A", "password": "vaultpassword123"},
         )
         assert create_resp.status_code == status.HTTP_201_CREATED
         vault_a_id = create_resp.json()["vault_id"]
 
-        # User A lists vaults -> sees Vault A
         list_a = client.get("/api/v1/vaults/", headers=_auth_header(token_a))
         assert list_a.status_code == status.HTTP_200_OK
         summaries_a = list_a.json()
         assert len(summaries_a) == 1
         assert summaries_a[0]["vault_id"] == vault_a_id
 
-        # User B lists vaults -> sees nothing
         list_b = client.get("/api/v1/vaults/", headers=_auth_header(token_b))
         assert list_b.status_code == status.HTTP_200_OK
         assert len(list_b.json()) == 0
@@ -135,21 +120,18 @@ class TestVaultOwnershipAndIsolation:
         token_a = _register_and_login(client, "user_a_lock")
         token_b = _register_and_login(client, "user_b_lock")
 
-        # User A creates vault
         vault_a_id = client.post(
             "/api/v1/vaults/",
             headers=_auth_header(token_a),
             json={"name": "Vault A", "password": "vaultpassword123"},
         ).json()["vault_id"]
 
-        # User B attempts to unlock User A's vault -> 404
         unlock_b = client.post(
             f"/api/v1/vaults/{vault_a_id}/unlock",
             headers=_auth_header(token_b),
         )
         assert unlock_b.status_code == status.HTTP_404_NOT_FOUND
 
-        # User B attempts to lock User A's vault -> 404
         lock_b = client.post(
             f"/api/v1/vaults/{vault_a_id}/lock",
             headers=_auth_header(token_b),
@@ -167,14 +149,12 @@ class TestVaultOwnershipAndIsolation:
             json={"name": "Vault A", "password": "vaultpassword123"},
         ).json()["vault_id"]
 
-        # User B tries to delete -> 404
         del_b = client.delete(
             f"/api/v1/vaults/{vault_a_id}",
             headers=_auth_header(token_b),
         )
         assert del_b.status_code == status.HTTP_404_NOT_FOUND
 
-        # User A deletes -> 204
         del_a = client.delete(
             f"/api/v1/vaults/{vault_a_id}",
             headers=_auth_header(token_a),
@@ -188,7 +168,6 @@ class TestVaultOwnershipAndIsolation:
 
         pwd = "vaultpassword123"
 
-        # User A creates & unlocks vault
         vault_a_id = client.post(
             "/api/v1/vaults/",
             headers=_auth_header(token_a),
@@ -200,7 +179,6 @@ class TestVaultOwnershipAndIsolation:
             headers=_auth_header(token_a),
         )
 
-        # User A uploads document
         file_content = b"Super secret content for User A"
         file_tuple = ("secret.txt", io.BytesIO(file_content), "text/plain")
         up_resp_a = client.post(
@@ -211,7 +189,6 @@ class TestVaultOwnershipAndIsolation:
         assert up_resp_a.status_code == status.HTTP_201_CREATED
         doc_a_id = up_resp_a.json()["document_id"]
 
-        # User B attempts upload to User A's vault -> 404
         file_tuple_b = ("fake.txt", io.BytesIO(b"attacker data"), "text/plain")
         up_resp_b = client.post(
             f"/api/v1/vaults/{vault_a_id}/documents",
@@ -220,35 +197,30 @@ class TestVaultOwnershipAndIsolation:
         )
         assert up_resp_b.status_code == status.HTTP_404_NOT_FOUND
 
-        # User B attempts to list documents in User A's vault -> 404
         list_docs_b = client.get(
             f"/api/v1/vaults/{vault_a_id}/documents",
             headers=_auth_header(token_b),
         )
         assert list_docs_b.status_code == status.HTTP_404_NOT_FOUND
 
-        # User B attempts to download User A's document -> 404
         down_b = client.get(
             f"/api/v1/vaults/{vault_a_id}/documents/{doc_a_id}",
             headers={**_auth_header(token_b), "X-Vault-Password": pwd},
         )
         assert down_b.status_code == status.HTTP_404_NOT_FOUND
 
-        # User B attempts to verify User A's document -> 404
         verify_b = client.get(
             f"/api/v1/vaults/{vault_a_id}/documents/{doc_a_id}/verify",
             headers=_auth_header(token_b),
         )
         assert verify_b.status_code == status.HTTP_404_NOT_FOUND
 
-        # User B attempts to delete User A's document -> 404
         del_doc_b = client.delete(
             f"/api/v1/vaults/{vault_a_id}/documents/{doc_a_id}",
             headers=_auth_header(token_b),
         )
         assert del_doc_b.status_code == status.HTTP_404_NOT_FOUND
 
-        # User A can download their document -> 200
         down_a = client.get(
             f"/api/v1/vaults/{vault_a_id}/documents/{doc_a_id}",
             headers={**_auth_header(token_a), "X-Vault-Password": pwd},
@@ -273,7 +245,6 @@ class TestVaultOwnershipAndIsolation:
             headers=_auth_header(token_a),
         )
 
-        # User B attempts to change User A's password -> 404
         change_b = client.post(
             f"/api/v1/vaults/{vault_a_id}/change-password",
             headers=_auth_header(token_b),
@@ -281,14 +252,12 @@ class TestVaultOwnershipAndIsolation:
         )
         assert change_b.status_code == status.HTTP_404_NOT_FOUND
 
-        # User B attempts to generate recovery seed for User A -> 404
         seed_b = client.post(
             f"/api/v1/vaults/{vault_a_id}/recovery-seed",
             headers=_auth_header(token_b),
         )
         assert seed_b.status_code == status.HTTP_404_NOT_FOUND
 
-        # User A generates recovery seed -> 201
         seed_a_resp = client.post(
             f"/api/v1/vaults/{vault_a_id}/recovery-seed",
             headers=_auth_header(token_a),
@@ -296,7 +265,6 @@ class TestVaultOwnershipAndIsolation:
         assert seed_a_resp.status_code == status.HTTP_201_CREATED
         seed_words = seed_a_resp.json()["seed"]
 
-        # User B attempts to verify recovery seed on User A's vault -> 404
         verify_seed_b = client.post(
             f"/api/v1/vaults/{vault_a_id}/recovery-seed/verify",
             headers=_auth_header(token_b),
@@ -350,7 +318,6 @@ class TestUnauthenticatedAndInvalidTokens:
         """Deactivated user returns 403 on protected vault endpoints."""
         token = _register_and_login(client, "deactivated_user")
 
-        # Deactivate user in DB
         user = db_session.query(User).filter(User.username == "deactivated_user").first()
         user.is_active = False
         db_session.commit()

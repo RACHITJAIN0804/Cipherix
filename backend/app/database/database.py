@@ -37,10 +37,6 @@ from app.core.logger import get_logger
 logger = get_logger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Engine
-# ---------------------------------------------------------------------------
-
 
 def _create_engine():
     """
@@ -56,7 +52,6 @@ def _create_engine():
       default; the ``PRAGMA foreign_keys = ON`` call activates them so
       CASCADE DELETE works as expected.
     """
-    # Ensure the database parent directory exists.
     db_path = Path(settings.DATABASE_DIR)
     db_path.mkdir(parents=True, exist_ok=True)
 
@@ -82,10 +77,6 @@ def _create_engine():
 engine = _create_engine()
 
 
-# ---------------------------------------------------------------------------
-# Session factory
-# ---------------------------------------------------------------------------
-
 SessionLocal: sessionmaker[Session] = sessionmaker(
     bind=engine,
     autocommit=False,
@@ -93,10 +84,6 @@ SessionLocal: sessionmaker[Session] = sessionmaker(
     expire_on_commit=False,
 )
 
-
-# ---------------------------------------------------------------------------
-# FastAPI dependency
-# ---------------------------------------------------------------------------
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -125,10 +112,6 @@ def get_db() -> Generator[Session, None, None]:
     finally:
         db.close()
 
-
-# ---------------------------------------------------------------------------
-# Database initialisation helper (used at startup)
-# ---------------------------------------------------------------------------
 
 
 def init_db() -> None:

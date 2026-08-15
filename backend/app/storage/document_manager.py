@@ -72,10 +72,6 @@ from app.core.logger import get_logger
 
 logger = get_logger(__name__)
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
 _ENCRYPTED_DIR: str = "encrypted"
 _METADATA_DIR: str = "metadata"
 _BLOB_SUFFIX: str = ".bin"
@@ -85,10 +81,6 @@ _META_SUFFIX: str = ".json"
 # Increment when the metadata schema changes in a backward-incompatible way.
 ENCRYPTION_VERSION: str = "AES-256-GCM-v1"
 
-
-# ---------------------------------------------------------------------------
-# Metadata model
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -144,10 +136,6 @@ class DocumentMetadata:
     nonce: str
     encryption_version: str = field(default=ENCRYPTION_VERSION)
     sha256_ciphertext: Optional[str] = field(default=None)
-
-    # ------------------------------------------------------------------
-    # Factory helpers
-    # ------------------------------------------------------------------
 
     @classmethod
     def create(
@@ -235,10 +223,6 @@ class DocumentMetadata:
         return cls(**filtered)
 
 
-# ---------------------------------------------------------------------------
-# Manager
-# ---------------------------------------------------------------------------
-
 
 class DocumentManager:
     """
@@ -266,10 +250,6 @@ class DocumentManager:
         self._vault_root: Path = vault_root
         self._encrypted_dir: Path = vault_root / _ENCRYPTED_DIR
         self._metadata_dir: Path = vault_root / _METADATA_DIR
-
-    # ------------------------------------------------------------------
-    # Write
-    # ------------------------------------------------------------------
 
     def write_blob(
         self,
@@ -382,10 +362,6 @@ class DocumentManager:
             meta_path,
         )
         return meta_path
-
-    # ------------------------------------------------------------------
-    # Read
-    # ------------------------------------------------------------------
 
     def read_blob(self, document_id: str, vault_id: str) -> bytes:
         """
@@ -524,10 +500,6 @@ class DocumentManager:
         )
         return results
 
-    # ------------------------------------------------------------------
-    # Delete
-    # ------------------------------------------------------------------
-
     def delete_document(self, document_id: str, vault_id: str) -> None:
         """
         Delete both the encrypted blob and the metadata sidecar for a document.
@@ -594,10 +566,6 @@ class DocumentManager:
                     f"Failed to delete metadata for document '{document_id}': {exc}",
                     detail=f"OS error deleting metadata file: {exc.strerror}.",
                 ) from exc
-
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
     def _blob_path(self, document_id: str) -> Path:
         """Return the absolute path for a document's encrypted blob."""

@@ -132,10 +132,6 @@ def _auth_headers(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-# ---------------------------------------------------------------------------
-# Registration tests
-# ---------------------------------------------------------------------------
-
 
 class TestRegister:
     def test_successful_registration(self, client):
@@ -186,10 +182,6 @@ class TestRegister:
         assert resp.json()["username"] == "alice"
 
 
-# ---------------------------------------------------------------------------
-# Login tests
-# ---------------------------------------------------------------------------
-
 
 class TestLogin:
     def test_successful_login_returns_tokens(self, client):
@@ -216,7 +208,6 @@ class TestLogin:
     def test_inactive_user_returns_403(self, client, db_session: Session):
         """Deactivated account → 403 Forbidden."""
         _register(client)
-        # Deactivate the user directly in DB.
         user = db_session.query(User).filter(User.username == _VALID_USERNAME).first()
         user.is_active = False
         db_session.commit()
@@ -231,10 +222,6 @@ class TestLogin:
         assert "password" not in data
         assert "password_hash" not in data
 
-
-# ---------------------------------------------------------------------------
-# /auth/me tests
-# ---------------------------------------------------------------------------
 
 
 class TestMe:
@@ -262,7 +249,6 @@ class TestMe:
     def test_me_with_expired_token_returns_401(self, client):
         """GET /me with an expired access token → 401."""
         _register(client)
-        # Create a token that expired in the past.
         now = datetime.now(UTC)
         expired_claims = {
             "sub": "any-id",
@@ -311,10 +297,6 @@ class TestMe:
         resp = client.get(_ME_URL, headers=_auth_headers(token))
         assert resp.status_code == status.HTTP_403_FORBIDDEN
 
-
-# ---------------------------------------------------------------------------
-# Refresh token tests
-# ---------------------------------------------------------------------------
 
 
 class TestRefresh:
@@ -367,10 +349,6 @@ class TestRefresh:
         resp = client.get(_ME_URL, headers=_auth_headers(new_tokens["access_token"]))
         assert resp.status_code == status.HTTP_200_OK
 
-
-# ---------------------------------------------------------------------------
-# JWTManager unit tests
-# ---------------------------------------------------------------------------
 
 
 class TestJWTManager:
@@ -459,10 +437,6 @@ class TestJWTManager:
             f"Sensitive key found in JWT claims: {forbidden_keys & payload.keys()}"
         )
 
-
-# ---------------------------------------------------------------------------
-# User model security assertions
-# ---------------------------------------------------------------------------
 
 
 class TestUserModelSecurity:

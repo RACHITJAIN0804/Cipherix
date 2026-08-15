@@ -32,9 +32,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # ------------------------------------------------------------------
-    # Table: vaults
-    # ------------------------------------------------------------------
     op.create_table(
         "vaults",
         sa.Column("id", sa.String(36), primary_key=True),
@@ -57,9 +54,6 @@ def upgrade() -> None:
     op.create_index("ix_vaults_name", "vaults", ["name"])
     op.create_index("ix_vaults_status", "vaults", ["status"])
 
-    # ------------------------------------------------------------------
-    # Table: documents
-    # ------------------------------------------------------------------
     op.create_table(
         "documents",
         sa.Column("id", sa.String(36), primary_key=True),
@@ -95,9 +89,6 @@ def upgrade() -> None:
     )
     op.create_index("ix_documents_vault_id", "documents", ["vault_id"])
 
-    # ------------------------------------------------------------------
-    # Table: security_metadata
-    # ------------------------------------------------------------------
     op.create_table(
         "security_metadata",
         # Primary key is also the FK — one-to-one with vaults.

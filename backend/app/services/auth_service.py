@@ -67,10 +67,6 @@ class AuthService:
     Methods are synchronous to match the existing service-layer convention.
     """
 
-    # ------------------------------------------------------------------
-    # Registration
-    # ------------------------------------------------------------------
-
     def register(self, db: Session, request: RegisterRequest) -> UserResponse:
         """
         Register a new user account.
@@ -91,13 +87,11 @@ class AuthService:
         -------
         UserResponse
             Safe representation of the newly created user.
-
         Raises
         ------
         UserAlreadyExistsError
             If a user with the same username already exists.
         """
-        # Service-layer uniqueness check (fast path before hashing).
         existing = db.query(User).filter(User.username == request.username).first()
         if existing is not None:
             raise UserAlreadyExistsError(
@@ -105,7 +99,6 @@ class AuthService:
                 detail="A user with that username already exists.",
             )
 
-        # Hash the password — only the hash is ever stored.
         password_hash = _ph.hash(request.password)
 
         user = User(
@@ -132,34 +125,9 @@ class AuthService:
         logger.info("User registered | user_id=%s | username=%s", user.id, user.username)
         return UserResponse.model_validate(user)
 
-    # ------------------------------------------------------------------
-    # Login
-    # ------------------------------------------------------------------
-
     def login(self, db: Session, request: LoginRequest) -> TokenResponse:
         """
         Authenticate a user and return access + refresh tokens.
-
-        1. Look up the user by username.
-        2. Verify the password with Argon2id.
-        3. Reject inactive accounts.
-        4. Generate and return tokens.
-
-        Both "user not found" and "wrong password" raise the same
-        :class:`~app.core.exceptions.InvalidCredentialsError` to prevent
-        user-enumeration attacks.
-
-        Parameters
-        ----------
-        db:
-            Active SQLAlchemy session.
-        request:
-            Validated login payload.
-
-        Returns
-        -------
-        TokenResponse
-            Access and refresh tokens.
 
         Raises
         ------
@@ -204,25 +172,9 @@ class AuthService:
         logger.info("User logged in | user_id=%s | username=%s", user.id, user.username)
         return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
-    # ------------------------------------------------------------------
-    # User lookup (used by get_current_user dependency)
-    # ------------------------------------------------------------------
-
     def get_user_by_id(self, db: Session, user_id: str) -> User:
         """
         Load a user row by primary key.
-
-        Parameters
-        ----------
-        db:
-            Active SQLAlchemy session.
-        user_id:
-            UUID4 string (the ``sub`` claim from a decoded JWT).
-
-        Returns
-        -------
-        User
-            The ORM row for the active user.
 
         Raises
         ------
@@ -237,25 +189,9 @@ class AuthService:
             )
         return user
 
-    # ------------------------------------------------------------------
-    # Token refresh
-    # ------------------------------------------------------------------
-
     def refresh(self, db: Session, refresh_token: str) -> TokenResponse:
         """
         Validate a refresh token and issue a new token pair.
-
-        Parameters
-        ----------
-        db:
-            Active SQLAlchemy session.
-        refresh_token:
-            A refresh JWT previously issued at login.
-
-        Returns
-        -------
-        TokenResponse
-            Fresh access and refresh tokens.
 
         Raises
         ------
@@ -268,8 +204,7 @@ class AuthService:
         InactiveUserError
             If the user account has been deactivated.
         """
-        from app.core.exceptions import InactiveUserError  # local to avoid circular
-
+        from app.core.exceptions import InactiveUserError
         payload = JWTManager.decode_refresh_token(refresh_token)
         user_id: str = payload["sub"]
 

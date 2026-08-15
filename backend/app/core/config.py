@@ -55,11 +55,6 @@ class Settings(BaseSettings):
     # Override via DATABASE_FILENAME env var to point at a different file
     # (e.g. "cipherix_test.db" in tests).
     database_filename: str = "cipherix.db"
-
-    # ----------------------------------------------------------------
-    # JWT / authentication
-    # ----------------------------------------------------------------
-
     # Secret used to sign JWTs.  MUST be overridden in production via the
     # JWT_SECRET_KEY environment variable.  The default is intentionally
     # weak and flagged in the field description.

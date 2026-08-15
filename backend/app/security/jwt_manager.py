@@ -63,10 +63,6 @@ class JWTManager:
     Never place passwords, keys, or seeds in any JWT claim.
     """
 
-    # ------------------------------------------------------------------
-    # Token creation
-    # ------------------------------------------------------------------
-
     @staticmethod
     def create_access_token(user_id: str) -> str:
         """
@@ -133,10 +129,6 @@ class JWTManager:
         logger.debug("Refresh token created | user_id=%s | exp=%s", user_id, expire)
         return token
 
-    # ------------------------------------------------------------------
-    # Token validation
-    # ------------------------------------------------------------------
-
     @staticmethod
     def decode_access_token(token: str) -> dict[str, Any]:
         """
@@ -195,10 +187,6 @@ class JWTManager:
         """
         return JWTManager._decode(token, expected_type=_REFRESH_TYPE)
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
     @staticmethod
     def _decode(token: str, expected_type: str) -> dict[str, Any]:
         """
@@ -240,7 +228,6 @@ class JWTManager:
                 "Invalid token.", detail="Invalid or malformed token."
             ) from exc
 
-        # Verify required claims exist.
         if "sub" not in payload:
             raise InvalidTokenError("Missing 'sub' claim.", detail="Invalid token claims.")
         if "type" not in payload:

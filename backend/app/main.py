@@ -29,18 +29,10 @@ from app.core.logger import configure_logging, get_logger
 from app.api.router import api_router
 from app.database import init_db
 
-# ---------------------------------------------------------------------------
 # Bootstrap logging before anything else so that all subsequent imports
 # (including FastAPI internals) already have handlers attached.
-# ---------------------------------------------------------------------------
-
 configure_logging()
 logger = get_logger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Lifespan – startup & shutdown events
-# ---------------------------------------------------------------------------
 
 
 @asynccontextmanager
@@ -51,7 +43,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Everything *before* ``yield`` runs at startup;
     everything *after* ``yield`` runs at shutdown.
     """
-    # ---- Startup ----
     logger.info(
         "Starting %s v%s [env=%s, debug=%s]",
         settings.app_name,
@@ -67,13 +58,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_db()
 
     yield
-    # ---- Shutdown ----
     logger.info("Shutting down %s. Goodbye.", settings.app_name)
-
-
-# ---------------------------------------------------------------------------
-# Application factory
-# ---------------------------------------------------------------------------
 
 
 def create_app() -> FastAPI:
@@ -100,10 +85,6 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if settings.debug else None,
     )
 
-    # ----------------------------------------------------------------
-    # CORS middleware
-    # ----------------------------------------------------------------
-
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -111,10 +92,6 @@ def create_app() -> FastAPI:
         allow_methods=settings.cors_allow_methods,
         allow_headers=settings.cors_allow_headers,
     )
-
-    # ----------------------------------------------------------------
-    # Global exception handler
-    # ----------------------------------------------------------------
 
     @application.exception_handler(Exception)
     async def global_exception_handler(
@@ -137,15 +114,7 @@ def create_app() -> FastAPI:
             content={"detail": "An internal server error occurred."},
         )
 
-    # ----------------------------------------------------------------
-    # Feature routers
-    # ----------------------------------------------------------------
-
     application.include_router(api_router)
-
-    # ----------------------------------------------------------------
-    # Routes
-    # ----------------------------------------------------------------
 
     @application.get("/", tags=["General"])
     async def root() -> dict:
@@ -179,8 +148,5 @@ def create_app() -> FastAPI:
     return application
 
 
-# ---------------------------------------------------------------------------
-# Module-level app instance (used by uvicorn: ``app.main:app``)
-# ---------------------------------------------------------------------------
-
 app: FastAPI = create_app()
+

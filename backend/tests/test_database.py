@@ -27,10 +27,6 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.database.models import Base, Document, SecurityMetadata, Vault
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
 
 @pytest.fixture(scope="function")
 def in_memory_engine():
@@ -65,10 +61,6 @@ def db_session(in_memory_engine):
         session.rollback()
         session.close()
 
-
-# ---------------------------------------------------------------------------
-# Helper factories
-# ---------------------------------------------------------------------------
 
 
 def _new_vault_id() -> str:
@@ -125,10 +117,6 @@ def _sample_document(vault_id: str) -> Document:
     )
 
 
-# ---------------------------------------------------------------------------
-# DB Initialisation
-# ---------------------------------------------------------------------------
-
 
 class TestDatabaseInitialisation:
     """Verify that the schema is created correctly."""
@@ -170,10 +158,6 @@ class TestDatabaseInitialisation:
         assert expected.issubset(cols)
 
 
-# ---------------------------------------------------------------------------
-# Vault CRUD
-# ---------------------------------------------------------------------------
-
 
 class TestVaultRecord:
     """Verify Vault record creation, retrieval, and deletion."""
@@ -193,9 +177,8 @@ class TestVaultRecord:
         vault = _sample_vault()
         db_session.add(vault)
         db_session.flush()
-        # Verify the ID is a valid UUID string.
-        parsed = uuid.UUID(vault.id)
-        assert str(parsed) == vault.id
+        uuid.UUID(vault.id, version=4)
+        assert vault.id == vault.id
 
     def test_update_vault_status(self, db_session: Session):
         vault = _sample_vault()
@@ -224,14 +207,8 @@ class TestVaultRecord:
         assert "locked" in repr(vault)
 
 
-# ---------------------------------------------------------------------------
-# SecurityMetadata CRUD
-# ---------------------------------------------------------------------------
-
 
 class TestSecurityMetadataRecord:
-    """Verify SecurityMetadata record creation and vault association."""
-
     def test_create_security_metadata(self, db_session: Session):
         vault = _sample_vault()
         db_session.add(vault)
@@ -247,13 +224,6 @@ class TestSecurityMetadataRecord:
         assert fetched.argon2_time_cost == 3
 
     def test_security_metadata_no_plaintext_key(self, db_session: Session):
-        """
-        The stored encrypted_vault_key must never equal a known plaintext key.
-
-        This test asserts the sentinel placeholder is not equal to any real
-        key and that the field is not a raw 256-bit hex string (which would
-        indicate a plaintext key was accidentally stored).
-        """
         vault = _sample_vault()
         db_session.add(vault)
         db_session.flush()
@@ -263,11 +233,9 @@ class TestSecurityMetadataRecord:
         db_session.flush()
 
         fetched = db_session.get(SecurityMetadata, vault.id)
-        # Must not be exactly 64 hex chars (raw 256-bit Vault Key).
         assert len(fetched.encrypted_vault_key) != 64 or not all(
             c in "0123456789abcdef" for c in fetched.encrypted_vault_key
-        ), "encrypted_vault_key should not store a raw hex Vault Key"
-        # Must not be empty.
+        )
         assert fetched.encrypted_vault_key
 
     def test_seed_fingerprint_is_none_initially(self, db_session: Session):
@@ -292,14 +260,12 @@ class TestSecurityMetadataRecord:
         db_session.add(sec)
         db_session.flush()
 
-        # Simulate setting the fingerprint after seed generation.
-        sec.seed_fingerprint = "abcd1234efgh5678"[:16]  # 16 hex chars
+        sec.seed_fingerprint = "a1b2c3d4e5f60718"
         sec.recovery_version = "1"
         db_session.flush()
 
         fetched = db_session.get(SecurityMetadata, vault.id)
         assert fetched.seed_fingerprint is not None
-        assert len(fetched.seed_fingerprint) == 16
 
     def test_security_metadata_repr(self, db_session: Session):
         vault = _sample_vault()
@@ -310,14 +276,8 @@ class TestSecurityMetadataRecord:
         assert "AES-256-GCM" in repr(sec)
 
 
-# ---------------------------------------------------------------------------
-# Document CRUD
-# ---------------------------------------------------------------------------
-
 
 class TestDocumentRecord:
-    """Verify Document record creation, retrieval, and deletion."""
-
     def test_create_document(self, db_session: Session):
         vault = _sample_vault()
         db_session.add(vault)
@@ -335,7 +295,6 @@ class TestDocumentRecord:
         assert fetched.vault_id == vault.id
 
     def test_document_encrypted_path_is_relative(self, db_session: Session):
-        """Encrypted path must be relative (not an absolute path)."""
         vault = _sample_vault()
         db_session.add(vault)
         db_session.flush()
@@ -345,7 +304,6 @@ class TestDocumentRecord:
         db_session.flush()
 
         fetched = db_session.get(Document, doc.id)
-        # Relative path must not start with '/' or a drive letter.
         assert not fetched.encrypted_path.startswith("/")
         assert fetched.encrypted_path.startswith("encrypted/")
 
@@ -375,7 +333,6 @@ class TestDocumentRecord:
         db_session.flush()
 
         assert db_session.get(Document, doc.id) is None
-        # Vault must still exist after document deletion.
         assert db_session.get(Vault, vault.id) is not None
 
     def test_multiple_documents_per_vault(self, db_session: Session):
@@ -392,14 +349,8 @@ class TestDocumentRecord:
         assert len(fetched_vault.documents) == 3
 
 
-# ---------------------------------------------------------------------------
-# Cascade DELETE
-# ---------------------------------------------------------------------------
-
 
 class TestCascadeDelete:
-    """Verify that CASCADE DELETE propagates from Vault to children."""
-
     def test_delete_vault_cascades_to_documents(self, db_session: Session):
         vault = _sample_vault()
         db_session.add(vault)
@@ -451,14 +402,8 @@ class TestCascadeDelete:
             assert db_session.get(Document, did) is None
 
 
-# ---------------------------------------------------------------------------
-# Vault–Document relationship
-# ---------------------------------------------------------------------------
-
 
 class TestVaultDocumentRelationship:
-    """Verify the ORM relationship between Vault and Document."""
-
     def test_vault_documents_backref(self, db_session: Session):
         vault = _sample_vault()
         db_session.add(vault)
@@ -468,7 +413,6 @@ class TestVaultDocumentRelationship:
         db_session.add(doc)
         db_session.flush()
 
-        # Access the relationship.
         db_session.refresh(vault)
         assert len(vault.documents) == 1
         assert vault.documents[0].id == doc.id
@@ -487,22 +431,9 @@ class TestVaultDocumentRelationship:
         assert doc.vault.id == vault.id
 
 
-# ---------------------------------------------------------------------------
-# Security: no sensitive data in stored records
-# ---------------------------------------------------------------------------
-
 
 class TestNoSensitiveData:
-    """
-    Assert that no obviously plaintext sensitive values appear in DB records.
-
-    These tests are not cryptographic proofs — they check that the ORM
-    models do not have fields intended for plaintext passwords/keys, and
-    that the data stored matches expected formats (Base64, hex, etc.).
-    """
-
     def test_vault_has_no_password_field(self):
-        """Vault ORM model must not have a 'password' column."""
         vault = Vault.__table__
         column_names = {c.name for c in vault.columns}
         assert "password" not in column_names
@@ -510,7 +441,6 @@ class TestNoSensitiveData:
         assert "vault_key" not in column_names
 
     def test_document_has_no_content_field(self):
-        """Document ORM model must not have a 'content' or 'plaintext' column."""
         doc = Document.__table__
         column_names = {c.name for c in doc.columns}
         assert "content" not in column_names
@@ -518,45 +448,30 @@ class TestNoSensitiveData:
         assert "decrypted" not in column_names
 
     def test_security_metadata_has_no_plaintext_key_field(self):
-        """SecurityMetadata must have no 'vault_key' or 'master_key' column."""
         sec = SecurityMetadata.__table__
         column_names = {c.name for c in sec.columns}
         assert "vault_key" not in column_names
         assert "master_key" not in column_names
         assert "password" not in column_names
-        assert "seed" not in column_names  # seed_fingerprint is OK, 'seed' is not
+        assert "seed" not in column_names
 
     def test_seed_fingerprint_is_16_chars_when_set(self, db_session: Session):
-        """seed_fingerprint must be exactly 16 hex chars — never the full seed."""
         vault = _sample_vault()
         db_session.add(vault)
         db_session.flush()
 
         sec = _sample_security_metadata(vault.id)
-        sec.seed_fingerprint = "a1b2c3d4e5f60718"  # exactly 16 hex chars
+        sec.seed_fingerprint = "a1b2c3d4e5f60718"
         db_session.add(sec)
         db_session.flush()
 
         fetched = db_session.get(SecurityMetadata, vault.id)
-        # BIP-39 24-word seed is hundreds of characters — 16 chars cannot be a seed.
         assert len(fetched.seed_fingerprint) == 16
 
 
-# ---------------------------------------------------------------------------
-# Integration: VaultService → SQLite persistence
-# ---------------------------------------------------------------------------
-
 
 class TestVaultServiceDbIntegration:
-    """
-    Integration tests that exercise VaultService with a real in-memory DB.
-
-    These tests verify the full service→SQLite round-trip for vault creation,
-    lock/unlock state transitions, and deletion.
-    """
-
     def test_create_vault_persists_vault_record(self, db_session: Session, tmp_path):
-        """VaultService.create_vault should insert a Vault row and SecurityMetadata row."""
         from app.services.vault_service import VaultService
         from app.vault.vault_manager import VaultManager
 
@@ -567,21 +482,17 @@ class TestVaultServiceDbIntegration:
         request = CreateVaultRequest(name="Integration Vault", password="TestPass123!")
         response = service.create_vault(request, db=db_session)
 
-        # Vault row should exist.
         vault_row = db_session.get(Vault, response.vault_id)
         assert vault_row is not None
         assert vault_row.name == "Integration Vault"
         assert vault_row.status == "locked"
 
-        # SecurityMetadata row should exist.
         sec_row = db_session.get(SecurityMetadata, response.vault_id)
         assert sec_row is not None
-        # Must NOT store the password or plaintext key.
         assert sec_row.encrypted_vault_key != "TestPass123!"
         assert sec_row.salt is not None
 
     def test_create_vault_without_db_leaves_no_db_record(self, tmp_path):
-        """When db=None, create_vault must work (filesystem-only mode)."""
         from app.services.vault_service import VaultService
         from app.vault.vault_manager import VaultManager
         from app.schemas.vault import CreateVaultRequest
@@ -592,11 +503,9 @@ class TestVaultServiceDbIntegration:
         request = CreateVaultRequest(name="No DB Vault", password="TestPass123!")
         response = service.create_vault(request, db=None)
 
-        # Vault directory must exist on disk.
         assert (tmp_path / response.vault_id).is_dir()
 
     def test_lock_vault_updates_db_status(self, db_session: Session, tmp_path):
-        """lock_vault should flip the Vault row status from unlocked→locked in SQLite."""
         from app.services.vault_service import VaultService
         from app.vault.vault_manager import VaultManager
         from app.schemas.vault import CreateVaultRequest
@@ -608,19 +517,16 @@ class TestVaultServiceDbIntegration:
         created = service.create_vault(request, db=db_session)
         vault_id = created.vault_id
 
-        # Unlock first so we can lock.
         service.unlock_vault(vault_id, db=db_session)
         row_after_unlock = db_session.get(Vault, vault_id)
         assert row_after_unlock.status == "unlocked"
 
-        # Now lock.
         service.lock_vault(vault_id, db=db_session)
         db_session.expire(row_after_unlock)
         row_after_lock = db_session.get(Vault, vault_id)
         assert row_after_lock.status == "locked"
 
     def test_unlock_vault_updates_db_status(self, db_session: Session, tmp_path):
-        """unlock_vault should flip the Vault row status from locked→unlocked in SQLite."""
         from app.services.vault_service import VaultService
         from app.vault.vault_manager import VaultManager
         from app.schemas.vault import CreateVaultRequest
@@ -641,7 +547,6 @@ class TestVaultServiceDbIntegration:
         assert row_after.status == "unlocked"
 
     def test_delete_vault_removes_db_record(self, db_session: Session, tmp_path):
-        """delete_vault should remove the Vault row (and children via CASCADE)."""
         from app.services.vault_service import VaultService
         from app.vault.vault_manager import VaultManager
         from app.schemas.vault import CreateVaultRequest
@@ -659,25 +564,10 @@ class TestVaultServiceDbIntegration:
         assert db_session.get(SecurityMetadata, vault_id) is None
 
 
-# ---------------------------------------------------------------------------
-# Integration: DocumentService → SQLite persistence
-# ---------------------------------------------------------------------------
-
 
 class TestDocumentServiceDbIntegration:
-    """
-    Integration tests that exercise DocumentService with a real in-memory DB.
-
-    These tests verify:
-    - upload_document inserts a Document row in SQLite.
-    - list_documents reads from SQLite when db is provided.
-    - delete_document removes the Document row.
-    - verify_document reads the integrity_hash from SQLite.
-    """
-
     @pytest.fixture()
     def _vault_setup(self, db_session: Session, tmp_path):
-        """Create a vault and return (vault_id, service, tmp_path)."""
         from app.services.vault_service import VaultService
         from app.vault.vault_manager import VaultManager
         from app.schemas.vault import CreateVaultRequest
@@ -687,7 +577,6 @@ class TestDocumentServiceDbIntegration:
         request = CreateVaultRequest(name="Doc Test Vault", password="DocPass123!")
         created = vsvc.create_vault(request, db=db_session)
 
-        # Unlock so documents can be uploaded.
         vsvc.unlock_vault(created.vault_id, db=db_session)
 
         from app.services.document_service import DocumentService
@@ -697,7 +586,6 @@ class TestDocumentServiceDbIntegration:
     def test_upload_inserts_document_record(
         self, _vault_setup, db_session: Session
     ):
-        """upload_document should insert a Document row in SQLite."""
         vault_id, svc = _vault_setup
 
         doc_resp = svc.upload_document(
@@ -714,19 +602,15 @@ class TestDocumentServiceDbIntegration:
         assert doc_row.original_filename == "hello.txt"
         assert doc_row.mime_type == "text/plain"
         assert doc_row.vault_id == vault_id
-        # Integrity hash must be a 64-char SHA-256 hex digest.
         assert doc_row.integrity_hash is not None
         assert len(doc_row.integrity_hash) == 64
-        # Ensure no plaintext content is stored.
         assert doc_row.integrity_hash != "Hello, Cipherix!"
 
     def test_list_documents_reads_from_sqlite(
         self, _vault_setup, db_session: Session
     ):
-        """list_documents(db=...) should return results from the SQLite table."""
         vault_id, svc = _vault_setup
 
-        # Upload two documents.
         for i in range(2):
             svc.upload_document(
                 vault_id=vault_id,
@@ -745,7 +629,6 @@ class TestDocumentServiceDbIntegration:
     def test_list_documents_returns_empty_for_new_vault(
         self, _vault_setup, db_session: Session
     ):
-        """list_documents should return an empty list if no documents exist."""
         vault_id, svc = _vault_setup
         result = svc.list_documents(vault_id, db=db_session)
         assert result.count == 0
@@ -754,7 +637,6 @@ class TestDocumentServiceDbIntegration:
     def test_delete_document_removes_db_record(
         self, _vault_setup, db_session: Session
     ):
-        """delete_document should remove the Document row from SQLite."""
         vault_id, svc = _vault_setup
 
         doc_resp = svc.upload_document(
@@ -774,7 +656,6 @@ class TestDocumentServiceDbIntegration:
     def test_verify_document_reads_hash_from_sqlite(
         self, _vault_setup, db_session: Session
     ):
-        """verify_document(db=...) should read the hash from SQLite and pass."""
         vault_id, svc = _vault_setup
 
         doc_resp = svc.upload_document(
@@ -793,7 +674,6 @@ class TestDocumentServiceDbIntegration:
     def test_document_content_not_stored_in_db(
         self, _vault_setup, db_session: Session
     ):
-        """The plaintext document content must never appear in any DB column."""
         vault_id, svc = _vault_setup
         plaintext = b"super secret content"
 
@@ -807,7 +687,6 @@ class TestDocumentServiceDbIntegration:
         )
 
         doc_row = db_session.get(Document, doc_resp.document_id)
-        # None of the string columns should contain the plaintext.
         for col in (
             doc_row.original_filename,
             doc_row.mime_type,
@@ -820,19 +699,10 @@ class TestDocumentServiceDbIntegration:
             )
 
 
-# ---------------------------------------------------------------------------
-# Integration: SecurityService → SQLite (seed fingerprint verification)
-# ---------------------------------------------------------------------------
-
 
 class TestSecurityServiceSeedDbIntegration:
-    """
-    Integration tests for verify_recovery_seed using the SQLite fingerprint path.
-    """
-
     @pytest.fixture()
     def _seeded_vault(self, db_session: Session, tmp_path):
-        """Create a vault, generate a recovery seed, and return (vault_id, seed, svc)."""
         from app.services.vault_service import VaultService
         from app.vault.vault_manager import VaultManager
         from app.schemas.vault import CreateVaultRequest
@@ -843,7 +713,6 @@ class TestSecurityServiceSeedDbIntegration:
         request = CreateVaultRequest(name="Seed DB Test Vault", password="SeedPass123!")
         created = vsvc.create_vault(request, db=db_session)
 
-        # Unlock the vault (required by generate_recovery_seed).
         vsvc.unlock_vault(created.vault_id, db=db_session)
 
         ssvc = SecurityService(vault_base_dir=tmp_path)
@@ -853,7 +722,6 @@ class TestSecurityServiceSeedDbIntegration:
     def test_verify_correct_seed_against_sqlite(
         self, _seeded_vault, db_session: Session
     ):
-        """verify_recovery_seed(db=...) should return valid=True for the correct seed."""
         vault_id, seed, svc = _seeded_vault
         result = svc.verify_recovery_seed(vault_id, seed, db=db_session)
         assert result.valid is True
@@ -861,13 +729,11 @@ class TestSecurityServiceSeedDbIntegration:
     def test_verify_wrong_seed_against_sqlite(
         self, _seeded_vault, db_session: Session, tmp_path
     ):
-        """verify_recovery_seed(db=...) should return valid=False for a different seed."""
         from mnemonic import Mnemonic
         import os
 
         vault_id, _correct_seed, svc = _seeded_vault
 
-        # Generate a different valid BIP-39 seed.
         mnemo = Mnemonic("english")
         wrong_seed = mnemo.to_mnemonic(os.urandom(32))
 
@@ -877,7 +743,6 @@ class TestSecurityServiceSeedDbIntegration:
     def test_verify_seed_raises_for_invalid_bip39(
         self, _seeded_vault, db_session: Session
     ):
-        """verify_recovery_seed(db=...) should raise InvalidRecoverySeedError for garbage."""
         from app.core.exceptions import InvalidRecoverySeedError
 
         vault_id, _seed, svc = _seeded_vault

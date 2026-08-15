@@ -20,10 +20,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 
-# ---------------------------------------------------------------------------
-# Data model
-# ---------------------------------------------------------------------------
-
 
 @dataclass
 class VaultManifest:
@@ -58,10 +54,6 @@ class VaultManifest:
     version: str = field(default="1.0")
     status: str = field(default="locked")
 
-    # ------------------------------------------------------------------
-    # Factory helpers
-    # ------------------------------------------------------------------
-
     @classmethod
     def create(cls, vault_id: str, name: str) -> "VaultManifest":
         """
@@ -87,10 +79,6 @@ class VaultManifest:
             name=name,
             created_at=datetime.now(UTC).isoformat(),
         )
-
-    # ------------------------------------------------------------------
-    # Serialisation
-    # ------------------------------------------------------------------
 
     def to_dict(self) -> dict[str, str]:
         """Return a plain dictionary representation of the manifest."""

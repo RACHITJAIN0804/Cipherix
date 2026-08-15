@@ -15,10 +15,6 @@ response is constructed.
 from pydantic import BaseModel, Field
 
 
-# ---------------------------------------------------------------------------
-# Request
-# ---------------------------------------------------------------------------
-
 
 class ChangePasswordRequest(BaseModel):
     """
@@ -49,10 +45,6 @@ class ChangePasswordRequest(BaseModel):
         ),
     )
 
-
-# ---------------------------------------------------------------------------
-# Response
-# ---------------------------------------------------------------------------
 
 
 class ChangePasswordResponse(BaseModel):
@@ -86,10 +78,6 @@ class ChangePasswordResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-
-# ---------------------------------------------------------------------------
-# Recovery seed — generation
-# ---------------------------------------------------------------------------
 
 
 class RecoverySeedResponse(BaseModel):
@@ -147,10 +135,6 @@ class RecoverySeedResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-
-# ---------------------------------------------------------------------------
-# Recovery seed — verification
-# ---------------------------------------------------------------------------
 
 
 class VerifySeedRequest(BaseModel):

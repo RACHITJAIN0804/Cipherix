@@ -53,10 +53,6 @@ router = APIRouter(
 )
 
 
-# ---------------------------------------------------------------------------
-# Dependency
-# ---------------------------------------------------------------------------
-
 
 def _get_security_service() -> SecurityService:
     """
@@ -67,10 +63,6 @@ def _get_security_service() -> SecurityService:
     """
     return SecurityService(vault_base_dir=settings.VAULT_DIR)
 
-
-# ---------------------------------------------------------------------------
-# Exception mapper
-# ---------------------------------------------------------------------------
 
 
 def _map_security_exception(exc: Exception) -> None:
@@ -125,10 +117,6 @@ def _map_security_exception(exc: Exception) -> None:
 
     raise exc
 
-
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
 
 
 @router.post(

@@ -74,10 +74,6 @@ from app.vault.vault_manager import VaultManager
 
 logger = get_logger(__name__)
 
-# ---------------------------------------------------------------------------
-# Module-level constants
-# ---------------------------------------------------------------------------
-
 _STATUS_LOCKED: str = "locked"
 _STATUS_UNLOCKED: str = "unlocked"
 
@@ -95,10 +91,6 @@ class VaultService:
 
     def __init__(self, manager: VaultManager) -> None:
         self._manager: VaultManager = manager
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
 
     def create_vault(
         self,
@@ -157,12 +149,10 @@ class VaultService:
 
         manifest = VaultManifest.create(vault_id=vault_id, name=request.name)
 
-        # --- Step 4: Filesystem scaffolding ---
         vault_root: Path = self._manager.create(
             vault_id=vault_id, manifest=manifest, password=request.password
         )
 
-        # --- Step 5: DB persistence ---
         if db is not None:
             try:
                 self._insert_vault_records(
@@ -255,7 +245,6 @@ class VaultService:
             logger.warning("Vault deletion did not complete | vault_id=%s", vault_id)
             raise
 
-        # --- DB cleanup (non-blocking) ---
         if db is not None:
             try:
                 record = db.get(VaultRecord, vault_id)
@@ -273,7 +262,6 @@ class VaultService:
                     )
             except SQLAlchemyError as exc:
                 db.rollback()
-                # Filesystem is already gone; log the orphaned DB record.
                 logger.error(
                     "Failed to delete vault DB record after filesystem deletion "
                     "| vault_id=%s | error=%s",
@@ -307,7 +295,6 @@ class VaultService:
         """
         raw_manifests = self._manager.list_vaults()
 
-        # If db and user_id are provided, filter by SQLite ownership
         allowed_vault_ids: set[str] | None = None
         if db is not None and user_id is not None:
             user_records = db.query(VaultRecord.id).filter(VaultRecord.user_id == user_id).all()
@@ -424,10 +411,6 @@ class VaultService:
             db=db,
         )
 
-    # ------------------------------------------------------------------
-    # Private: DB helpers
-    # ------------------------------------------------------------------
-
     def _insert_vault_records(
         self,
         db: Session,
@@ -470,17 +453,14 @@ class VaultService:
 
         now = datetime.now(UTC)
 
-        # --- Read key.json ---
         key_json_path = vault_root / "key.json"
         key_data: dict = json.loads(key_json_path.read_text(encoding="utf-8"))
 
-        # --- Read password_meta.json ---
         pwd_meta_path = vault_root / "password_meta.json"
         pwd_data: dict = json.loads(pwd_meta_path.read_text(encoding="utf-8"))
         kdf_params = KdfParams.from_dict(pwd_data.get("kdf", {}))
         salt_hex: str = pwd_data.get("salt", "")
 
-        # Insert Vault row.
         vault_record = VaultRecord(
             id=vault_id,
             name=name,
@@ -492,7 +472,6 @@ class VaultService:
         )
         db.add(vault_record)
 
-        # Insert SecurityMetadata row.
         # encrypted_vault_key stores CIPHERTEXT — never plaintext.
         # salt and nonce are not secret; they are required for future
         # Master Key re-derivation and AES-GCM decryption respectively.
@@ -520,10 +499,6 @@ class VaultService:
             "Vault + SecurityMetadata DB records inserted | vault_id=%s",
             vault_id,
         )
-
-    # ------------------------------------------------------------------
-    # Private: state transition helpers
-    # ------------------------------------------------------------------
 
     def _transition_vault_state(
         self,

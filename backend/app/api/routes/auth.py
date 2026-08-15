@@ -21,28 +21,35 @@ or returned in any response body.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.api.dependencies import get_current_user
+from app.core.config import settings
 from app.core.exceptions import (
     AuthError,
     ExpiredTokenError,
     InactiveUserError,
     InvalidCredentialsError,
+    InvalidRecoverySeedError,
     InvalidTokenError,
+    RecoveryMetadataMissingError,
     TokenError,
+    UnsupportedRecoveryVersionError,
     UserAlreadyExistsError,
     UserNotFoundError,
+    VaultNotFoundError,
 )
 from app.core.logger import get_logger
 from app.database import get_db
 from app.database.models import User
-from app.api.dependencies import get_current_user
 from app.schemas.auth import (
     LoginRequest,
+    RecoverVaultRequest,
     RefreshRequest,
     RegisterRequest,
     TokenResponse,
     UserResponse,
 )
 from app.services.auth_service import AuthService
+from app.services.security_service import SecurityService
 
 logger = get_logger(__name__)
 
@@ -51,24 +58,8 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 _auth_service = AuthService()
 
 
-# ---------------------------------------------------------------------------
-# Exception mapper
-# ---------------------------------------------------------------------------
-
 
 def _map_auth_exception(exc: Exception) -> None:
-    """
-    Map a domain exception to the appropriate :class:`HTTPException`.
-
-    Centralising the mapping here means every auth endpoint shares the same
-    exception-to-status-code table without repeating it.
-
-    Raises
-    ------
-    HTTPException
-        Always.  Non-domain exceptions are re-raised so the global handler
-        in ``main.py`` can log the full traceback.
-    """
     if isinstance(exc, UserAlreadyExistsError):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -88,11 +79,16 @@ def _map_auth_exception(exc: Exception) -> None:
             detail=exc.detail,
         ) from exc
 
-    if isinstance(exc, UserNotFoundError):
+    if isinstance(exc, (UserNotFoundError, VaultNotFoundError, RecoveryMetadataMissingError)):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=exc.detail,
-            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
+    if isinstance(exc, (InvalidRecoverySeedError, UnsupportedRecoveryVersionError)):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.detail,
         ) from exc
 
     if isinstance(exc, ExpiredTokenError):
@@ -118,37 +114,16 @@ def _map_auth_exception(exc: Exception) -> None:
     raise exc
 
 
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
-
-
 @router.post(
     "/register",
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user account",
-    description=(
-        "Create a new Cipherix user account.  The username must be unique "
-        "(3–64 characters).  The password is hashed with Argon2id before "
-        "storage and is never returned in any response."
-    ),
-    responses={
-        201: {"description": "Account created successfully."},
-        409: {"description": "Username already taken."},
-        422: {"description": "Validation error (username too short, password too short, etc.)."},
-    },
 )
 async def register(
     payload: RegisterRequest,
     db: Session = Depends(get_db),
 ) -> UserResponse:
-    """
-    ``POST /auth/register`` — create a new user account.
-
-    Validates the username and password, hashes the password with Argon2id,
-    and stores the user row.  Returns safe user information (no password hash).
-    """
     try:
         return _auth_service.register(db, payload)
     except Exception as exc:  # noqa: BLE001
@@ -160,27 +135,11 @@ async def register(
     response_model=TokenResponse,
     status_code=status.HTTP_200_OK,
     summary="Log in and obtain JWT tokens",
-    description=(
-        "Authenticate with username and password.  Returns an access token "
-        "(short-lived) and a refresh token (longer-lived).  Both are signed "
-        "JWTs.  The password is never logged or returned."
-    ),
-    responses={
-        200: {"description": "Login successful — tokens returned."},
-        401: {"description": "Invalid username or password."},
-        403: {"description": "Account is deactivated."},
-    },
 )
 async def login(
     payload: LoginRequest,
     db: Session = Depends(get_db),
 ) -> TokenResponse:
-    """
-    ``POST /auth/login`` — authenticate and return tokens.
-
-    Uses a constant-time Argon2id check for both existing and non-existing
-    usernames to prevent timing-based user enumeration.
-    """
     try:
         return _auth_service.login(db, payload)
     except Exception as exc:  # noqa: BLE001
@@ -192,27 +151,10 @@ async def login(
     response_model=UserResponse,
     status_code=status.HTTP_200_OK,
     summary="Get the currently authenticated user",
-    description=(
-        "Returns the profile of the user identified by the Bearer JWT in "
-        "the ``Authorization`` header.  No sensitive fields (password hash, "
-        "keys, seeds) are included in the response."
-    ),
-    responses={
-        200: {"description": "Authenticated user profile."},
-        401: {"description": "Missing, expired, or invalid token."},
-        403: {"description": "Account is deactivated."},
-    },
 )
 async def me(
     current_user: User = Depends(get_current_user),
 ) -> UserResponse:
-    """
-    ``GET /auth/me`` — return the authenticated user's profile.
-
-    This endpoint demonstrates and tests the ``get_current_user`` dependency.
-    The dependency validates the Bearer token, loads the user from SQLite,
-    and verifies the account is active before this handler is called.
-    """
     return UserResponse.model_validate(current_user)
 
 
@@ -221,28 +163,49 @@ async def me(
     response_model=TokenResponse,
     status_code=status.HTTP_200_OK,
     summary="Refresh access token using a refresh token",
-    description=(
-        "Exchange a valid refresh token for a new access token and refresh "
-        "token pair.  Refresh tokens have a longer lifetime than access tokens "
-        "but cannot be used directly to access protected endpoints."
-    ),
-    responses={
-        200: {"description": "New token pair issued."},
-        401: {"description": "Refresh token is expired, invalid, or malformed."},
-        403: {"description": "Account is deactivated."},
-    },
 )
 async def refresh(
     payload: RefreshRequest,
     db: Session = Depends(get_db),
 ) -> TokenResponse:
-    """
-    ``POST /auth/refresh`` — exchange a refresh token for a new token pair.
-
-    Validates the refresh token's signature, expiry, and type claim
-    (``type="refresh"`` — an access token is never accepted here).
-    """
     try:
         return _auth_service.refresh(db, payload.refresh_token)
     except Exception as exc:  # noqa: BLE001
         _map_auth_exception(exc)
+
+
+@router.post(
+    "/recover",
+    response_model=TokenResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Recover vault access using BIP-39 recovery seed",
+    description=(
+        "Recover access to a vault using a 24-word BIP-39 recovery seed and "
+        "establish a new password.  Does not require an existing password or JWT."
+    ),
+    responses={
+        200: {"description": "Recovery successful — new password established and tokens issued."},
+        401: {"description": "Invalid user or unauthenticated."},
+        403: {"description": "Account is deactivated."},
+        404: {"description": "User or vault not found or recovery seed not configured."},
+        422: {"description": "Invalid BIP-39 recovery seed format, checksum, or fingerprint mismatch."},
+    },
+)
+async def recover(
+    payload: RecoverVaultRequest,
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    """
+    ``POST /auth/recover`` — recover vault access and establish a new password.
+    """
+    try:
+        sec_service = SecurityService(vault_base_dir=settings.VAULT_DIR)
+        return sec_service.recover_vault(
+            username=payload.username,
+            seed=payload.seed,
+            new_password=payload.new_password,
+            db=db,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _map_auth_exception(exc)
+

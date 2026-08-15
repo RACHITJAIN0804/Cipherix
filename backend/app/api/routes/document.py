@@ -61,10 +61,6 @@ router = APIRouter(
 )
 
 
-# ---------------------------------------------------------------------------
-# Dependency
-# ---------------------------------------------------------------------------
-
 
 def _get_document_service() -> DocumentService:
     """
@@ -78,10 +74,6 @@ def _get_document_service() -> DocumentService:
     """
     return DocumentService(vault_base_dir=settings.VAULT_DIR)
 
-
-# ---------------------------------------------------------------------------
-# Exception mapper
-# ---------------------------------------------------------------------------
 
 
 def _map_document_exception(exc: Exception) -> None:
@@ -133,10 +125,6 @@ def _map_document_exception(exc: Exception) -> None:
 
     raise exc
 
-
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
 
 
 @router.post(

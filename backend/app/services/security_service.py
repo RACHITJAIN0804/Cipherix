@@ -105,7 +105,9 @@ from app.vault.manifest import VaultManifest
 
 logger = get_logger(__name__)
 
+_STATUS_LOCKED: str = "locked"
 _STATUS_UNLOCKED: str = "unlocked"
+
 
 
 class SecurityService:
@@ -125,10 +127,6 @@ class SecurityService:
     def __init__(self, vault_base_dir: Path) -> None:
         self._vault_base_dir: Path = vault_base_dir
         self._enc_mgr: EncryptionManager = EncryptionManager()
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
 
     def change_password(
         self,
@@ -194,17 +192,14 @@ class SecurityService:
             pwd_mgr = PasswordManager(vault_root)
             key_mgr = KeyManager(vault_root)
 
-            # --- Step 3: Load stored metadata ---
             salt_hex, _kdf_params = pwd_mgr.read_metadata(vault_id)
 
-            # --- Step 4: Derive Old Master Key ---
             logger.info(
                 "Deriving old Master Key for password change | vault_id=%s",
                 vault_id,
             )
             old_master_key = pwd_mgr.derive_master_key(old_password, salt_hex)
 
-            # --- Steps 5 & 6: Read + validate key.json envelope ---
             key_meta: KeyMetadata = key_mgr.read(vault_id)
             self._enc_mgr.validate_envelope(
                 encrypted_vault_key_b64=key_meta.encrypted_vault_key,
@@ -212,7 +207,6 @@ class SecurityService:
                 algorithm=key_meta.algorithm,
             )
 
-            # --- Step 7: Decrypt Vault Key with old Master Key ---
             ct_bytes = self._enc_mgr.decode_from_storage(
                 key_meta.encrypted_vault_key, "encrypted_vault_key"
             )
@@ -230,17 +224,14 @@ class SecurityService:
                 vault_id,
             )
 
-            # --- Step 8: Generate new salt ---
             new_salt_hex: str = pwd_mgr.generate_salt()
 
-            # --- Step 9: Derive New Master Key ---
             logger.info(
                 "Deriving new Master Key | vault_id=%s",
                 vault_id,
             )
             new_master_key = pwd_mgr.derive_master_key(new_password, new_salt_hex)
 
-            # --- Steps 10 & 11: Generate nonce + re-encrypt Vault Key ---
             new_nonce: bytes = self._enc_mgr.generate_nonce()
             new_encrypted_vault_key: bytes = self._enc_mgr.encrypt_vault_key(
                 vault_key=vault_key,
@@ -253,14 +244,13 @@ class SecurityService:
             )
             new_nonce_b64: str = self._enc_mgr.encode_for_storage(new_nonce)
 
-            # --- Steps 12 & 13: Persist new key.json and password_meta.json ---
             # Write key.json first.  If password_meta.json then fails, the vault
             # still contains a valid wrapped Vault Key (under the new Master Key),
             # but the stored salt is stale.  The recommended recovery path is to
             # retry the password change — both files will be overwritten cleanly.
             key_mgr.create(
                 vault_id=vault_id,
-                vault_key_hex="",  # Raw key not needed here; create() only writes the wrapped form.
+                vault_key_hex="",
                 encrypted_vault_key=new_encrypted_vault_key_b64,
                 nonce=new_nonce_b64,
             )
@@ -268,7 +258,7 @@ class SecurityService:
 
             changed_at: str = datetime.now(UTC).isoformat()
 
-            # --- Step 14: Update DB SecurityMetadata record ---
+            # Update DB SecurityMetadata record.
             # This is non-atomic with the disk writes (disk goes first).
             # If DB update fails, log a warning: the vault is still usable
             # (the disk files are authoritative) but the DB record is stale.
@@ -330,9 +320,6 @@ class SecurityService:
             ) from exc
 
         except CipherixError:
-            # Re-raise all other typed domain errors (InvalidPasswordError,
-            # MissingSaltError, KeyMetadataError, etc.) without wrapping —
-            # the route exception mapper will handle them.
             raise
 
         except Exception as exc:
@@ -346,43 +333,12 @@ class SecurityService:
                 detail="An unexpected error occurred during the password change operation.",
             ) from exc
 
-    # ------------------------------------------------------------------
-    # Recovery seed
-    # ------------------------------------------------------------------
-
     def generate_recovery_seed(
         self,
         vault_id: str,
+        password: str | None = None,
         db: Session | None = None,
     ) -> RecoverySeedResponse:
-        """
-        Generate a BIP-39 24-word recovery seed for a vault.
-
-        The seed is generated, returned in the response, and **never**
-        written to disk.  Only the seed fingerprint (SHA-256 prefix) is
-        stored in ``recovery_meta.json`` so future verification calls can
-        confirm a candidate seed without access to the plaintext.
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 identifying the target vault.
-
-        Returns
-        -------
-        RecoverySeedResponse
-            Contains the plaintext seed (shown once, then discarded),
-            the algorithm label, word count, and generation timestamp.
-
-        Raises
-        ------
-        VaultNotFoundError
-            If the vault directory does not exist.
-        VaultLockedError
-            If the vault is not in the ``unlocked`` state.
-        OSError
-            If ``recovery_meta.json`` cannot be written.
-        """
         vault_root = self._assert_vault_unlocked(vault_id)
         recovery_mgr = RecoveryManager(vault_root)
 
@@ -393,15 +349,27 @@ class SecurityService:
             seed_fingerprint=fingerprint,
         )
 
+        if password:
+            try:
+                pwd_mgr = PasswordManager(vault_root)
+                key_mgr = KeyManager(vault_root)
+                enc_mgr = EncryptionManager()
+                salt_hex, _ = pwd_mgr.read_metadata(vault_id)
+                master_key = pwd_mgr.derive_master_key(password, salt_hex)
+                key_meta = key_mgr.read(vault_id)
+                ct_bytes = enc_mgr.decode_from_storage(key_meta.encrypted_vault_key, "encrypted_vault_key")
+                nonce_bytes = enc_mgr.decode_from_storage(key_meta.nonce, "nonce")
+                vault_key_bytes = enc_mgr.decrypt_vault_key(ct_bytes, master_key, nonce_bytes)
+                recovery_mgr.create_recovery_key(vault_id, vault_key_bytes, seed)
+            except Exception as exc:
+                logger.warning("Failed to create recovery_key.json during seed generation: %s", exc)
+
         logger.info(
             "Recovery seed generation complete | vault_id=%s | algorithm=%s",
             vault_id,
             metadata.algorithm,
         )
 
-        # Update DB SecurityMetadata with the seed fingerprint and version.
-        # seed_fingerprint is the first 16 hex chars of SHA-256(seed) — safe to store.
-        # The plaintext seed is NEVER written here.
         if db is not None:
             try:
                 sec_record = db.get(SecurityMetadataRecord, vault_id)
@@ -438,6 +406,109 @@ class SecurityService:
             word_count=len(seed.split()),
             created_at=metadata.created_at,
         )
+
+    def recover_vault(
+        self,
+        username: str,
+        seed: str,
+        new_password: str,
+        db: Session | None = None,
+    ):
+        from app.core.exceptions import (
+            AuthError,
+            InactiveUserError,
+            UserNotFoundError,
+        )
+        from app.database.models import User, Vault as VaultRecord
+        from app.schemas.auth import TokenResponse
+        from app.security.jwt_manager import JWTManager
+
+        if db is None:
+            raise AuthError("Database session required for recovery.", detail="SQLite DB session is required.")
+
+        user = db.query(User).filter(User.username == username).first()
+        if user is None:
+            raise UserNotFoundError(
+                f"User '{username}' not found.",
+                detail=f"No registered user found with username '{username}'.",
+            )
+        if not user.is_active:
+            raise InactiveUserError(
+                "Account is deactivated.",
+                detail=f"Account '{username}' is inactive and cannot perform recovery.",
+            )
+
+        vault_record = db.query(VaultRecord).filter(VaultRecord.user_id == user.id).first()
+        if vault_record is None:
+            raise VaultNotFoundError(
+                f"No vault found for user '{username}'.",
+                detail=f"User '{username}' has no associated vault record.",
+            )
+
+        vault_id = vault_record.id
+        vault_root = self._assert_vault_exists(vault_id)
+        recovery_mgr = RecoveryManager(vault_root)
+
+        vault_key_bytes: bytes = recovery_mgr.recover_vault_key(vault_id, seed)
+
+        pwd_mgr = PasswordManager(vault_root)
+        key_mgr = KeyManager(vault_root)
+        enc_mgr = EncryptionManager()
+
+        new_salt_hex: str = pwd_mgr.generate_salt()
+        new_master_key: bytes = pwd_mgr.derive_master_key(new_password, new_salt_hex)
+
+        new_nonce_bytes: bytes = enc_mgr.generate_nonce()
+        new_encrypted_vk_bytes: bytes = enc_mgr.encrypt_vault_key(
+            vault_key=vault_key_bytes,
+            master_key=new_master_key,
+            nonce=new_nonce_bytes,
+        )
+
+        new_encrypted_vk_b64: str = enc_mgr.encode_for_storage(new_encrypted_vk_bytes)
+        new_nonce_b64: str = enc_mgr.encode_for_storage(new_nonce_bytes)
+
+        key_mgr.create(
+            vault_id=vault_id,
+            vault_key_hex="",
+            encrypted_vault_key=new_encrypted_vk_b64,
+            nonce=new_nonce_b64,
+        )
+        pwd_mgr.write_metadata(vault_id=vault_id, salt_hex=new_salt_hex)
+
+        manifest_path = vault_root / "manifest.json"
+        if manifest_path.is_file():
+            try:
+                m = VaultManifest.read(manifest_path)
+                m.status = _STATUS_LOCKED
+                m.write(manifest_path)
+            except Exception:
+                pass
+
+        try:
+            sec_record = db.get(SecurityMetadataRecord, vault_id)
+            if sec_record is not None:
+                sec_record.encrypted_vault_key = new_encrypted_vk_b64
+                sec_record.nonce = new_nonce_b64
+                sec_record.salt = new_salt_hex
+                sec_record.updated_at = datetime.now(UTC)
+
+            v_record = db.get(VaultRecord, vault_id)
+            if v_record is not None:
+                v_record.status = _STATUS_LOCKED
+                v_record.updated_at = datetime.now(UTC)
+
+            db.commit()
+        except SQLAlchemyError as db_exc:
+            db.rollback()
+            logger.warning("DB update during recovery failed | vault_id=%s | error=%s", vault_id, db_exc)
+
+        jwt_mgr = JWTManager()
+        access_token = jwt_mgr.create_access_token(user_id=user.id)
+        refresh_token = jwt_mgr.create_refresh_token(user_id=user.id)
+
+        logger.info("Vault recovered successfully via seed | username=%s | vault_id=%s", username, vault_id)
+        return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
     def verify_recovery_seed(
         self,
@@ -488,8 +559,6 @@ class SecurityService:
         recovery_mgr = RecoveryManager(vault_root)
 
         if db is not None:
-            # Validate BIP-39 structure / checksum first, then compare
-            # fingerprint against the SQLite record.
             sec_record = db.get(SecurityMetadataRecord, vault_id)
             if sec_record is None or sec_record.seed_fingerprint is None:
                 raise RecoveryMetadataMissingError(
@@ -500,10 +569,8 @@ class SecurityService:
                     ),
                 )
 
-            # Validate BIP-39 structure of the candidate seed.
             recovery_mgr.validate_seed_format(candidate_seed)
 
-            # Compute fingerprint of the candidate and compare.
             candidate_fingerprint: str = recovery_mgr.compute_fingerprint(candidate_seed)
             valid: bool = candidate_fingerprint == sec_record.seed_fingerprint
         else:
@@ -519,10 +586,6 @@ class SecurityService:
         )
 
         return VerifySeedResponse(vault_id=vault_id, valid=valid)
-
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
     def _vault_root(self, vault_id: str) -> Path:
         """Return the vault root directory for a given vault_id."""

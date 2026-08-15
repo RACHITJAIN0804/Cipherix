@@ -19,10 +19,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-# ---------------------------------------------------------------------------
-# Shared base (internal — not part of the public API surface)
-# ---------------------------------------------------------------------------
-
 
 class _DocumentBase(BaseModel):
     """
@@ -70,10 +66,6 @@ class _DocumentBase(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ---------------------------------------------------------------------------
-# Single document response
-# ---------------------------------------------------------------------------
-
 
 class DocumentResponse(_DocumentBase):
     """
@@ -86,10 +78,6 @@ class DocumentResponse(_DocumentBase):
     is never returned through this endpoint.
     """
 
-
-# ---------------------------------------------------------------------------
-# List response
-# ---------------------------------------------------------------------------
 
 
 class DocumentListResponse(BaseModel):
@@ -116,10 +104,6 @@ class DocumentListResponse(BaseModel):
         description="Document metadata entries, sorted by upload time descending.",
     )
 
-
-# ---------------------------------------------------------------------------
-# Integrity verification response
-# ---------------------------------------------------------------------------
 
 
 class VerifyIntegrityResponse(BaseModel):

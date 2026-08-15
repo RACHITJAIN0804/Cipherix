@@ -55,10 +55,6 @@ class SecurityMetadataManager:
         self._vault_root: Path = vault_root
         self._security_path: Path = vault_root / _SECURITY_FILENAME
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def create(self, vault_id: str) -> None:
         """
         Write a fresh ``security.json`` to the vault root.
@@ -177,17 +173,11 @@ class SecurityMetadataManager:
             "Validating security.json for vault '%s'", vault_id
         )
 
-        # read() already asserts presence and parseability; if it
-        # returns without raising, validation has passed.
         self.read(vault_id)
 
         logger.debug(
             "security.json validation passed for vault '%s'", vault_id
         )
-
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
     def _assert_security_file_present(self, vault_id: str) -> None:
         """

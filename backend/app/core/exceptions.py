@@ -17,10 +17,6 @@ so callers can handle them at whatever granularity they need.
 """
 
 
-# ---------------------------------------------------------------------------
-# Base
-# ---------------------------------------------------------------------------
-
 
 class CipherixError(Exception):
     """
@@ -36,10 +32,6 @@ class CipherixError(Exception):
         self.message: str = message
         self.detail: str = detail or message
 
-
-# ---------------------------------------------------------------------------
-# Vault errors
-# ---------------------------------------------------------------------------
 
 
 class VaultError(CipherixError):
@@ -134,10 +126,6 @@ class VaultStateError(VaultError):
     """
 
 
-# ---------------------------------------------------------------------------
-# Security errors
-# ---------------------------------------------------------------------------
-
 
 class SecurityMetadataNotFoundError(VaultError):
     """
@@ -168,10 +156,6 @@ class SecurityMetadataError(VaultError):
     the same way they would handle :class:`VaultManifestError`.
     """
 
-
-# ---------------------------------------------------------------------------
-# Key management errors
-# ---------------------------------------------------------------------------
 
 
 class KeyMetadataNotFoundError(VaultError):
@@ -207,10 +191,6 @@ class KeyMetadataError(VaultError):
     the vault is re-initialised.
     """
 
-
-# ---------------------------------------------------------------------------
-# Password / key-derivation errors
-# ---------------------------------------------------------------------------
 
 
 class PasswordError(CipherixError):
@@ -317,10 +297,6 @@ class PasswordChangeError(PasswordError):
     """
 
 
-# ---------------------------------------------------------------------------
-# Encryption errors
-# ---------------------------------------------------------------------------
-
 
 class EncryptionError(CipherixError):
     """
@@ -409,10 +385,6 @@ class CorruptedVaultKeyError(EncryptionError):
     """
 
 
-# ---------------------------------------------------------------------------
-# Document errors
-# ---------------------------------------------------------------------------
-
 
 class DocumentError(CipherixError):
     """
@@ -500,10 +472,6 @@ class DocumentStorageError(DocumentError):
     """
 
 
-# ---------------------------------------------------------------------------
-# Integrity errors
-# ---------------------------------------------------------------------------
-
 
 class IntegrityError(DocumentError):
     """Base class for all document integrity verification errors."""
@@ -574,10 +542,6 @@ class CorruptedDocumentError(IntegrityError):
     """
 
 
-# ---------------------------------------------------------------------------
-# Recovery seed errors
-# ---------------------------------------------------------------------------
-
 
 class RecoveryError(CipherixError):
     """Base class for all recovery seed errors."""
@@ -633,10 +597,6 @@ class RecoveryMetadataMissingError(RecoveryError):
     """
 
 
-# ---------------------------------------------------------------------------
-# Database errors
-# ---------------------------------------------------------------------------
-
 
 class DatabaseError(CipherixError):
     """
@@ -683,10 +643,6 @@ class SecurityMetadataRecordNotFoundError(DatabaseError):
     Routes should map this to ``HTTP 404 Not Found``.
     """
 
-
-# ---------------------------------------------------------------------------
-# Authentication / authorisation errors
-# ---------------------------------------------------------------------------
 
 
 class AuthError(CipherixError):

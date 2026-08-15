@@ -32,9 +32,6 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
-# ---------------------------------------------------------------------------
-# OWASP-recommended Argon2id defaults
-# ---------------------------------------------------------------------------
 # References:
 #   https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
 #   https://datatracker.ietf.org/doc/html/rfc9106  (Argon2 RFC)
@@ -42,21 +39,16 @@ from typing import Any
 # OWASP minimum: time_cost=1, memory_cost=47104 (46 MiB), parallelism=1
 # We use the OWASP recommended profile 2:
 #   time_cost=3, memory_cost=65536 (64 MiB), parallelism=4, hash_len=32
-
 _KDF_ALGORITHM: str = "argon2id"
-_KDF_VERSION: int = 19           # Argon2 version 1.3 → integer 19 per RFC 9106
-_DEFAULT_TIME_COST: int = 3      # number of iterations
-_DEFAULT_MEMORY_COST: int = 65536  # kilobytes (64 MiB)
-_DEFAULT_PARALLELISM: int = 4    # degree of parallelism
-_DEFAULT_HASH_LEN: int = 32      # output key length in bytes (256 bits)
+_KDF_VERSION: int = 19  # Argon2 version 1.3 → integer 19 per RFC 9106
+_DEFAULT_TIME_COST: int = 3
+_DEFAULT_MEMORY_COST: int = 65536
+_DEFAULT_PARALLELISM: int = 4
+_DEFAULT_HASH_LEN: int = 32
 
 # Salt length in bytes. 16 bytes (128 bits) is the minimum; we use 32 for margin.
 SALT_BYTES: int = 32
 
-
-# ---------------------------------------------------------------------------
-# Data model
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -110,10 +102,6 @@ class KdfParams:
     hash_len: int = field(default=_DEFAULT_HASH_LEN)
     salt_encoding: str = field(default="hex")
 
-    # ------------------------------------------------------------------
-    # Factory
-    # ------------------------------------------------------------------
-
     @classmethod
     def default(cls) -> "KdfParams":
         """
@@ -129,10 +117,6 @@ class KdfParams:
             A ready-to-use parameter set.
         """
         return cls()
-
-    # ------------------------------------------------------------------
-    # Serialisation
-    # ------------------------------------------------------------------
 
     def to_dict(self) -> dict[str, Any]:
         """Return a plain dictionary representation of the parameters."""

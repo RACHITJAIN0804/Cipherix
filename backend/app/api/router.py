@@ -8,10 +8,6 @@ from app.api.routes.vault import router as vault_router
 
 api_router = APIRouter(prefix=API_V1_PREFIX)
 
-# ---------------------------------------------------------------------------
-# Feature routers
-# ---------------------------------------------------------------------------
-
 api_router.include_router(auth_router)
 api_router.include_router(vault_router)
 api_router.include_router(document_router)

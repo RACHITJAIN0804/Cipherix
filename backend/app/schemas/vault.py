@@ -18,10 +18,6 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
 
-# ---------------------------------------------------------------------------
-# Request
-# ---------------------------------------------------------------------------
-
 
 class CreateVaultRequest(BaseModel):
     """
@@ -75,10 +71,6 @@ class CreateVaultRequest(BaseModel):
         return stripped
 
 
-# ---------------------------------------------------------------------------
-# Shared base (internal — not part of the public API surface)
-# ---------------------------------------------------------------------------
-
 
 class _VaultBase(BaseModel):
     """
@@ -116,10 +108,6 @@ class _VaultBase(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ---------------------------------------------------------------------------
-# Response
-# ---------------------------------------------------------------------------
-
 
 class VaultResponse(_VaultBase):
     """
@@ -131,10 +119,6 @@ class VaultResponse(_VaultBase):
     keys, etc.) must never appear in this model.
     """
 
-
-# ---------------------------------------------------------------------------
-# List
-# ---------------------------------------------------------------------------
 
 
 class VaultSummary(_VaultBase):
@@ -155,10 +139,6 @@ class VaultSummary(_VaultBase):
     to ``VaultSummary``) never forces a change to the other.
     """
 
-
-# ---------------------------------------------------------------------------
-# State
-# ---------------------------------------------------------------------------
 
 
 class VaultStateResponse(BaseModel):

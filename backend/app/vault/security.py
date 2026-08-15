@@ -26,19 +26,11 @@ from pathlib import Path
 from typing import Any
 
 
-# ---------------------------------------------------------------------------
-# Constants -- cryptographic parameters recorded for future use
-# ---------------------------------------------------------------------------
-
 _DEFAULT_ALGORITHM: str = "AES-256-GCM"
 _DEFAULT_KEY_DERIVATION: str = "Argon2id"
 _DEFAULT_VERSION: str = "1.0"
 _DEFAULT_STATUS: str = "uninitialized"
 
-
-# ---------------------------------------------------------------------------
-# Data model
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -85,10 +77,6 @@ class SecurityMetadata:
     status: str = field(default=_DEFAULT_STATUS)
     created_at: str = field(default="")
 
-    # ------------------------------------------------------------------
-    # Factory helpers
-    # ------------------------------------------------------------------
-
     @classmethod
     def create(cls) -> "SecurityMetadata":
         """
@@ -106,10 +94,6 @@ class SecurityMetadata:
             A fresh, ready-to-write instance with ``status="uninitialized"``.
         """
         return cls(created_at=datetime.now(UTC).isoformat())
-
-    # ------------------------------------------------------------------
-    # Serialisation
-    # ------------------------------------------------------------------
 
     def to_dict(self) -> dict[str, Any]:
         """Return a plain dictionary representation of the metadata."""

@@ -91,19 +91,11 @@ from app.vault.manifest import VaultManifest
 
 logger = get_logger(__name__)
 
-# ---------------------------------------------------------------------------
-# Module-level constants
-# ---------------------------------------------------------------------------
-
 _STATUS_UNLOCKED: str = "unlocked"
 _DEFAULT_MIME: str = "application/octet-stream"
 _MAX_FILENAME_LEN: int = 255
 _FORBIDDEN_CHARS: re.Pattern = re.compile(r'[\x00<>:"/\\|?*]')
 
-
-# ---------------------------------------------------------------------------
-# Service
-# ---------------------------------------------------------------------------
 
 
 class DocumentService:
@@ -119,10 +111,6 @@ class DocumentService:
     def __init__(self, vault_base_dir: Path) -> None:
         self._vault_base_dir: Path = vault_base_dir
         self._enc_mgr: EncryptionManager = EncryptionManager()
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
 
     def upload_document(
         self,
@@ -204,7 +192,6 @@ class DocumentService:
             mime_type,
         )
 
-        # --- Step 5: Unwrap the Vault Key ---
         vault_key: bytes = self._unwrap_vault_key(vault_root, vault_id, password)
 
         try:
@@ -230,7 +217,6 @@ class DocumentService:
             except NameError:
                 pass
 
-        # --- Steps 8 & 9: Persist to filesystem ---
         doc_mgr = DocumentManager(vault_root)
 
         blob_path = doc_mgr.write_blob(
@@ -250,7 +236,6 @@ class DocumentService:
 
         meta_path = doc_mgr.write_metadata(metadata=metadata, vault_id=vault_id)
 
-        # --- Step 10: DB persistence ---
         if db is not None:
             # Relative encrypted path stored in DB so the record stays valid
             # if the vault base directory is relocated.
@@ -344,8 +329,7 @@ class DocumentService:
         vault_root = self._assert_vault_exists(vault_id)
 
         if db is not None:
-            from app.database.models import Document as DocumentRecord  # local to avoid circular import risk
-
+            from app.database.models import Document as DocumentRecord
             db_docs = (
                 db.query(DocumentRecord)
                 .filter(DocumentRecord.vault_id == vault_id)
@@ -403,14 +387,6 @@ class DocumentService:
         The vault must exist but need not be unlocked — deletion does not
         require decrypting the file.
 
-        Transaction ordering
-        --------------------
-        1. DELETE the DB record first (so the system sees the document as
-           gone before the files are removed).
-        2. Delete blob + sidecar from the filesystem.
-        → On DB failure: raise immediately; do not touch the filesystem.
-        → On filesystem failure after DB delete: log the orphaned files.
-
         Parameters
         ----------
         vault_id:
@@ -432,7 +408,6 @@ class DocumentService:
         """
         vault_root = self._assert_vault_exists(vault_id)
 
-        # --- Step 1: DB deletion (before filesystem) ---
         if db is not None:
             try:
                 record = db.get(DocumentRecord, document_id)
@@ -467,7 +442,6 @@ class DocumentService:
                     ),
                 ) from exc
 
-        # --- Step 2: Filesystem deletion ---
         doc_mgr = DocumentManager(vault_root)
         doc_mgr.delete_document(document_id=document_id, vault_id=vault_id)
 
@@ -489,18 +463,6 @@ class DocumentService:
 
         The decrypted content exists **only in memory** during this call.
         It is never written to any file or temp directory on disk.
-
-        Flow
-        ----
-        1. Assert the vault exists and is unlocked.
-        2. Read the document metadata.  When ``db`` is provided, the metadata
-           is fetched from the SQLite ``documents`` table and the encrypted
-           blob path is resolved from the stored relative path.  When ``db``
-           is ``None``, the filesystem ``metadata/*.json`` sidecar is used.
-        3. Assert the encrypted blob exists on disk.
-        4. Unwrap the Vault Key (Argon2id + AES-GCM key-unwrap).
-        5. Decrypt the blob in memory using the Vault Key and stored nonce.
-        6. Return (plaintext_bytes, metadata).  Vault Key is cleared.
 
         Parameters
         ----------
@@ -543,7 +505,7 @@ class DocumentService:
         doc_mgr = DocumentManager(vault_root)
 
         if db is not None:
-            from app.database.models import Document as DocumentRecord  # local import
+            from app.database.models import Document as DocumentRecord
 
             db_record = db.get(DocumentRecord, document_id)
             if db_record is None or db_record.vault_id != vault_id:
@@ -554,10 +516,8 @@ class DocumentService:
                         f"in vault '{vault_id}'."
                     ),
                 )
-            # Read the nonce from the JSON sidecar (it is not stored in the DB).
-            metadata: DocumentMetadata = doc_mgr.read_metadata(document_id, vault_id)
+            metadata = doc_mgr.read_metadata(document_id, vault_id)
         else:
-            # Read metadata first so we have the nonce before touching the blob.
             metadata = doc_mgr.read_metadata(document_id, vault_id)
 
         ciphertext: bytes = doc_mgr.read_blob(document_id, vault_id)
@@ -757,10 +717,6 @@ class DocumentService:
             checked_at=checked_at,
         )
 
-    # ------------------------------------------------------------------
-    # Private: DB helpers
-    # ------------------------------------------------------------------
-
     @staticmethod
     def _insert_document_record(
         db: Session,
@@ -828,10 +784,6 @@ class DocumentService:
             document_id,
         )
 
-    # ------------------------------------------------------------------
-    # Private: vault state helpers
-    # ------------------------------------------------------------------
-
     def _vault_root(self, vault_id: str) -> Path:
         """Return the vault root directory path for a given vault_id."""
         return self._vault_base_dir / vault_id
@@ -895,10 +847,6 @@ class DocumentService:
             )
 
         return root
-
-    # ------------------------------------------------------------------
-    # Private: vault key unwrapping
-    # ------------------------------------------------------------------
 
     def _unwrap_vault_key(
         self,
@@ -982,10 +930,6 @@ class DocumentService:
                 del master_key
             except NameError:
                 pass
-
-    # ------------------------------------------------------------------
-    # Private: validation
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _validate_filename(filename: str) -> str:
@@ -1091,10 +1035,6 @@ class DocumentService:
                     "Empty files cannot be encrypted and stored."
                 ),
             )
-
-    # ------------------------------------------------------------------
-    # Private: response mapping
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _metadata_to_response(metadata: DocumentMetadata) -> DocumentResponse:

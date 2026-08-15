@@ -65,10 +65,6 @@ from pathlib import Path
 from typing import Any
 
 
-# ---------------------------------------------------------------------------
-# Module-level constants
-# ---------------------------------------------------------------------------
-
 # Algorithm labels are recorded verbatim so that future readers of key.json
 # can act on them without parsing free-form strings.
 _DEFAULT_ALGORITHM: str = "AES-256-GCM"
@@ -86,10 +82,6 @@ _PENDING_SENTINEL: str = "[PENDING_ENCRYPTION]"
 # Lifecycle states for a key record.
 _STATUS_ACTIVE: str = "active"
 
-
-# ---------------------------------------------------------------------------
-# Data model
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -138,34 +130,19 @@ class KeyMetadata:
         The Vault Key, encrypted (wrapped) by the Master Key.  While
         Master-Key wrapping is not yet implemented, this field holds the
         sentinel string ``"[PENDING_ENCRYPTION]"`` — a deliberate,
-        unambiguous placeholder that is impossible to confuse with real
-        ciphertext.  A future milestone will replace it with a Base64-
-        encoded AES-256-GCM ciphertext blob once Argon2id derivation and
-        key-wrapping are implemented.
     """
 
-    # ------------------------------------------------------------------
-    # Required fields — no default, must be supplied at construction time.
-    # ------------------------------------------------------------------
     created_at: str
     key_id: str
 
-    # ------------------------------------------------------------------
-    # Optional fields with secure, meaningful defaults.
-    # ------------------------------------------------------------------
     key_version: str = field(default=_DEFAULT_KEY_VERSION)
     algorithm: str = field(default=_DEFAULT_ALGORITHM)
     status: str = field(default=_STATUS_ACTIVE)
     encrypted_vault_key: str = field(default=_PENDING_SENTINEL)
-    nonce: str = field(default="")
     # Base64-encoded 12-byte AES-GCM nonce stored alongside the
     # encrypted Vault Key.  Empty string signals the vault pre-dates
     # AES-256-GCM wrapping (migration required).
-
-
-    # ------------------------------------------------------------------
-    # Factory helpers
-    # ------------------------------------------------------------------
+    nonce: str = field(default="")
 
     @classmethod
     def create(
@@ -175,40 +152,16 @@ class KeyMetadata:
     ) -> "KeyMetadata":
         """
         Build a brand-new :class:`KeyMetadata` for a vault created *now*.
-
-        Generates a fresh ``key_id`` (128-bit random hex, globally unique)
-        and captures the current UTC timestamp.
-
-        Parameters
-        ----------
-        encrypted_vault_key:
-            Base64-encoded AES-256-GCM ciphertext of the Vault Key
-            (produced by
-            :meth:`~app.security.encryption.EncryptionManager.encode_for_storage`
-            after encryption).
-        nonce:
-            Base64-encoded 12-byte nonce used during encryption (also
-            produced by :meth:`~app.security.encryption.EncryptionManager.encode_for_storage`).
-
-        Returns
-        -------
-        KeyMetadata
-            A fresh instance with ``status="active"`` and the wrapped Vault
-            Key stored as a Base64 string.
         """
         return cls(
             created_at=datetime.now(UTC).isoformat(),
-            key_id=secrets.token_hex(16),  # 128-bit unique key identifier
+            key_id=secrets.token_hex(16),
             key_version=_DEFAULT_KEY_VERSION,
             algorithm=_DEFAULT_ALGORITHM,
             status=_STATUS_ACTIVE,
             encrypted_vault_key=encrypted_vault_key,
             nonce=nonce,
         )
-
-    # ------------------------------------------------------------------
-    # Serialisation
-    # ------------------------------------------------------------------
 
     def to_dict(self) -> dict[str, Any]:
         """Return a plain dictionary representation of the key metadata."""

@@ -37,7 +37,6 @@ from app.vault.vault_manager import VaultManager
 
 logger = get_logger(__name__)
 
-# Re-export get_db so route modules only need to import from this module.
 __all__ = ["get_db", "get_current_user", "get_user_vault"]
 
 # HTTPBearer extracts the ``Authorization: Bearer <token>`` header.
@@ -170,7 +169,6 @@ def get_user_vault(
 
     vault_record = db.get(Vault, vault_id)
 
-    # Check existence on disk as well
     vault_root = settings.VAULT_DIR / vault_id
     if not (vault_root.is_dir() and (vault_root / "manifest.json").is_file()):
         raise HTTPException(

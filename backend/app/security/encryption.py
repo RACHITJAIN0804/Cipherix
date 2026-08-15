@@ -174,10 +174,6 @@ class EncryptionManager:
     as soon as they are no longer needed.
     """
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def generate_nonce(self) -> bytes:
         """
         Generate a cryptographically secure random 96-bit nonce.
@@ -698,10 +694,6 @@ class EncryptionManager:
             len(ct_bytes),
             len(nonce_bytes),
         )
-
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _validate_key_bytes(key: bytes, param_name: str) -> None:

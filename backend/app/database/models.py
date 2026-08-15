@@ -126,7 +126,6 @@ class Vault(Base):
         onupdate=func.now(),
     )
 
-    # Relationships
     user: Mapped[Optional["User"]] = relationship(
         "User",
         back_populates="vaults",
@@ -227,7 +226,6 @@ class Document(Base):
         onupdate=func.now(),
     )
 
-    # Relationships
     vault: Mapped["Vault"] = relationship("Vault", back_populates="documents")
 
     def __repr__(self) -> str:
@@ -351,7 +349,6 @@ class SecurityMetadata(Base):
         onupdate=func.now(),
     )
 
-    # Relationships
     vault: Mapped["Vault"] = relationship(
         "Vault", back_populates="security_metadata"
     )
@@ -418,7 +415,6 @@ class User(Base):
         onupdate=func.now(),
     )
 
-    # Relationships
     vaults: Mapped[list["Vault"]] = relationship(
         "Vault",
         back_populates="user",

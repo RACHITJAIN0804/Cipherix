@@ -21,10 +21,6 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-# ---------------------------------------------------------------------------
-# Registration
-# ---------------------------------------------------------------------------
-
 
 class RegisterRequest(BaseModel):
     """
@@ -60,10 +56,6 @@ class RegisterRequest(BaseModel):
         return stripped
 
 
-# ---------------------------------------------------------------------------
-# Login
-# ---------------------------------------------------------------------------
-
 
 class LoginRequest(BaseModel):
     """
@@ -80,10 +72,6 @@ class LoginRequest(BaseModel):
     username: str = Field(..., description="Login identifier.")
     password: str = Field(..., description="Account password.")
 
-
-# ---------------------------------------------------------------------------
-# Token response
-# ---------------------------------------------------------------------------
 
 
 class TokenResponse(BaseModel):
@@ -104,10 +92,6 @@ class TokenResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
 
-
-# ---------------------------------------------------------------------------
-# User response (safe — no password hash)
-# ---------------------------------------------------------------------------
 
 
 class UserResponse(BaseModel):
@@ -136,19 +120,34 @@ class UserResponse(BaseModel):
     created_at: datetime
 
 
-# ---------------------------------------------------------------------------
-# Refresh request
-# ---------------------------------------------------------------------------
-
 
 class RefreshRequest(BaseModel):
+    refresh_token: str = Field(..., description="Refresh JWT issued at login.")
+
+
+class RecoverVaultRequest(BaseModel):
     """
-    Request body for ``POST /auth/refresh``.
+    Request body for ``POST /auth/recover``.
 
     Attributes
     ----------
-    refresh_token:
-        A valid refresh JWT previously issued by ``POST /auth/login``.
+    username:
+        Login identifier of the account to recover.
+    seed:
+        Space-separated 24-word BIP-39 recovery mnemonic.
+    new_password:
+        New password to establish for the vault.
     """
 
-    refresh_token: str = Field(..., description="Refresh JWT issued at login.")
+    username: str = Field(..., description="Login identifier.")
+    seed: str = Field(..., min_length=20, description="24-word BIP-39 recovery seed.")
+    new_password: str = Field(..., min_length=8, description="New vault password (minimum 8 characters).")
+
+    @field_validator("username")
+    @classmethod
+    def username_strip(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("Username must not be blank.")
+        return stripped
+

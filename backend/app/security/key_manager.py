@@ -123,10 +123,6 @@ class KeyManager:
         self._vault_root: Path = vault_root
         self._key_path: Path = vault_root / _KEY_FILENAME
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def generate_vault_key(self, vault_id: str) -> str:
         """
         Generate a 256-bit cryptographically secure random Vault Key.
@@ -308,10 +304,6 @@ class KeyManager:
         self._validate_fields(vault_id, metadata)
 
         logger.debug("key.json validation passed for vault '%s'", vault_id)
-
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _generate_raw_key() -> str:

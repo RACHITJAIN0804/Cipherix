@@ -59,7 +59,6 @@ from app.vault.security_manager import SecurityMetadataManager
 
 logger = get_logger(__name__)
 
-# Sub-directories created inside every vault root.
 _VAULT_SUBDIRS: tuple[str, ...] = ("encrypted", "metadata", "temp")
 
 
@@ -77,10 +76,6 @@ class VaultManager:
 
     def __init__(self, vault_base_dir: Path) -> None:
         self._base: Path = vault_base_dir
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
 
     def create(
         self,
@@ -323,10 +318,6 @@ class VaultManager:
 
         logger.debug("manifest.json updated for vault '%s' (status=%s)", vault_id, new_status)
 
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
-
     def _load_manifest(self, vault_id: str) -> VaultManifest:
         """
         Assert the vault exists and its manifest is present, then parse it.
@@ -415,7 +406,6 @@ class VaultManager:
     def _create_vault_root(self, vault_root: Path, vault_id: str) -> None:
         """Create the top-level ``<vault_uuid>/`` directory."""
         try:
-            # exist_ok=False: raise immediately if the path is already taken.
             vault_root.mkdir(parents=True, exist_ok=False)
         except FileExistsError as exc:
             raise VaultAlreadyExistsError(
@@ -493,27 +483,23 @@ class VaultManager:
            algorithm metadata.  No plaintext key material is written.
         8. Immediately discard the raw Vault Key, Master Key, and salt
            by deleting the local variable bindings.
-
         Re-wraps any key or encryption exception as a
         :class:`~app.core.exceptions.VaultCreationError` so that
         :meth:`create` exposes a single, consistent failure type.
         """
-        from app.core.exceptions import MissingSaltError  # local to avoid circular
+        from app.core.exceptions import MissingSaltError
 
         key_mgr = KeyManager(vault_root)
         enc_mgr = EncryptionManager()
         pwd_mgr = PasswordManager(vault_root)
 
         try:
-            # 1. Generate raw Vault Key
             vault_key_hex: str = key_mgr.generate_vault_key(vault_id)
             vault_key_bytes: bytes = bytes.fromhex(vault_key_hex)
 
-            # 2 & 3. Generate salt and derive ephemeral Master Key
             salt_hex: str = pwd_mgr.generate_salt()
             master_key: bytes = pwd_mgr.derive_master_key(password, salt_hex)
 
-            # 4 & 5. Encrypt the Vault Key with AES-256-GCM
             nonce: bytes = enc_mgr.generate_nonce()
             ciphertext: bytes = enc_mgr.encrypt_vault_key(
                 vault_key=vault_key_bytes,
@@ -521,11 +507,9 @@ class VaultManager:
                 nonce=nonce,
             )
 
-            # 6. Base64-encode for JSON storage
             encrypted_vault_key_b64: str = enc_mgr.encode_for_storage(ciphertext)
             nonce_b64: str = enc_mgr.encode_for_storage(nonce)
 
-            # 7. Persist key.json (ciphertext + nonce only)
             key_mgr.create(
                 vault_id=vault_id,
                 vault_key_hex=vault_key_hex,
@@ -533,7 +517,6 @@ class VaultManager:
                 nonce=nonce_b64,
             )
 
-            # 8. Write password_meta.json with the salt used in step 3
             pwd_mgr.write_metadata(vault_id, salt_hex)
 
         except (KeyMetadataError, VaultKeyEncryptionError, InvalidKdfParamsError,

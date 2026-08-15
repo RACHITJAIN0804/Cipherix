@@ -109,7 +109,7 @@ class TestRecoveryManager(unittest.TestCase):
         seed = self.manager.generate_seed("test-vault-001")
         fp = self.manager.compute_fingerprint(seed)
         self.assertEqual(len(fp), 16)
-        int(fp, 16)  # Raises ValueError if not valid hex
+        int(fp, 16)
 
     def test_compute_fingerprint_is_case_insensitive(self) -> None:
         seed = self.manager.generate_seed("test-vault-001")
@@ -150,7 +150,6 @@ class TestRecoveryManager(unittest.TestCase):
         fingerprint = self.manager.compute_fingerprint(seed)
         self.manager.write_metadata("test-vault-001", fingerprint)
 
-        # Generate a different valid BIP-39 seed
         different_seed = self.manager.generate_seed("test-vault-001")
         while different_seed == seed:
             different_seed = self.manager.generate_seed("test-vault-001")
@@ -172,7 +171,6 @@ class TestRecoveryManager(unittest.TestCase):
         fingerprint = self.manager.compute_fingerprint(seed)
         self.manager.write_metadata("test-vault-001", fingerprint)
 
-        # Replace real words with gibberish words (not in BIP-39)
         fake_seed = " ".join(["notaword"] * SEED_WORD_COUNT)
         with self.assertRaises(InvalidRecoverySeedError):
             self.manager.validate_seed(fake_seed, "test-vault-001")
@@ -252,7 +250,6 @@ class TestSecurityServiceRecovery(unittest.TestCase):
 
         self.security_service.generate_recovery_seed(vault_id)
 
-        # Generate a second vault's seed to use as the wrong candidate
         other_mgr = RecoveryManager(self.vault_base_dir / vault_id)
         wrong_seed = other_mgr.generate_seed("other-vault")
 

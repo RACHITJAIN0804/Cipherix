@@ -1,4 +1,4 @@
-﻿"""
+"""
 tests/test_password_change.py
 ------------------------------
 Unit and integration tests for Vault Key rewrapping (Password Change).
@@ -64,7 +64,6 @@ class TestPasswordChange(unittest.TestCase):
 
         self._create_and_unlock_vault(vault_id, "Test Vault", old_pass)
 
-        # Upload a document prior to password change
         doc_content = b"Confidential document content"
         upload_resp = self.doc_service.upload_document(
             vault_id=vault_id,
@@ -75,7 +74,6 @@ class TestPasswordChange(unittest.TestCase):
         )
         doc_id = upload_resp.document_id
 
-        # Perform password change
         response = self.security_service.change_password(
             vault_id=vault_id,
             old_password=old_pass,
@@ -86,7 +84,6 @@ class TestPasswordChange(unittest.TestCase):
         self.assertEqual(response.vault_id, vault_id)
         self.assertTrue(response.changed_at)
 
-        # Verify old password no longer unwraps Vault Key
         pwd_mgr = PasswordManager(self.vault_base_dir / vault_id)
         key_mgr = KeyManager(self.vault_base_dir / vault_id)
         enc_mgr = EncryptionManager()
@@ -105,7 +102,6 @@ class TestPasswordChange(unittest.TestCase):
                 ciphertext=ct_bytes, master_key=old_mk, nonce=nonce_bytes
             )
 
-        # Verify document is still decryptable using the same Vault Key with new password
         decrypted_bytes, metadata = self.doc_service.download_document(
             vault_id=vault_id,
             document_id=doc_id,
@@ -136,7 +132,6 @@ class TestPasswordChange(unittest.TestCase):
 
         manifest = VaultManifest.create(vault_id=vault_id, name="Locked Vault")
         self.vault_mgr.create(vault_id=vault_id, manifest=manifest, password=old_pass)
-        # Vault is created in locked status by default
 
         with self.assertRaises(VaultLockedError):
             self.security_service.change_password(

@@ -115,10 +115,6 @@ from app.core.logger import get_logger
 
 logger = get_logger(__name__)
 
-# ---------------------------------------------------------------------------
-# Module-level constants
-# ---------------------------------------------------------------------------
-
 # BIP-39 entropy bits for a 24-word mnemonic.
 _ENTROPY_BITS: int = 256
 
@@ -137,16 +133,11 @@ _CHECKSUM_VERSION: str = "sha256-prefix-16"
 # Number of hex characters used for the seed fingerprint.
 _FINGERPRINT_HEX_LEN: int = 16
 
-# File written to the vault root.
 _RECOVERY_META_FILENAME: str = "recovery_meta.json"
 
 # Supported recovery versions.  Extend this set when a new version is deployed.
 _SUPPORTED_VERSIONS: frozenset[str] = frozenset({"1"})
 
-
-# ---------------------------------------------------------------------------
-# Metadata dataclass
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -188,11 +179,8 @@ class RecoveryMetadata:
         Identifies the fingerprint derivation function.
     """
 
-    # Required fields
     created_at: str
     seed_fingerprint: str
-
-    # Optional with defaults
     recovery_version: str = field(default=RECOVERY_VERSION)
     algorithm: str = field(default=_RECOVERY_ALGORITHM)
     checksum_version: str = field(default=_CHECKSUM_VERSION)
@@ -235,30 +223,46 @@ class RecoveryMetadata:
         return cls(**{k: v for k, v in data.items() if k in known})
 
 
-# ---------------------------------------------------------------------------
-# RecoveryManager
-# ---------------------------------------------------------------------------
+
+_RECOVERY_KEY_FILENAME: str = "recovery_key.json"
+
+
+@dataclass
+class RecoveryKeyMetadata:
+    """
+    In-memory representation of `recovery_key.json`.
+
+    Contains the AES-256-GCM ciphertext of the Vault Key wrapped under the
+    Recovery Master Key (derived from the BIP-39 seed), along with the nonce
+    and salt.
+    """
+
+    encrypted_vault_key: str
+    nonce: str
+    salt: str
+    created_at: str
+    algorithm: str = field(default=_RECOVERY_ALGORITHM)
+    recovery_version: str = field(default=RECOVERY_VERSION)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    def write(self, path: Path) -> None:
+        path.write_text(json.dumps(self.to_dict(), indent=4), encoding="utf-8")
+
+    @classmethod
+    def read(cls, path: Path) -> "RecoveryKeyMetadata":
+        import dataclasses
+
+        data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+        known: set[str] = {f.name for f in dataclasses.fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in known})
 
 
 class RecoveryManager:
     """
     Manages BIP-39 recovery seed generation, validation, and metadata I/O
     for a single vault.
-
-    This class is the single authority for:
-
-    * Generating a 24-word BIP-39 mnemonic from OS CSPRNG entropy.
-    * Computing the seed fingerprint (stored; never the seed itself).
-    * Validating a candidate mnemonic against the stored fingerprint.
-    * Reading and writing `recovery_meta.json`.
-
-    No key material is derived or stored here.  Actual key recovery (using
-    the seed to unwrap the Vault Key) is a future milestone.
-
-    Parameters
-    ----------
-    vault_root:
-        Absolute path to the vault's root directory.
     """
 
     def __init__(self, vault_root: Path) -> None:
@@ -266,28 +270,7 @@ class RecoveryManager:
         self._meta_path: Path = vault_root / _RECOVERY_META_FILENAME
         self._mnemo: Mnemonic = Mnemonic("english")
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def generate_seed(self, vault_id: str) -> str:
-        """
-        Generate a BIP-39 24-word recovery mnemonic from 256-bit CSPRNG entropy.
-
-        The mnemonic is returned to the caller and **never written to disk**.
-        Only the :meth:compute_fingerprint result is persisted via
-        :meth:write_metadata.
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 string used only in log messages.
-
-        Returns
-        -------
-        str
-            Space-separated 24-word BIP-39 mnemonic (all lowercase).
-        """
         entropy: bytes = os.urandom(_ENTROPY_BITS // 8)
         seed: str = self._mnemo.to_mnemonic(entropy)
 
@@ -301,54 +284,12 @@ class RecoveryManager:
         return seed
 
     def compute_fingerprint(self, seed: str) -> str:
-        """
-        Compute the seed fingerprint from a mnemonic string.
-
-        The fingerprint is the first :data:_FINGERPRINT_HEX_LEN hex
-        characters of SHA-256 of the normalised (lowercase, space-joined)
-        mnemonic.
-
-        This value is safe to store because:
-
-        * A 16-character hex prefix (64 bits) of a SHA-256 hash of a
-          256-bit random mnemonic cannot be reversed to recover the seed.
-        * It is long enough to confirm identity but too short to be a
-          preimage target.
-
-        Parameters
-        ----------
-        seed:
-            The raw mnemonic string (any case, any whitespace).
-
-        Returns
-        -------
-        str
-            Lowercase hex string of length :data:_FINGERPRINT_HEX_LEN.
-        """
         normalised: str = " ".join(seed.lower().split())
         return hashlib.sha256(normalised.encode("utf-8")).hexdigest()[
             :_FINGERPRINT_HEX_LEN
         ]
 
     def validate_seed_format(self, candidate: str) -> None:
-        """
-        Validate the BIP-39 structural format of a candidate seed.
-
-        Checks that the seed has the correct word count, all words are in
-        the BIP-39 English wordlist, and the embedded checksum is valid.
-        Does **not** compare against any stored fingerprint.
-
-        Parameters
-        ----------
-        candidate:
-            The seed presented by the user (any case, any whitespace layout).
-
-        Raises
-        ------
-        InvalidRecoverySeedError
-            If the candidate fails BIP-39 structural validation (wrong number
-            of words, a word not in the wordlist, or invalid checksum).
-        """
         normalised: str = " ".join(candidate.lower().split())
         words = normalised.split()
 
@@ -372,51 +313,10 @@ class RecoveryManager:
             )
 
     def validate_seed(self, candidate: str, vault_id: str) -> bool:
-        """
-        Validate a candidate seed against the stored fingerprint.
-
-        Validation has two stages:
-
-        1. **BIP-39 structural check**: the mnemonic must be a valid BIP-39
-           sequence (correct word count, all words in the wordlist, valid
-           checksum).
-        2. **Fingerprint match**: the candidate's fingerprint must match
-           the value stored in `recovery_meta.json`.
-
-        Validation **does not** grant access to any key material.  It only
-        confirms that the candidate is the same seed that was generated for
-        this vault.
-
-        Parameters
-        ----------
-        candidate:
-            The seed presented by the user (any case, any whitespace layout).
-        vault_id:
-            UUID4 string used only in log messages.
-
-        Returns
-        -------
-        bool
-            `True` if both checks pass; `False` if the fingerprint does
-            not match (but BIP-39 structure is valid).
-
-        Raises
-        ------
-        InvalidRecoverySeedError
-            If the candidate fails BIP-39 structural validation (wrong number
-            of words, a word not in the wordlist, or invalid checksum).
-        RecoveryMetadataMissingError
-            If `recovery_meta.json` does not exist.
-        UnsupportedRecoveryVersionError
-            If the stored `recovery_version` is not in
-            :data:_SUPPORTED_VERSIONS.
-        """
-        # Stage 1 — BIP-39 structural validation
         self.validate_seed_format(candidate)
 
         normalised: str = " ".join(candidate.lower().split())
 
-        # Stage 2 — fingerprint comparison against stored metadata
         metadata: RecoveryMetadata = self.read_metadata(vault_id)
 
         if metadata.recovery_version not in _SUPPORTED_VERSIONS:
@@ -441,29 +341,6 @@ class RecoveryManager:
         return match
 
     def write_metadata(self, vault_id: str, seed_fingerprint: str) -> RecoveryMetadata:
-        """
-        Persist recovery metadata to `recovery_meta.json`.
-
-        Only the fingerprint is written — never the seed itself.
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 string used in log and error messages.
-        seed_fingerprint:
-            First :data:_FINGERPRINT_HEX_LEN hex characters of
-            SHA-256(normalised seed), as returned by :meth:compute_fingerprint.
-
-        Returns
-        -------
-        RecoveryMetadata
-            The newly created, already-persisted metadata object.
-
-        Raises
-        ------
-        OSError
-            If the file cannot be written.
-        """
         metadata = RecoveryMetadata(
             created_at=datetime.now(UTC).isoformat(),
             seed_fingerprint=seed_fingerprint,
@@ -486,25 +363,6 @@ class RecoveryManager:
         return metadata
 
     def read_metadata(self, vault_id: str) -> RecoveryMetadata:
-        """
-        Read and parse `recovery_meta.json` for this vault.
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 string used in log and error messages.
-
-        Returns
-        -------
-        RecoveryMetadata
-
-        Raises
-        ------
-        RecoveryMetadataMissingError
-            If `recovery_meta.json` does not exist.
-        InvalidRecoverySeedError
-            If the file is present but cannot be parsed or has missing fields.
-        """
         if not self._meta_path.is_file():
             raise RecoveryMetadataMissingError(
                 f"recovery_meta.json not found for vault '{vault_id}'.",
@@ -535,5 +393,85 @@ class RecoveryManager:
         return metadata
 
     def has_recovery_seed(self) -> bool:
-        """Return `True` if `recovery_meta.json` exists for this vault."""
         return self._meta_path.is_file()
+
+    def create_recovery_key(
+        self,
+        vault_id: str,
+        vault_key_bytes: bytes,
+        seed: str,
+    ) -> RecoveryKeyMetadata:
+        from app.security.encryption import EncryptionManager
+        from app.security.password_manager import PasswordManager
+
+        pwd_mgr = PasswordManager(self._vault_root)
+        enc_mgr = EncryptionManager()
+
+        normalised_seed: str = " ".join(seed.lower().split())
+        salt_hex: str = pwd_mgr.generate_salt()
+        recovery_master_key: bytes = pwd_mgr.derive_master_key(normalised_seed, salt_hex)
+
+        nonce_bytes: bytes = enc_mgr.generate_nonce()
+        ciphertext_bytes: bytes = enc_mgr.encrypt_vault_key(
+            vault_key=vault_key_bytes,
+            master_key=recovery_master_key,
+            nonce=nonce_bytes,
+        )
+
+        key_meta = RecoveryKeyMetadata(
+            encrypted_vault_key=enc_mgr.encode_for_storage(ciphertext_bytes),
+            nonce=enc_mgr.encode_for_storage(nonce_bytes),
+            salt=salt_hex,
+            created_at=datetime.now(UTC).isoformat(),
+        )
+
+        key_meta.write(self._vault_root / _RECOVERY_KEY_FILENAME)
+        logger.info("recovery_key.json created for vault '%s'", vault_id)
+        return key_meta
+
+    def recover_vault_key(self, vault_id: str, seed: str) -> bytes:
+        from app.security.encryption import EncryptionManager
+        from app.security.password_manager import PasswordManager
+
+        valid: bool = self.validate_seed(seed, vault_id)
+        if not valid:
+            raise InvalidRecoverySeedError(
+                "Recovery seed does not match the vault's stored fingerprint.",
+                detail="The candidate seed words failed fingerprint verification for this vault.",
+            )
+
+        recovery_key_path = self._vault_root / _RECOVERY_KEY_FILENAME
+        if not recovery_key_path.is_file():
+            raise RecoveryMetadataMissingError(
+                f"recovery_key.json not found for vault '{vault_id}'.",
+                detail=f"Vault '{vault_id}' is missing recovery_key.json. Recovery cannot proceed.",
+            )
+
+        try:
+            key_meta = RecoveryKeyMetadata.read(recovery_key_path)
+        except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise InvalidRecoverySeedError(
+                f"Cannot parse recovery_key.json for vault '{vault_id}': {exc}",
+                detail=f"The recovery_key.json for vault '{vault_id}' is malformed or unreadable.",
+            ) from exc
+
+        pwd_mgr = PasswordManager(self._vault_root)
+        enc_mgr = EncryptionManager()
+
+        normalised_seed: str = " ".join(seed.lower().split())
+        recovery_master_key: bytes = pwd_mgr.derive_master_key(normalised_seed, key_meta.salt)
+
+        ct_bytes: bytes = enc_mgr.decode_from_storage(
+            key_meta.encrypted_vault_key, "encrypted_vault_key"
+        )
+        nonce_bytes: bytes = enc_mgr.decode_from_storage(key_meta.nonce, "nonce")
+
+        vault_key_bytes: bytes = enc_mgr.decrypt_vault_key(
+            ciphertext=ct_bytes,
+            master_key=recovery_master_key,
+            nonce=nonce_bytes,
+        )
+
+        logger.info("Vault Key successfully recovered using recovery seed | vault_id=%s", vault_id)
+        return vault_key_bytes
+

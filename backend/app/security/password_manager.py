@@ -132,7 +132,6 @@ from app.security.kdf_params import SALT_BYTES, KdfParams
 
 logger = get_logger(__name__)
 
-# Filename written to the vault root.
 _PASSWORD_META_FILENAME: str = "password_meta.json"
 
 # Top-level schema version for password_meta.json.
@@ -176,10 +175,6 @@ class PasswordManager:
         self._vault_root: Path = vault_root
         self._meta_path: Path = vault_root / _PASSWORD_META_FILENAME
         self._params: KdfParams = params if params is not None else KdfParams.default()
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
 
     def generate_salt(self) -> str:
         """
@@ -596,10 +591,6 @@ class PasswordManager:
         logger.debug(
             "password_meta.json validation passed for vault '%s'", vault_id
         )
-
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
     def _validate_params(self, params: KdfParams) -> None:
         """
