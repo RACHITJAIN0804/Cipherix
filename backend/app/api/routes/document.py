@@ -29,28 +29,36 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile,
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db, get_user_vault
+from app.api.dependencies import get_current_user, get_db, get_user_vault
 from app.core.config import settings
 from app.core.exceptions import (
     CipherixError,
     CorruptedDocumentError,
     DocumentEncryptionError,
+    DocumentExtractionError,
     DocumentNotFoundError,
+    DocumentProcessingError,
     DocumentStorageError,
+    EmptyDocumentError,
     IntegrityError,
     IntegrityVerificationError,
     InvalidUploadError,
     MissingIntegrityMetadataError,
+    UnsupportedFileTypeError,
+    VaultAccessDeniedError,
     VaultLockedError,
     VaultNotFoundError,
 )
 from app.core.logger import get_logger
-from app.database.models import Vault
+from app.database.models import User, Vault
+
 from app.schemas.document import (
     DocumentListResponse,
+    DocumentProcessingResponse,
     DocumentResponse,
     VerifyIntegrityResponse,
 )
+from app.services.document_processing.pipeline import DocumentProcessingPipeline
 from app.services.document_service import DocumentService
 
 logger = get_logger(__name__)
@@ -63,32 +71,11 @@ router = APIRouter(
 
 
 def _get_document_service() -> DocumentService:
-    """
-    FastAPI dependency that wires together the DocumentService.
-
-    Constructing the service here (rather than at module import time) means:
-
-    * Each request gets a fresh service instance with no shared mutable state.
-    * Tests can override this dependency with ``app.dependency_overrides``.
-    * ``settings.VAULT_DIR`` is read at request time.
-    """
     return DocumentService(vault_base_dir=settings.VAULT_DIR)
 
 
 
 def _map_document_exception(exc: Exception) -> None:
-    """
-    Map a domain exception to the appropriate :class:`HTTPException`.
-
-    Centralising the mapping here means every document endpoint shares
-    the same exception-to-status-code table without repeating it.
-
-    Raises
-    ------
-    HTTPException
-        Always.  Re-raises non-domain exceptions unmodified so the global
-        handler in ``main.py`` can log the full traceback.
-    """
     if isinstance(exc, VaultNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.detail) from exc
 
@@ -98,15 +85,17 @@ def _map_document_exception(exc: Exception) -> None:
     if isinstance(exc, DocumentNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.detail) from exc
 
-    if isinstance(exc, InvalidUploadError):
+    if isinstance(exc, (InvalidUploadError, UnsupportedFileTypeError, EmptyDocumentError, DocumentExtractionError)):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.detail
         ) from exc
 
-    # IntegrityVerificationError and MissingIntegrityMetadataError both extend
-    # IntegrityError and both map to 409 Conflict.
     if isinstance(exc, IntegrityError):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.detail) from exc
+
+    if isinstance(exc, DocumentProcessingError):
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=exc.detail) from exc
+
 
     if isinstance(exc, CorruptedDocumentError):
         raise HTTPException(
@@ -352,3 +341,51 @@ async def delete_document(
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except Exception as exc:  # noqa: BLE001
         _map_document_exception(exc)
+
+
+@router.post(
+    "/{vault_id}/documents/{document_id}/process",
+    response_model=DocumentProcessingResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Process an encrypted document for RAG chunking",
+    description=(
+        "Decrypts an encrypted document in memory, verifies integrity, "
+        "extracts text (TXT, PDF, DOCX), cleans text, and generates deterministic "
+        "chunks ready for downstream RAG embeddings. Does NOT permanently persist "
+        "decrypted text or plaintext chunks."
+    ),
+    responses={
+        200: {"description": "Document processed successfully into chunks."},
+        401: {"description": "Missing, expired, or invalid JWT or wrong password."},
+        403: {"description": "User does not own the vault."},
+        404: {"description": "Vault or document not found."},
+        409: {"description": "Document integrity check failed."},
+        422: {"description": "Unsupported file format, empty document, or extraction error."},
+    },
+)
+async def process_document(
+    vault_id: str,
+    document_id: str,
+    x_vault_password: str = Header(
+        ...,
+        alias="X-Vault-Password",
+        description="Password required to decrypt the vault key.",
+    ),
+    vault: Vault = Depends(get_user_vault),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DocumentProcessingResponse:
+    """``POST /vaults/{vault_id}/documents/{document_id}/process`` — process a document for RAG."""
+    try:
+        pipeline = DocumentProcessingPipeline(vault_base_dir=settings.VAULT_DIR)
+        return pipeline.process_document(
+            vault_id=vault.id,
+            document_id=document_id,
+            user_id=current_user.id,
+            password=x_vault_password,
+            db=db,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _map_document_exception(exc)
+
+

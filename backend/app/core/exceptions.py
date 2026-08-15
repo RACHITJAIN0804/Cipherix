@@ -460,15 +460,30 @@ class DocumentStorageError(DocumentError):
     """
     Raised when the filesystem cannot write, read, or delete a document's
     encrypted content or metadata file.
+    """
 
-    Examples
-    --------
-    * Permission denied when writing ``encrypted/<document_id>.bin``.
-    * Permission denied when writing ``metadata/<document_id>.json``.
-    * Disk full during an upload.
-    * OS-level I/O error on the metadata directory.
 
-    Routes should map this to ``HTTP 500 Internal Server Error``.
+class DocumentProcessingError(DocumentError):
+    """Base class for document processing pipeline errors."""
+
+
+class UnsupportedFileTypeError(DocumentProcessingError):
+    """
+    Raised when a document's file extension or MIME type is not supported
+    for text extraction and chunking.
+    """
+
+
+class DocumentExtractionError(DocumentProcessingError):
+    """
+    Raised when text extraction from a supported document type fails
+    due to corruption or parsing error.
+    """
+
+
+class EmptyDocumentError(DocumentProcessingError):
+    """
+    Raised when a document contains no extractable text after parsing.
     """
 
 

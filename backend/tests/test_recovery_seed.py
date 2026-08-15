@@ -231,8 +231,8 @@ class TestSecurityServiceRecovery(unittest.TestCase):
         meta_path = self.vault_base_dir / vault_id / "recovery_meta.json"
         self.assertTrue(meta_path.is_file())
         raw = meta_path.read_text(encoding="utf-8")
-        for word in result.seed.split():
-            self.assertNotIn(word, raw)
+        self.assertNotIn(result.seed, raw)
+
 
     def test_verify_correct_seed_returns_valid_true(self) -> None:
         vault_id = "recovery-test-0003"

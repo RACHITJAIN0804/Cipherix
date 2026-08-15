@@ -71,6 +71,22 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = Field(default=30)
     refresh_token_expire_days: int = Field(default=7)
 
+    # RAG Document Processing Settings
+    rag_chunk_size: int = Field(default=500, description="Default character size per chunk.")
+    rag_chunk_overlap: int = Field(default=50, description="Default character overlap between consecutive chunks.")
+    max_document_processing_size_bytes: int = Field(
+        default=10 * 1024 * 1024,
+        description="Maximum allowed file size for document text extraction and chunking (10 MB).",
+    )
+    supported_processing_mime_types: list[str] = Field(
+        default=[
+            "text/plain",
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ],
+        description="Allowed MIME types for document processing pipeline.",
+    )
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:

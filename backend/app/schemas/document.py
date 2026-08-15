@@ -150,3 +150,25 @@ class VerifyIntegrityResponse(BaseModel):
     )
 
     model_config = {"from_attributes": True}
+
+
+class DocumentChunkMetadata(BaseModel):
+    chunk_id: str = Field(..., description="Deterministic SHA-256 hash identifier for the chunk.")
+    document_id: str = Field(..., description="Parent document UUID4.")
+    chunk_index: int = Field(..., ge=0, description="0-indexed position of chunk within document.")
+    character_count: int = Field(..., ge=0, description="Character count of chunk text.")
+    page_number: int | None = Field(default=None, description="Page number if extracted from paginated format (PDF).")
+    text: str = Field(..., description="In-memory extracted chunk text.")
+
+
+class DocumentProcessingResponse(BaseModel):
+    document_id: str = Field(..., description="UUID4 of the processed document.")
+    processing_status: str = Field(..., description="Processing status (e.g. 'processed').")
+    chunk_count: int = Field(..., ge=0, description="Total number of chunks generated.")
+    processed_at: datetime = Field(..., description="UTC timestamp of completion.")
+    extraction_version: str = Field(default="1.0")
+    chunking_version: str = Field(default="1.0")
+    chunks: list[DocumentChunkMetadata] = Field(default_factory=list, description="In-memory list of generated chunks.")
+
+    model_config = {"from_attributes": True}
+

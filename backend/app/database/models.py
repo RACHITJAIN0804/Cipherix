@@ -214,6 +214,19 @@ class Document(Base):
     encryption_version: Mapped[str] = mapped_column(
         String(64), nullable=False, default="AES-256-GCM-v1"
     )
+    processing_status: Mapped[Optional[str]] = mapped_column(
+        String(32), nullable=True, default=None
+    )
+    extraction_version: Mapped[Optional[str]] = mapped_column(
+        String(16), nullable=True, default=None
+    )
+    chunking_version: Mapped[Optional[str]] = mapped_column(
+        String(16), nullable=True, default=None
+    )
+    chunk_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None)
+    processed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
