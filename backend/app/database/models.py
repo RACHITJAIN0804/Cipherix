@@ -557,3 +557,52 @@ class ComputerAccessAuditLog(Base):
             f"action={self.action!r} result={self.result_status!r}>"
         )
 
+
+class BlockchainAnchorRecord(Base):
+    """
+    Metadata record indexing document integrity hashes anchored on a blockchain network.
+
+    Stores ONLY privacy-safe references, integrity hashes, and blockchain transaction identifiers.
+    NEVER stores plaintext document content, ciphertext, encryption keys, or seeds.
+    """
+
+    __tablename__ = "blockchain_anchor_records"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    document_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    privacy_reference: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    integrity_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    network: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="local-development"
+    )
+    tx_hash: Mapped[str] = mapped_column(
+        String(128), nullable=False, unique=True, index=True
+    )
+    block_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="anchored"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<BlockchainAnchorRecord id={self.id!r} doc_id={self.document_id!r} "
+            f"network={self.network!r} status={self.status!r}>"
+        )
+
+

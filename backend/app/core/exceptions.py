@@ -846,3 +846,24 @@ class ActionExecutionError(ComputerAccessError):
     """Raised when an error occurs during execution of a safe computer action."""
 
 
+class BlockchainError(CipherixError):
+    """Base class for all blockchain service and anchoring errors."""
+
+
+class BlockchainUnavailableError(BlockchainError):
+    """Raised when the configured blockchain provider network is unreachable or disabled."""
+
+
+class AnchorNotFoundError(BlockchainError):
+    """Raised when a blockchain anchor for a document cannot be found."""
+
+
+class AnchorAlreadyExistsError(BlockchainError):
+    """Raised when attempting to anchor a document hash that has already been anchored."""
+
+
+class BlockchainVerificationError(BlockchainError):
+    """Raised when document integrity fails verification against the recorded blockchain anchor."""
+
+
+

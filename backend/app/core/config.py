@@ -155,6 +155,20 @@ class Settings(BaseSettings):
         description="Minimum cosine similarity score for a chunk to be included in RAG context.",
     )
 
+    # Blockchain Settings
+    blockchain_enabled: bool = Field(
+        default=True,
+        description="Whether blockchain document integrity anchoring is enabled.",
+    )
+    blockchain_provider: str = Field(
+        default="local",
+        description="Blockchain adapter provider name ('local').",
+    )
+    blockchain_network: str = Field(
+        default="local-development",
+        description="Blockchain network identifier label.",
+    )
+
 
     @computed_field  # type: ignore[prop-decorator]
     @property
