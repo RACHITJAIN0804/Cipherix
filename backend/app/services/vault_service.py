@@ -69,10 +69,12 @@ from app.schemas.vault import (
     VaultStateResponse,
     VaultSummary,
 )
+from app.services.vector_store import VectorStore
 from app.vault.manifest import VaultManifest
 from app.vault.vault_manager import VaultManager
 
 logger = get_logger(__name__)
+
 
 _STATUS_LOCKED: str = "locked"
 _STATUS_UNLOCKED: str = "unlocked"
@@ -244,6 +246,17 @@ class VaultService:
         except VaultError:
             logger.warning("Vault deletion did not complete | vault_id=%s", vault_id)
             raise
+
+        try:
+            vector_store = VectorStore()
+            vector_store.delete_vault_vectors(vault_id)
+        except Exception as v_exc:
+            logger.warning(
+                "Failed to delete vault vectors during vault deletion | vault_id=%s | error=%s",
+                vault_id,
+                v_exc,
+            )
+
 
         if db is not None:
             try:

@@ -87,6 +87,25 @@ class Settings(BaseSettings):
         description="Allowed MIME types for document processing pipeline.",
     )
 
+    # Embedding and Vector Storage Settings
+    embedding_model_name: str = Field(
+        default="all-MiniLM-L6-v2",
+        description="Local Sentence Transformers embedding model name.",
+    )
+    vector_db_dir_name: str = Field(
+        default="cipherix_vectors",
+        description="Directory name for ChromaDB vector storage under VECTOR_DB_DIR.",
+    )
+    embedding_batch_size: int = Field(
+        default=32,
+        description="Default batch size for generating text chunk embeddings.",
+    )
+    search_default_top_k: int = Field(
+        default=5,
+        description="Default number of top semantic search results to return.",
+    )
+
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:

@@ -86,8 +86,10 @@ from app.schemas.document import (
 from app.security.encryption import EncryptionManager
 from app.security.key_manager import KeyManager
 from app.security.password_manager import PasswordManager
+from app.services.vector_store import VectorStore
 from app.storage.document_manager import DocumentManager, DocumentMetadata
 from app.vault.manifest import VaultManifest
+
 
 logger = get_logger(__name__)
 
@@ -445,11 +447,22 @@ class DocumentService:
         doc_mgr = DocumentManager(vault_root)
         doc_mgr.delete_document(document_id=document_id, vault_id=vault_id)
 
+        try:
+            vector_store = VectorStore()
+            vector_store.delete_document_vectors(document_id=document_id, vault_id=vault_id)
+        except Exception as v_exc:
+            logger.warning(
+                "Failed to delete document vectors during document deletion | document_id=%s | error=%s",
+                document_id,
+                v_exc,
+            )
+
         logger.info(
             "Document deleted | vault_id=%s | document_id=%s",
             vault_id,
             document_id,
         )
+
 
     def download_document(
         self,

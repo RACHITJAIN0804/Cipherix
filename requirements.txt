@@ -5,3 +5,5 @@ pydantic-settings
 python-dotenv
 argon2-cffi
 cryptography
+sentence-transformers
+chromadb

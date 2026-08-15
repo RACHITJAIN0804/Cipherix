@@ -30,6 +30,8 @@ from app.services.document_processing.chunker import TextChunker
 from app.services.document_processing.cleaner import TextCleaner
 from app.services.document_processing.extractor import DocumentExtractor
 from app.services.document_service import DocumentService
+from app.services.embedding_service import EmbeddingService
+from app.services.vector_store import VectorStore
 from app.storage.document_manager import DocumentManager
 
 from app.vault.manifest import VaultManifest
@@ -40,10 +42,16 @@ logger = get_logger(__name__)
 class DocumentProcessingPipeline:
     """
     Coordinates authorization, integrity verification, controlled in-memory
-    decryption, text extraction, cleaning, chunking, and metadata persistence.
+    decryption, text extraction, cleaning, chunking, embedding generation,
+    vector index storage, and metadata persistence.
     """
 
-    def __init__(self, vault_base_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        vault_base_dir: Path | None = None,
+        embedding_service: EmbeddingService | None = None,
+        vector_store: VectorStore | None = None,
+    ) -> None:
         self._vault_base_dir: Path = vault_base_dir or settings.VAULT_DIR
         self._extractor = DocumentExtractor()
         self._cleaner = TextCleaner()
@@ -51,6 +59,9 @@ class DocumentProcessingPipeline:
             default_chunk_size=settings.rag_chunk_size,
             default_chunk_overlap=settings.rag_chunk_overlap,
         )
+        self._embedding_service = embedding_service or EmbeddingService()
+        self._vector_store = vector_store or VectorStore()
+
 
     def process_document(
         self,
@@ -164,7 +175,19 @@ class DocumentProcessingPipeline:
                 page_blocks=page_blocks,
             )
 
-            # 8. Update SQLite Processing Metadata
+            # 8. Embedding Generation & Vector Storage Indexing
+            if chunks:
+                chunk_texts = [c.text for c in chunks]
+                embeddings = self._embedding_service.generate_embeddings(chunk_texts)
+                self._vector_store.add_chunks(
+                    chunks=chunks,
+                    embeddings=embeddings,
+                    vault_id=vault_id,
+                    document_id=document_id,
+                    embedding_model=self._embedding_service.model_name,
+                )
+
+            # 9. Update SQLite Processing Metadata
             now = datetime.now(UTC)
             doc_rec.processing_status = "processed"
             doc_rec.extraction_version = "1.0"
@@ -172,6 +195,7 @@ class DocumentProcessingPipeline:
             doc_rec.chunk_count = len(chunks)
             doc_rec.processed_at = now
             db.commit()
+
 
             logger.info(
                 "Document processing complete | vault_id=%s | document_id=%s | chunks=%d",
