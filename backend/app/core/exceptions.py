@@ -736,3 +736,88 @@ class InvalidTokenError(TokenError):
 
     Routes should map this to ``HTTP 401 Unauthorized``.
     """
+
+
+
+class LLMError(CipherixError):
+    """
+    Base class for all local LLM errors.
+
+    Catch this to handle any LLM failure without distinguishing between
+    specific subtypes (unavailable, generation error, timeout).
+    """
+
+
+class LLMUnavailableError(LLMError):
+    """
+    Raised when the local LLM backend (e.g. Ollama) cannot be reached.
+
+    Examples
+    --------
+    * Ollama is not running (connection refused).
+    * The configured ``llm_base_url`` is incorrect.
+    * The model has not been pulled yet (``ollama pull <model>``).
+
+    Routes should map this to ``HTTP 503 Service Unavailable`` with a
+    message directing the user to start Ollama and pull the model.
+    Do NOT expose the connection URL in the response.
+    """
+
+
+class LLMGenerationError(LLMError):
+    """
+    Raised when the local LLM returns an unexpected error response
+    or produces an unusable output during generation.
+
+    Examples
+    --------
+    * Ollama returns a non-2xx HTTP status for the generate endpoint.
+    * The response body is malformed or missing the expected fields.
+    * The model produces an empty response with no content.
+
+    Routes should map this to ``HTTP 500 Internal Server Error``.
+    """
+
+
+class LLMTimeoutError(LLMError):
+    """
+    Raised when a generation request to the local LLM exceeds the
+    configured ``llm_timeout_seconds`` limit.
+
+    This can happen when the model is too large for the available CPU/GPU,
+    or when the context is unusually large.
+
+    Routes should map this to ``HTTP 503 Service Unavailable`` or
+    ``HTTP 504 Gateway Timeout``.
+    """
+
+
+
+class RAGError(CipherixError):
+    """
+    Base class for all RAG pipeline errors.
+
+    Catch this to handle any RAG failure without distinguishing between
+    specific subtypes (empty query, no context, etc.).
+    """
+
+
+class RAGEmptyQueryError(RAGError):
+    """
+    Raised when the RAG query string is empty or contains only whitespace.
+
+    Routes should map this to ``HTTP 422 Unprocessable Entity``.
+    """
+
+
+class RAGNoContextError(RAGError):
+    """
+    Raised when no document chunks meet the minimum similarity threshold
+    for a given query, making it impossible to ground an answer.
+
+    This is not an error in the traditional sense — it means the vault
+    does not contain information relevant to the query.  Routes may choose
+    to return a 200 response with a canned "not found" answer rather than
+    propagating this as an HTTP error.
+    """
+

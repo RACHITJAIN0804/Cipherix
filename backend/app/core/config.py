@@ -105,6 +105,55 @@ class Settings(BaseSettings):
         description="Default number of top semantic search results to return.",
     )
 
+    # LLM Settings
+    llm_provider: str = Field(
+        default="ollama",
+        description="Local LLM backend provider. Supported: 'ollama', 'disabled'.",
+    )
+    llm_base_url: str = Field(
+        default="http://localhost:11434",
+        description="Base URL for the Ollama REST API server.",
+    )
+    llm_model_name: str = Field(
+        default="llama3.2:1b",
+        description="Ollama model name to use for RAG generation (e.g. 'llama3.2:1b', 'phi3.5').",
+    )
+    llm_temperature: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=2.0,
+        description="Sampling temperature for LLM generation. Lower = more deterministic.",
+    )
+    llm_max_tokens: int = Field(
+        default=1024,
+        ge=64,
+        description="Maximum number of tokens the LLM may generate in a single response.",
+    )
+    llm_timeout_seconds: int = Field(
+        default=60,
+        ge=5,
+        description="HTTP timeout in seconds for Ollama generation requests.",
+    )
+
+    # RAG Pipeline Settings
+    rag_max_chunks: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum number of retrieved chunks passed to the LLM context.",
+    )
+    rag_max_context_chars: int = Field(
+        default=4000,
+        ge=500,
+        description="Maximum total characters allowed in the assembled LLM context.",
+    )
+    rag_min_similarity: float = Field(
+        default=0.30,
+        ge=0.0,
+        le=1.0,
+        description="Minimum cosine similarity score for a chunk to be included in RAG context.",
+    )
+
 
     @computed_field  # type: ignore[prop-decorator]
     @property
