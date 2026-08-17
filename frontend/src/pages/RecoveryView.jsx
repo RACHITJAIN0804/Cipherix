@@ -105,10 +105,10 @@ export function RecoveryView({ user, onLogout }) {
 
   return (
     <PageTransition>
-      <div className="min-h-screen bg-[#070a10]">
+      <div className="min-h-screen bg-[#080B12]">
         <TopNavBar title="BIP-39 Vault Recovery" user={user} onLogout={onLogout} />
 
-        <main className="max-w-4xl mx-auto p-6 space-y-6">
+        <main className="max-w-[1400px] mx-auto p-6 space-y-6">
           <div className="glass-panel p-6 space-y-6 border-purple-500/20">
             <div className="flex flex-wrap justify-between items-center gap-3 border-b border-slate-800 pb-4">
               <div>

@@ -26,10 +26,10 @@ export function DashboardView({ user, onLogout }) {
 
   return (
     <PageTransition>
-      <div className="min-h-screen bg-[#070a10]">
+      <div className="min-h-screen bg-[#080B12]">
         <TopNavBar title="Dashboard Overview" user={user} onLogout={onLogout} />
 
-        <main className="max-w-7xl mx-auto p-6 space-y-6">
+        <main className="max-w-[1400px] mx-auto p-6 space-y-6">
           {/* Stat Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
             <div className="glass-panel p-5 relative overflow-hidden">
@@ -51,7 +51,7 @@ export function DashboardView({ user, onLogout }) {
             <div className="glass-panel p-5 relative overflow-hidden">
               <div className="flex justify-between items-start">
                 <div>
-                  <div class="text-xs text-slate-400 font-bold uppercase tracking-wider">ENCRYPTED DOCUMENTS</div>
+                  <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">ENCRYPTED DOCUMENTS</div>
                   <div className="text-3xl font-extrabold font-outfit mt-1 text-slate-100">5</div>
                 </div>
                 <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-400 flex items-center justify-center">

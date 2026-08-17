@@ -1,6 +1,7 @@
 /* Cipherix Cybersecurity Command Center Design System */
 
 :root {
+  color-scheme: dark;
   --bg-main: #080B12;
   --bg-secondary: #0B111C;
   --bg-card: #101827;
@@ -22,8 +23,10 @@
   --text-muted: #64748B;
 }
 
-body {
+html, body {
+  color-scheme: dark;
   margin: 0;
+  padding: 0;
   background-color: var(--bg-main);
   color: var(--text-primary);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -31,6 +34,7 @@ body {
     radial-gradient(circle at 50% 0%, rgba(34, 211, 238, 0.05), transparent 50%),
     radial-gradient(circle at 10% 90%, rgba(168, 85, 247, 0.04), transparent 40%);
   background-attachment: fixed;
+  min-height: 100vh;
 }
 
 /* Custom Scrollbar */
@@ -56,7 +60,7 @@ body {
   border: 1px solid var(--border-subtle);
   border-radius: 1rem;
   box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.6);
-  transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1), border-color 280ms ease, box-shadow 280ms ease;
+  transition: transform 250ms cubic-bezier(0.16, 1, 0.3, 1), border-color 250ms ease, box-shadow 250ms ease;
 }
 
 .glass-panel:hover {
@@ -64,16 +68,34 @@ body {
   box-shadow: 0 15px 35px -5px rgba(34, 211, 238, 0.15);
 }
 
-/* Global Dark Overrides for Select, Option, Input, Textarea */
-input, select, textarea {
-  background-color: var(--bg-input) !important;
-  color: var(--text-primary) !important;
+/* Global Dark Overrides for Form & Interactive Elements */
+input, select, textarea, button, optgroup, option {
+  color-scheme: dark;
+  background-color: var(--bg-input);
+  color: var(--text-primary);
   border-color: var(--border-subtle);
 }
 
 option {
   background-color: #0b111c !important;
   color: #e5e7eb !important;
+}
+
+/* Fix browser autofill introducing white background */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #0d1522 inset !important;
+  -webkit-text-fill-color: #e5e7eb !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Table Dark Overrides */
+table, tr, th, td {
+  background-color: transparent;
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
 }
 
 /* Badge styling */
@@ -126,9 +148,62 @@ option {
 
 /* Responsive Command Center Container */
 .command-center-container {
-  max-width: 1280px;
+  width: 100%;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 2.5rem 1.5rem 4rem 1.5rem;
+  padding: 32px 40px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .command-center-container {
+    padding: 20px 16px;
+  }
+}
+
+/* Explicit CSS Grid Layout for Main Modules (4 cols -> 2 cols -> 1 col) */
+.cipherix-module-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 24px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+@media (max-width: 1100px) {
+  .cipherix-module-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 18px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .cipherix-module-grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+}
+
+/* Explicit CSS Grid Layout for System Section (2 cols -> 1 col) */
+.cipherix-system-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 24px !important;
+  width: 100% !important;
+  max-width: 960px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  box-sizing: border-box !important;
+  padding: 0 !important;
+}
+
+@media (max-width: 640px) {
+  .cipherix-system-grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
 }
 
 /* Reduced Motion for Accessibility */
@@ -140,3 +215,4 @@ option {
     scroll-behavior: auto !important;
   }
 }
+

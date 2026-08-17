@@ -87,10 +87,10 @@ export function AIAssistantView({ user, onLogout }) {
 
   return (
     <PageTransition>
-      <div className="min-h-screen bg-[#070a10] flex flex-col">
+      <div className="min-h-screen bg-[#080B12] flex flex-col">
         <TopNavBar title="AI Security Assistant (Local RAG)" user={user} onLogout={onLogout} />
 
-        <main className="max-w-5xl mx-auto p-6 w-full flex-1 flex flex-col space-y-4">
+        <main className="max-w-[1400px] mx-auto p-6 w-full flex-1 flex flex-col space-y-4">
           <div className="flex flex-wrap justify-between items-center gap-3">
             <div className="flex items-center gap-3">
               <span className="badge-tag badge-emerald">

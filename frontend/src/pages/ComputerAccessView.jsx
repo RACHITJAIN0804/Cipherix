@@ -82,10 +82,10 @@ export function ComputerAccessView({ user, onLogout }) {
 
   return (
     <PageTransition>
-      <div className="min-h-screen bg-[#070a10]">
+      <div className="min-h-screen bg-[#080B12]">
         <TopNavBar title="Controlled Computer Access" user={user} onLogout={onLogout} />
 
-        <main className="max-w-5xl mx-auto p-6 space-y-6">
+        <main className="max-w-[1400px] mx-auto p-6 space-y-6">
           <div className="glass-panel p-6 space-y-6 border-blue-500/20">
             <div className="flex flex-wrap justify-between items-center gap-3 border-b border-slate-800 pb-4">
               <div>

@@ -133,10 +133,10 @@ export function DocumentsView({ user, onLogout }) {
 
   return (
     <PageTransition>
-      <div className="min-h-screen bg-[#070a10]">
+      <div className="min-h-screen bg-[#080B12]">
         <TopNavBar title="Encrypted Document Storage" user={user} onLogout={onLogout} />
 
-        <main className="max-w-7xl mx-auto p-6 space-y-6">
+        <main className="max-w-[1400px] mx-auto p-6 space-y-6">
           <div className="flex flex-wrap justify-between items-center gap-4">
             <div>
               <h2 className="text-xl font-bold font-outfit text-slate-100">Encrypted Document Storage</h2>

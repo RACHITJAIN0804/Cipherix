@@ -76,20 +76,20 @@ export function ModuleCard({ title, description, icon: Icon, badge, accent = 'cy
     <motion.div
       whileHover={{ scale: 1.02, y: -4 }}
       whileTap={{ scale: 0.98 }}
-      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       tabIndex={0}
       role="button"
       aria-label={`${title} module: ${description}`}
-      className={`glass-panel p-6 flex flex-col justify-between cursor-pointer group select-none relative overflow-hidden h-full min-h-[210px] ${accentStyle.borderHover} ${accentStyle.glow}`}
+      className={`glass-panel p-6 flex flex-col justify-between cursor-pointer group select-none relative overflow-hidden h-full min-h-[210px] bg-[#101827] border border-white/10 rounded-2xl ${accentStyle.borderHover} ${accentStyle.glow}`}
     >
       {/* Background Subtle Ambient Gradient */}
-      <div className={`absolute top-0 right-0 w-36 h-36 bg-gradient-to-bl ${accentStyle.gradient} rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none`} />
+      <div className={`absolute top-0 right-0 w-36 h-36 bg-gradient-to-bl ${accentStyle.gradient} rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none`} />
 
       {/* Top Header Row: Icon + Badge */}
       <div className="flex justify-between items-start z-10">
-        <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center transition-transform duration-300 group-hover:scale-105 ${accentStyle.iconBg}`}>
+        <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center transition-transform duration-250 group-hover:scale-105 ${accentStyle.iconBg}`}>
           <Icon className="w-6 h-6 stroke-[2]" />
         </div>
         {badge !== undefined && badge !== null && (
@@ -101,7 +101,7 @@ export function ModuleCard({ title, description, icon: Icon, badge, accent = 'cy
 
       {/* Body Content: Title & Description */}
       <div className="space-y-1.5 my-3 z-10 flex-1 flex flex-col justify-center">
-        <h3 className="text-lg font-bold font-outfit text-[#E5E7EB] tracking-wide group-hover:text-cyan-300 transition-colors">
+        <h3 className="text-base font-semibold font-outfit text-[#E5E7EB] tracking-wide group-hover:text-cyan-300 transition-colors">
           {title}
         </h3>
         <p className="text-xs text-[#94A3B8] font-normal leading-relaxed line-clamp-2">
@@ -112,7 +112,7 @@ export function ModuleCard({ title, description, icon: Icon, badge, accent = 'cy
       {/* Footer Navigation Arrow Indicator */}
       <div className="flex items-center justify-end z-10 pt-2 border-t border-slate-800/60">
         <div className="flex items-center gap-1 text-xs font-semibold text-slate-400 group-hover:text-cyan-400 transition-colors">
-          <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1.5" />
+          <ArrowRight className="w-4 h-4 transition-transform duration-250 group-hover:translate-x-1.5" />
         </div>
       </div>
     </motion.div>

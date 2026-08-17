@@ -30,9 +30,9 @@ export function CommandCenter({ user, onLogout }) {
 
   return (
     <PageTransition>
-      <div className="min-h-screen bg-[#070a10] text-slate-100 relative overflow-x-hidden selection:bg-cyan-500 selection:text-black">
+      <div className="min-h-screen bg-[#080B12] text-slate-100 relative overflow-x-hidden selection:bg-cyan-500 selection:text-black">
         {/* Top Floating User Profile */}
-        <div className="absolute top-6 right-6 z-30">
+        <div className="absolute top-6 right-6 sm:right-10 z-30">
           <UserProfile user={user} onLogout={onLogout} />
         </div>
 
