@@ -69,11 +69,22 @@ html, body {
 }
 
 /* Global Dark Overrides for Form & Interactive Elements */
-input, select, textarea, button, optgroup, option {
+/* NOTE: buttons are excluded here — they manage their own backgrounds via Tailwind/component classes */
+input, select, textarea, optgroup, option {
   color-scheme: dark;
   background-color: var(--bg-input);
   color: var(--text-primary);
   border-color: var(--border-subtle);
+}
+
+/* Buttons reset only — background is controlled per-component */
+button {
+  color-scheme: dark;
+  color: inherit;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
 }
 
 option {
@@ -205,6 +216,175 @@ table, tr, th, td {
     gap: 14px !important;
   }
 }
+
+/* =============================================================
+   SHARED PAGE LAYOUT SYSTEM
+   Used by PageLayout.jsx and PageHeader.jsx across all sub-pages
+   ============================================================= */
+
+/* Outer page root — full dark background */
+.page-root {
+  min-height: 100vh;
+  background-color: var(--bg-main);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Main content area — centered, padded, vertical gap between sections */
+.page-main {
+  flex: 1;
+  width: 100%;
+  max-width: 1400px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 32px 24px 48px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Flex variant for chat-style pages (AIAssistant) that need to fill height */
+.page-main--flex {
+  flex: 1;
+}
+
+@media (max-width: 768px) {
+  .page-main {
+    padding: 24px 16px 40px;
+    gap: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-main {
+    padding: 20px 12px 32px;
+    gap: 16px;
+  }
+}
+
+/* =============================================================
+   PAGE HEADER BAR
+   The standard title / description / actions row
+   ============================================================= */
+
+.page-header-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  /* Subtle bottom border to visually detach the header from content */
+  padding-bottom: 4px;
+}
+
+.page-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0; /* allow text truncation */
+}
+
+.page-header-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(34, 211, 238, 0.08);
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  margin-top: 2px;
+}
+
+.page-header-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-family: 'Outfit', sans-serif;
+  color: var(--text-primary);
+  line-height: 1.3;
+  margin: 0;
+}
+
+.page-header-desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin: 4px 0 0 0;
+  line-height: 1.5;
+}
+
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* =============================================================
+   SECTION CARD UTILITY
+   Standard glass-panel with internal section spacing
+   ============================================================= */
+
+.section-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 1rem;
+  padding: 24px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.6);
+  transition: border-color 250ms ease, box-shadow 250ms ease;
+}
+
+.section-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: 0 15px 35px -5px rgba(34, 211, 238, 0.12);
+}
+
+/* Section sub-header inside a card */
+.section-sub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Standard grid for stat/info cards */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Vault / document cards grid */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+@media (max-width: 640px) {
+  .cards-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
+/* =============================================================
+   REDUCED MOTION FOR ACCESSIBILITY
+   ============================================================= */
 
 /* Reduced Motion for Accessibility */
 @media (prefers-reduced-motion: reduce) {
