@@ -1,25 +1,123 @@
 import React from 'react';
-import { Loader2, AlertTriangle, Info, CheckCircle2, X } from 'lucide-react';
+import { Loader2, AlertTriangle, Info, CheckCircle2, X, ShieldOff } from 'lucide-react';
 
-export function LoadingState({ message = "Loading secure data..." }) {
+/* -------------------------------------------------------
+   LoadingState
+   ------------------------------------------------------- */
+export function LoadingState({ message = 'Loading secure data...' }) {
   return (
-    <div className="glass-panel p-8 text-center text-xs text-cyan-400 flex flex-col items-center justify-center space-y-3">
-      <Loader2 className="w-7 h-7 animate-spin text-cyan-400" />
-      <span>{message}</span>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '14px',
+        padding: '52px 24px',
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 'var(--radius-lg)',
+        textAlign: 'center',
+      }}
+    >
+      <div
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: '50%',
+          background: 'rgba(34,211,238,0.08)',
+          border: '1px solid rgba(34,211,238,0.20)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Loader2 className="w-5 h-5 text-cyan-400 animate-spin" />
+      </div>
+      <p
+        style={{
+          fontSize: '0.8125rem',
+          color: 'var(--text-secondary)',
+          margin: 0,
+          fontWeight: 500,
+        }}
+      >
+        {message}
+      </p>
     </div>
   );
 }
 
-export function EmptyState({ title = "No items found", description = "Click the action button above to create or upload items.", actionLabel, onAction }) {
+/* -------------------------------------------------------
+   EmptyState
+   ------------------------------------------------------- */
+export function EmptyState({
+  title = 'No items found',
+  description = 'Click the action button above to create or upload items.',
+  actionLabel,
+  onAction,
+}) {
   return (
-    <div className="glass-panel p-10 text-center space-y-3 flex flex-col items-center justify-center">
-      <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400">
-        <Info className="w-6 h-6" />
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '14px',
+        padding: '60px 24px',
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 'var(--radius-lg)',
+        textAlign: 'center',
+      }}
+    >
+      <div
+        style={{
+          width: 52,
+          height: 52,
+          borderRadius: '16px',
+          background: 'rgba(100,116,139,0.10)',
+          border: '1px solid rgba(100,116,139,0.20)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Info style={{ width: 24, height: 24, color: '#64748B' }} />
       </div>
-      <h3 className="text-sm font-bold text-slate-200">{title}</h3>
-      <p className="text-xs text-slate-400 max-w-sm">{description}</p>
+
+      <div>
+        <h3
+          style={{
+            fontSize: '0.9375rem',
+            fontWeight: 700,
+            fontFamily: "'Outfit', sans-serif",
+            color: 'var(--text-primary)',
+            margin: '0 0 6px 0',
+          }}
+        >
+          {title}
+        </h3>
+        <p
+          style={{
+            fontSize: '0.8rem',
+            color: 'var(--text-secondary)',
+            maxWidth: '340px',
+            margin: 0,
+            lineHeight: 1.6,
+          }}
+        >
+          {description}
+        </p>
+      </div>
+
       {actionLabel && (
-        <button onClick={onAction} className="mt-2 px-4 py-2 rounded-xl bg-cyan-500 text-black font-bold text-xs">
+        <button
+          onClick={onAction}
+          className="btn btn-primary"
+          style={{ marginTop: '4px' }}
+        >
           {actionLabel}
         </button>
       )}
@@ -27,15 +125,47 @@ export function EmptyState({ title = "No items found", description = "Click the 
   );
 }
 
+/* -------------------------------------------------------
+   ErrorState
+   ------------------------------------------------------- */
 export function ErrorState({ message, onRetry }) {
   return (
-    <div className="glass-panel p-5 border-rose-500/30 bg-rose-500/5 text-xs text-rose-300 flex justify-between items-center">
-      <div className="flex items-center gap-2.5">
-        <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-        <span>{message || "An unexpected API error occurred."}</span>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+        padding: '14px 18px',
+        background: 'rgba(239,68,68,0.06)',
+        border: '1px solid rgba(239,68,68,0.25)',
+        borderRadius: 'var(--radius-md)',
+        fontSize: '0.8125rem',
+        color: '#fca5a5',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <AlertTriangle style={{ width: 16, height: 16, color: '#EF4444', flexShrink: 0 }} />
+        <span>{message || 'An unexpected error occurred.'}</span>
       </div>
       {onRetry && (
-        <button onClick={onRetry} className="px-3 py-1 rounded-lg bg-rose-500/20 text-rose-300 font-bold border border-rose-500/40 hover:bg-rose-500/30">
+        <button
+          onClick={onRetry}
+          style={{
+            padding: '5px 12px',
+            borderRadius: '8px',
+            background: 'rgba(239,68,68,0.15)',
+            border: '1px solid rgba(239,68,68,0.35)',
+            color: '#fca5a5',
+            fontSize: '0.75rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            flexShrink: 0,
+            transition: 'background 160ms',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.25)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(239,68,68,0.15)')}
+        >
           Retry
         </button>
       )}
@@ -43,25 +173,64 @@ export function ErrorState({ message, onRetry }) {
   );
 }
 
-export function ConfirmDialog({ isOpen, title, message, confirmLabel = "Delete", onConfirm, onCancel, isDanger = true }) {
+/* -------------------------------------------------------
+   ConfirmDialog
+   ------------------------------------------------------- */
+export function ConfirmDialog({
+  isOpen,
+  title,
+  message,
+  confirmLabel = 'Delete',
+  onConfirm,
+  onCancel,
+  isDanger = true,
+}) {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="glass-panel max-w-sm w-full p-6 space-y-4 relative border-slate-800">
-        <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-          <h3 className="text-sm font-bold font-outfit text-slate-100">{title}</h3>
-          <button onClick={onCancel} className="text-slate-400 hover:text-slate-100">
-            <X className="w-4 h-4" />
+    <div className="modal-backdrop">
+      <div className="modal-panel" style={{ maxWidth: '420px' }}>
+        <div className="modal-header">
+          <h3 className="modal-title">{title}</h3>
+          <button
+            onClick={onCancel}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 30,
+              height: 30,
+              borderRadius: '8px',
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              transition: 'all 160ms',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+              e.currentTarget.style.color = 'var(--text-primary)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = 'var(--text-muted)';
+            }}
+          >
+            <X style={{ width: 16, height: 16 }} />
           </button>
         </div>
-        <p className="text-xs text-slate-400 leading-relaxed">{message}</p>
-        <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-          <button onClick={onCancel} className="px-4 py-2 rounded-xl bg-slate-900 text-xs font-semibold text-slate-300 hover:bg-slate-800">
+
+        <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', lineHeight: 1.65, margin: 0 }}>
+          {message}
+        </p>
+
+        <div className="modal-footer">
+          <button onClick={onCancel} className="btn btn-secondary" style={{ fontSize: '0.8rem' }}>
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className={`px-4 py-2 rounded-xl text-xs font-bold ${isDanger ? 'bg-rose-500 text-black hover:bg-rose-400' : 'bg-cyan-500 text-black hover:bg-cyan-400'}`}
+            className={`btn ${isDanger ? 'btn-danger' : 'btn-primary'}`}
+            style={{ fontSize: '0.8rem' }}
           >
             {confirmLabel}
           </button>
@@ -71,14 +240,50 @@ export function ConfirmDialog({ isOpen, title, message, confirmLabel = "Delete",
   );
 }
 
-export function VaultSelector({ vaults = [], selectedVaultId, onChange, label = "Select Vault" }) {
+/* -------------------------------------------------------
+   VaultSelector
+   ------------------------------------------------------- */
+export function VaultSelector({ vaults = [], selectedVaultId, onChange, label = 'Vault' }) {
   return (
-    <div className="flex items-center gap-2">
-      {label && <label className="text-xs font-bold text-slate-400 uppercase tracking-wider hidden sm:block">{label}:</label>}
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      {label && (
+        <label
+          style={{
+            fontSize: '0.6875rem',
+            fontWeight: 700,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            color: 'var(--text-muted)',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+          }}
+          className="hidden sm:block"
+        >
+          {label}:
+        </label>
+      )}
       <select
         value={selectedVaultId}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-cyan-500 max-w-xs"
+        style={{
+          background: 'var(--bg-input)',
+          border: '1px solid rgba(255,255,255,0.10)',
+          borderRadius: '10px',
+          padding: '7px 32px 7px 12px',
+          fontSize: '0.8rem',
+          color: 'var(--text-primary)',
+          cursor: 'pointer',
+          outline: 'none',
+          maxWidth: '200px',
+          minWidth: '130px',
+          appearance: 'none',
+          backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
+          backgroundRepeat: 'no-repeat',
+          backgroundPosition: 'right 10px center',
+          transition: 'border-color 160ms ease',
+        }}
+        onFocus={e => (e.currentTarget.style.borderColor = 'rgba(34,211,238,0.45)')}
+        onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)')}
       >
         {vaults.length === 0 && <option value="">No Vaults Available</option>}
         {vaults.map((v) => (
@@ -91,14 +296,52 @@ export function VaultSelector({ vaults = [], selectedVaultId, onChange, label = 
   );
 }
 
-export function Toast({ message, type = "success", onClose }) {
+/* -------------------------------------------------------
+   Toast
+   ------------------------------------------------------- */
+export function Toast({ message, type = 'success', onClose }) {
   if (!message) return null;
   return (
-    <div className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl border text-xs font-semibold shadow-2xl flex items-center gap-2 animate-bounce ${type === 'success' ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300' : 'bg-rose-500/10 border-rose-500/40 text-rose-300'}`}>
-      {type === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertTriangle className="w-4 h-4 text-rose-400" />}
+    <div
+      style={{
+        position: 'fixed',
+        bottom: '24px',
+        right: '24px',
+        zIndex: 80,
+        padding: '12px 16px',
+        borderRadius: '12px',
+        border: `1px solid ${type === 'success' ? 'rgba(16,185,129,0.35)' : 'rgba(239,68,68,0.35)'}`,
+        background: type === 'success' ? 'rgba(16,185,129,0.10)' : 'rgba(239,68,68,0.10)',
+        color: type === 'success' ? '#6ee7b7' : '#fca5a5',
+        fontSize: '0.8125rem',
+        fontWeight: 600,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        boxShadow: '0 16px 40px rgba(0,0,0,0.55)',
+        backdropFilter: 'blur(12px)',
+        animation: 'modal-slide 220ms ease',
+      }}
+    >
+      {type === 'success'
+        ? <CheckCircle2 style={{ width: 16, height: 16, color: '#10B981', flexShrink: 0 }} />
+        : <AlertTriangle style={{ width: 16, height: 16, color: '#EF4444', flexShrink: 0 }} />
+      }
       <span>{message}</span>
-      <button onClick={onClose} className="ml-2 text-slate-400 hover:text-slate-100">
-        <X className="w-3.5 h-3.5" />
+      <button
+        onClick={onClose}
+        style={{
+          background: 'transparent',
+          border: 'none',
+          color: 'inherit',
+          opacity: 0.6,
+          cursor: 'pointer',
+          marginLeft: '4px',
+          display: 'flex',
+          alignItems: 'center',
+        }}
+      >
+        <X style={{ width: 14, height: 14 }} />
       </button>
     </div>
   );

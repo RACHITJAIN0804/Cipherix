@@ -2,7 +2,78 @@ import React, { useState, useEffect } from 'react';
 import { PageLayout } from '../components/PageLayout';
 import { PageHeader } from '../components/PageHeader';
 import { CipherixAPI } from '../api';
-import { Vault, ShieldAlert, Boxes, ShieldCheck, Activity, Lock, RefreshCw, LayoutDashboard } from 'lucide-react';
+import {
+  Vault, ShieldAlert, Boxes, ShieldCheck, Activity,
+  Lock, RefreshCw, LayoutDashboard, TrendingUp,
+} from 'lucide-react';
+
+/* Stat card with accent top stripe */
+function StatCard({ label, value, valueColor, icon: Icon, iconBg, iconBorder, iconColor, footnote, footnoteColor, accentGradient }) {
+  return (
+    <div
+      className="glass-panel stat-card p-5"
+      style={{ '--accent-top': accentGradient }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <div
+            style={{
+              fontSize: '0.6875rem',
+              fontWeight: 700,
+              letterSpacing: '0.07em',
+              textTransform: 'uppercase',
+              color: 'var(--text-muted)',
+            }}
+          >
+            {label}
+          </div>
+          <div
+            style={{
+              fontSize: '2rem',
+              fontWeight: 800,
+              fontFamily: "'Outfit', sans-serif",
+              color: valueColor || 'var(--text-primary)',
+              lineHeight: 1.15,
+              marginTop: '6px',
+              letterSpacing: '-0.02em',
+            }}
+          >
+            {value}
+          </div>
+        </div>
+        <div
+          style={{
+            width: 42,
+            height: 42,
+            borderRadius: '12px',
+            background: iconBg,
+            border: `1px solid ${iconBorder}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          <Icon style={{ width: 20, height: 20, color: iconColor }} />
+        </div>
+      </div>
+      <div
+        style={{
+          marginTop: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          fontSize: '0.78125rem',
+          color: footnoteColor || 'var(--text-secondary)',
+          fontWeight: 500,
+        }}
+      >
+        <TrendingUp style={{ width: 13, height: 13, flexShrink: 0 }} />
+        <span>{footnote}</span>
+      </div>
+    </div>
+  );
+}
 
 export function DashboardView({ user, onLogout }) {
   const [vaults, setVaults] = useState([]);
@@ -24,6 +95,8 @@ export function DashboardView({ user, onLogout }) {
     loadData();
   }, []);
 
+  const unlockedCount = vaults.filter(v => v.status === 'unlocked').length;
+
   return (
     <PageLayout title="Dashboard Overview" user={user} onLogout={onLogout}>
       {/* Page Header */}
@@ -31,108 +104,185 @@ export function DashboardView({ user, onLogout }) {
         icon={LayoutDashboard}
         iconColor="text-cyan-400"
         title="Dashboard Overview"
-        description="Real-time system metrics, vault status, and security posture monitoring."
+        description="Real-time system metrics, vault status, and security posture at a glance."
       >
         <button
           onClick={loadData}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300 hover:text-cyan-400 hover:border-cyan-500/40 transition-all"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '7px 14px',
+            borderRadius: '10px',
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.09)',
+            fontSize: '0.78rem',
+            fontWeight: 600,
+            color: 'var(--text-secondary)',
+            cursor: 'pointer',
+            transition: 'all 160ms',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.color = 'var(--accent-cyan)';
+            e.currentTarget.style.borderColor = 'rgba(34,211,238,0.28)';
+            e.currentTarget.style.background = 'rgba(34,211,238,0.05)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.color = 'var(--text-secondary)';
+            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)';
+            e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+          }}
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw style={{ width: 13, height: 13, ...(loading ? { animation: 'spin 1s linear infinite' } : {}) }} />
           <span>Refresh</span>
         </button>
       </PageHeader>
 
-      {/* Stat Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-        <div className="glass-panel p-5 relative overflow-hidden">
-          <div className="flex justify-between items-start">
-            <div>
-              <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">ACTIVE VAULTS</div>
-              <div className="text-3xl font-extrabold font-outfit mt-1 text-slate-100">{vaults.length}</div>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 flex items-center justify-center flex-shrink-0">
-              <Vault className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center gap-2 text-xs text-emerald-400 font-medium">
-            <Lock className="w-3.5 h-3.5" />
-            <span>Argon2id Key Derived</span>
-          </div>
-        </div>
-
-        <div className="glass-panel p-5 relative overflow-hidden">
-          <div className="flex justify-between items-start">
-            <div>
-              <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">ENCRYPTED DOCUMENTS</div>
-              <div className="text-3xl font-extrabold font-outfit mt-1 text-slate-100">5</div>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-400 flex items-center justify-center flex-shrink-0">
-              <ShieldAlert className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center gap-2 text-xs text-purple-400 font-medium">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>AES-256-GCM Ciphertext</span>
-          </div>
-        </div>
-
-        <div className="glass-panel p-5 relative overflow-hidden">
-          <div className="flex justify-between items-start">
-            <div>
-              <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">BLOCKCHAIN ANCHORS</div>
-              <div className="text-3xl font-extrabold font-outfit mt-1 text-slate-100">5</div>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center flex-shrink-0">
-              <Boxes className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center gap-2 text-xs text-amber-400 font-medium">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Tamper-Proof Ledger</span>
-          </div>
-        </div>
-
-        <div className="glass-panel p-5 relative overflow-hidden">
-          <div className="flex justify-between items-start">
-            <div>
-              <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">SECURITY SCORE</div>
-              <div className="text-3xl font-extrabold font-outfit mt-1 text-emerald-400">100%</div>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center flex-shrink-0">
-              <Activity className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center gap-2 text-xs text-emerald-400 font-medium">
-            <span>0 Leaks • Zero-Knowledge</span>
-          </div>
-        </div>
+      {/* Stat Cards */}
+      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
+        <StatCard
+          label="Active Vaults"
+          value={vaults.length}
+          icon={Vault}
+          iconBg="rgba(34,211,238,0.10)"
+          iconBorder="rgba(34,211,238,0.25)"
+          iconColor="var(--accent-cyan)"
+          footnote="Argon2id key derived"
+          footnoteColor="var(--accent-emerald)"
+          accentGradient="linear-gradient(90deg, #22D3EE, #3B82F6)"
+        />
+        <StatCard
+          label="Encrypted Documents"
+          value={5}
+          icon={ShieldAlert}
+          iconBg="rgba(168,85,247,0.10)"
+          iconBorder="rgba(168,85,247,0.25)"
+          iconColor="var(--accent-purple)"
+          footnote="AES-256-GCM ciphertext"
+          footnoteColor="var(--accent-purple)"
+          accentGradient="linear-gradient(90deg, #A855F7, #6366F1)"
+        />
+        <StatCard
+          label="Blockchain Anchors"
+          value={5}
+          icon={Boxes}
+          iconBg="rgba(245,158,11,0.10)"
+          iconBorder="rgba(245,158,11,0.25)"
+          iconColor="var(--accent-amber)"
+          footnote="Tamper-proof ledger"
+          footnoteColor="var(--accent-amber)"
+          accentGradient="linear-gradient(90deg, #F59E0B, #EF4444)"
+        />
+        <StatCard
+          label="Security Score"
+          value="100%"
+          valueColor="var(--accent-emerald)"
+          icon={Activity}
+          iconBg="rgba(16,185,129,0.10)"
+          iconBorder="rgba(16,185,129,0.25)"
+          iconColor="var(--accent-emerald)"
+          footnote="0 leaks · Zero-knowledge"
+          footnoteColor="var(--accent-emerald)"
+          accentGradient="linear-gradient(90deg, #10B981, #22D3EE)"
+        />
       </div>
 
-      {/* Vault Status List */}
+      {/* Vault Status Panel */}
       <div className="glass-panel p-6">
-        <div className="flex justify-between items-center border-b border-slate-800 pb-4 mb-4">
-          <h3 className="text-base font-bold font-outfit text-slate-100 flex items-center gap-2">
-            <Vault className="w-5 h-5 text-cyan-400" />
-            <span>Vault Status Overview</span>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingBottom: '16px',
+            marginBottom: '16px',
+            borderBottom: '1px solid var(--border-subtle)',
+          }}
+        >
+          <h3 className="section-title">
+            <Vault style={{ width: 17, height: 17, color: 'var(--accent-cyan)' }} />
+            Vault Status Overview
           </h3>
+          {vaults.length > 0 && (
+            <span className="badge-tag badge-cyan">
+              {unlockedCount} / {vaults.length} unlocked
+            </span>
+          )}
         </div>
 
-        <div className="flex flex-col gap-3">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {vaults.length === 0 && !loading && (
-            <p className="text-xs text-slate-400 py-4 text-center">No vaults found. Create one in the Vaults module.</p>
+            <p
+              style={{
+                fontSize: '0.8125rem',
+                color: 'var(--text-muted)',
+                textAlign: 'center',
+                padding: '24px 0',
+                margin: 0,
+              }}
+            >
+              No vaults found. Create one in the Vaults module.
+            </p>
           )}
           {vaults.map((v) => (
-            <div key={v.vault_id} className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 flex justify-between items-center text-xs">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 flex items-center justify-center flex-shrink-0">
-                  <Vault className="w-5 h-5" />
+            <div
+              key={v.vault_id}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '13px 16px',
+                borderRadius: '12px',
+                background: 'rgba(7,10,18,0.50)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                transition: 'border-color 160ms ease, background 160ms ease',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = 'rgba(34,211,238,0.18)';
+                e.currentTarget.style.background = 'rgba(34,211,238,0.03)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
+                e.currentTarget.style.background = 'rgba(7,10,18,0.50)';
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: '10px',
+                    background: 'rgba(34,211,238,0.08)',
+                    border: '1px solid rgba(34,211,238,0.22)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Vault style={{ width: 17, height: 17, color: 'var(--accent-cyan)' }} />
                 </div>
                 <div>
-                  <div className="font-bold text-slate-100 text-sm">{v.name}</div>
-                  <div className="text-slate-400 font-mono">ID: {v.vault_id}</div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {v.name}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '0.6875rem',
+                      color: 'var(--text-muted)',
+                      fontFamily: "'JetBrains Mono', 'Courier New', monospace",
+                      marginTop: '2px',
+                    }}
+                  >
+                    {v.vault_id}
+                  </div>
                 </div>
               </div>
               <span className={`badge-tag ${v.status === 'unlocked' ? 'badge-emerald' : 'badge-amber'}`}>
+                {v.status === 'unlocked'
+                  ? <Lock style={{ width: 10, height: 10 }} />
+                  : <Lock style={{ width: 10, height: 10 }} />
+                }
                 {v.status.toUpperCase()}
               </span>
             </div>

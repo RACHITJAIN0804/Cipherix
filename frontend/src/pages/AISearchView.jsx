@@ -3,7 +3,7 @@ import { PageLayout } from '../components/PageLayout';
 import { PageHeader } from '../components/PageHeader';
 import { LoadingState, EmptyState, ErrorState, VaultSelector } from '../components/CommonUI';
 import { CipherixAPI } from '../api';
-import { Search, FileText, Send, Sparkles } from 'lucide-react';
+import { Search, FileText, Send, Sparkles, SlidersHorizontal } from 'lucide-react';
 
 export function AISearchView({ user, onLogout }) {
   const [vaults, setVaults] = useState([]);
@@ -13,6 +13,7 @@ export function AISearchView({ user, onLogout }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [hasSearched, setHasSearched] = useState(false);
 
   useEffect(() => {
     async function loadVaults() {
@@ -20,12 +21,8 @@ export function AISearchView({ user, onLogout }) {
         const data = await CipherixAPI.request('/vaults');
         const vList = Array.isArray(data) ? data : [];
         setVaults(vList);
-        if (vList.length > 0 && !selectedVaultId) {
-          setSelectedVaultId(vList[0].vault_id);
-        }
-      } catch (err) {
-        console.warn(err);
-      }
+        if (vList.length > 0 && !selectedVaultId) setSelectedVaultId(vList[0].vault_id);
+      } catch (err) { console.warn(err); }
     }
     loadVaults();
   }, []);
@@ -36,6 +33,7 @@ export function AISearchView({ user, onLogout }) {
 
     setLoading(true);
     setError('');
+    setHasSearched(true);
     try {
       const res = await CipherixAPI.request('/search', {
         method: 'POST',
@@ -66,85 +64,225 @@ export function AISearchView({ user, onLogout }) {
       </PageHeader>
 
       {/* Search Panel */}
-      <div className="glass-panel p-6 flex flex-col gap-4 border-blue-500/20">
-        <form onSubmit={handleSearch} className="flex gap-3">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-4 top-3.5 text-slate-500 pointer-events-none" />
+      <div
+        className="glass-panel"
+        style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}
+      >
+        <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <Search
+              style={{
+                position: 'absolute',
+                left: '14px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                width: 15,
+                height: 15,
+                color: 'var(--text-muted)',
+                pointerEvents: 'none',
+              }}
+            />
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Enter natural language query (e.g. 'security protocol parameters')..."
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-11 pr-4 py-3 text-xs text-slate-100 focus:outline-none focus:border-blue-500 transition-colors"
+              placeholder="Enter natural language query..."
+              style={{
+                width: '100%',
+                background: 'var(--bg-input)',
+                border: '1px solid rgba(255,255,255,0.10)',
+                borderRadius: '12px',
+                padding: '11px 14px 11px 40px',
+                fontSize: '0.875rem',
+                color: 'var(--text-primary)',
+                outline: 'none',
+                transition: 'border-color 160ms ease, box-shadow 160ms ease',
+                boxSizing: 'border-box',
+                fontFamily: 'inherit',
+              }}
+              onFocus={e => {
+                e.target.style.borderColor = 'rgba(59,130,246,0.45)';
+                e.target.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.08)';
+              }}
+              onBlur={e => {
+                e.target.style.borderColor = 'rgba(255,255,255,0.10)';
+                e.target.style.boxShadow = 'none';
+              }}
             />
           </div>
           <button
             type="submit"
             disabled={loading}
-            className="px-6 py-3 rounded-xl bg-blue-500 text-black font-bold text-xs flex items-center gap-2 hover:bg-blue-400 transition-colors disabled:opacity-60"
+            className="btn"
+            style={{
+              background: 'var(--accent-blue)',
+              color: '#050a12',
+              padding: '11px 20px',
+              borderRadius: '12px',
+              fontSize: '0.875rem',
+              gap: '7px',
+              flexShrink: 0,
+              boxShadow: '0 4px 14px rgba(59,130,246,0.25)',
+              transition: 'all 160ms',
+            }}
+            onMouseEnter={e => { if (!loading) { e.currentTarget.style.background = '#60a5fa'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'var(--accent-blue)'; e.currentTarget.style.transform = 'translateY(0)'; }}
           >
-            <Send className="w-4 h-4" />
-            <span>Search</span>
+            <Send style={{ width: 15, height: 15 }} />
+            <span>{loading ? 'Searching...' : 'Search'}</span>
           </button>
         </form>
 
-        <div className="flex items-center gap-4 text-xs pt-2 border-t border-slate-800/80">
-          <label className="text-slate-400 font-semibold">Top K Results Matches:</label>
+        {/* Top-K slider */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            paddingTop: '14px',
+            borderTop: '1px solid rgba(255,255,255,0.06)',
+          }}
+        >
+          <SlidersHorizontal style={{ width: 13, height: 13, color: 'var(--text-muted)', flexShrink: 0 }} />
+          <label style={{ fontSize: '0.78125rem', color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            Top K Results:
+          </label>
           <input
             type="range"
-            min="1"
-            max="10"
-            step="1"
+            min="1" max="10" step="1"
             value={topK}
             onChange={(e) => setTopK(e.target.value)}
-            className="w-36 accent-purple-500"
+            style={{ width: '120px', accentColor: '#A855F7', cursor: 'pointer' }}
           />
-          <span className="font-bold text-purple-400">{topK}</span>
+          <span
+            style={{
+              fontSize: '0.875rem',
+              fontWeight: 700,
+              color: 'var(--accent-purple)',
+              minWidth: '16px',
+              textAlign: 'center',
+            }}
+          >
+            {topK}
+          </span>
         </div>
       </div>
 
       {error && <ErrorState message={error} onRetry={handleSearch} />}
 
       {/* Results Section */}
-      <div className="flex flex-col gap-3">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-          <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-          <span>Matching Text Chunks ({results.length})</span>
-        </h3>
+      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* Section header */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingBottom: '14px',
+            borderBottom: '1px solid rgba(255,255,255,0.06)',
+          }}
+        >
+          <h3
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '0.875rem',
+              fontWeight: 700,
+              color: 'var(--text-secondary)',
+              margin: 0,
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+              fontFamily: 'inherit',
+            }}
+          >
+            <Sparkles style={{ width: 14, height: 14, color: 'var(--accent-purple)' }} />
+            Matching Text Chunks
+          </h3>
+          {results.length > 0 && (
+            <span className="badge-tag badge-purple">{results.length} results</span>
+          )}
+        </div>
 
         {loading ? (
           <LoadingState message="Generating query embeddings & searching ChromaDB..." />
+        ) : !hasSearched ? (
+          <EmptyState
+            title="Ready to Search"
+            description="Enter a natural language query above and hit Search to find semantic text matches in your vault."
+          />
         ) : results.length === 0 ? (
           <EmptyState
             title="No Search Results"
-            description="Enter a query above and hit Search to find semantic text matches."
+            description="No matching chunks found for your query. Try different keywords or check that documents are processed."
           />
         ) : (
-          results.map((r, idx) => (
-            <div key={r.chunk_id || idx} className="glass-panel p-5 flex flex-col gap-3 border-purple-500/20 hover:border-cyan-500/40 transition-colors">
-              <div className="flex justify-between items-center text-xs">
-                <div className="flex items-center gap-2 font-bold text-slate-100">
-                  <FileText className="w-4 h-4 text-purple-400 flex-shrink-0" />
-                  <span>{r.filename || 'Document'}</span>
-                  {r.page_number && (
-                    <span className="text-slate-400 font-normal text-[11px]">(Page {r.page_number})</span>
-                  )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {results.map((r, idx) => (
+              <div
+                key={r.chunk_id || idx}
+                className="glass-panel"
+                style={{
+                  padding: '18px 20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  borderColor: 'rgba(168,85,247,0.12)',
+                }}
+              >
+                {/* Result header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                    <FileText style={{ width: 15, height: 15, color: 'var(--accent-purple)', flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {r.filename || 'Document'}
+                    </span>
+                    {r.page_number && (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        (Page {r.page_number})
+                      </span>
+                    )}
+                  </div>
+                  <span className="badge-tag badge-cyan" style={{ fontFamily: "'JetBrains Mono', monospace", flexShrink: 0 }}>
+                    {(r.similarity_score * 100).toFixed(1)}% match
+                  </span>
                 </div>
-                <span className="badge-tag badge-cyan font-mono text-[11px] flex-shrink-0">
-                  {(r.similarity_score * 100).toFixed(1)}% Similarity
-                </span>
-              </div>
 
-              <p className="text-xs text-slate-200 font-mono p-4 bg-slate-900/90 rounded-xl border border-slate-800/80 leading-relaxed">
-                &quot;{r.text_snippet}&quot;
-              </p>
+                {/* Snippet */}
+                <p
+                  style={{
+                    fontFamily: "'JetBrains Mono', 'Courier New', monospace",
+                    fontSize: '0.8rem',
+                    color: '#CBD5E1',
+                    padding: '14px 16px',
+                    background: 'rgba(0,0,0,0.35)',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    lineHeight: 1.7,
+                    margin: 0,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  "{r.text_snippet}"
+                </p>
 
-              <div className="text-[10px] text-slate-500 font-mono flex gap-3 pt-1">
-                <span>Chunk ID: {r.chunk_id || `chunk_${idx}`}</span>
-                <span>Document ID: {r.document_id}</span>
+                {/* Metadata */}
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '16px',
+                    fontSize: '0.6875rem',
+                    color: 'var(--text-muted)',
+                    fontFamily: "'JetBrains Mono', monospace",
+                  }}
+                >
+                  <span>Chunk: {r.chunk_id || `chunk_${idx}`}</span>
+                  <span>Doc: {r.document_id}</span>
+                </div>
               </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
     </PageLayout>

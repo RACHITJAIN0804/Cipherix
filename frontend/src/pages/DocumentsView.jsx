@@ -3,7 +3,7 @@ import { PageLayout } from '../components/PageLayout';
 import { PageHeader } from '../components/PageHeader';
 import { LoadingState, EmptyState, ErrorState, ConfirmDialog, VaultSelector } from '../components/CommonUI';
 import { CipherixAPI } from '../api';
-import { FileText, Download, Boxes, Check, Upload, Trash2, Play, RefreshCw, X } from 'lucide-react';
+import { FileText, Download, Check, Upload, Trash2, Play, RefreshCw, X, CloudUpload } from 'lucide-react';
 
 export function DocumentsView({ user, onLogout }) {
   const [vaults, setVaults] = useState([]);
@@ -12,13 +12,13 @@ export function DocumentsView({ user, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Modals & Actions state
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [vaultPassword, setVaultPassword] = useState('');
   const [uploadFile, setUploadFile] = useState(null);
   const [deleteDocId, setDeleteDocId] = useState(null);
   const [processingDocId, setProcessingDocId] = useState(null);
   const [statusMsg, setStatusMsg] = useState('');
+  const [dragOver, setDragOver] = useState(false);
 
   const fetchVaultsAndDocs = async () => {
     setLoading(true);
@@ -29,9 +29,7 @@ export function DocumentsView({ user, onLogout }) {
       setVaults(vArray);
 
       const targetVaultId = selectedVaultId || (vArray.length > 0 ? vArray[0].vault_id : '');
-      if (!selectedVaultId && targetVaultId) {
-        setSelectedVaultId(targetVaultId);
-      }
+      if (!selectedVaultId && targetVaultId) setSelectedVaultId(targetVaultId);
 
       if (targetVaultId) {
         const docList = await CipherixAPI.request(`/vaults/${targetVaultId}/documents`);
@@ -44,9 +42,7 @@ export function DocumentsView({ user, onLogout }) {
     }
   };
 
-  useEffect(() => {
-    fetchVaultsAndDocs();
-  }, [selectedVaultId]);
+  useEffect(() => { fetchVaultsAndDocs(); }, [selectedVaultId]);
 
   const handleUpload = async (e) => {
     e.preventDefault();
@@ -54,10 +50,8 @@ export function DocumentsView({ user, onLogout }) {
       alert('Please select a file and enter the vault password.');
       return;
     }
-
     const formData = new FormData();
     formData.append('file', uploadFile);
-
     try {
       setStatusMsg('Encrypting & Uploading...');
       await CipherixAPI.request(`/vaults/${selectedVaultId}/documents`, {
@@ -67,6 +61,7 @@ export function DocumentsView({ user, onLogout }) {
       });
       setUploadModalOpen(false);
       setUploadFile(null);
+      setVaultPassword('');
       setStatusMsg('');
       fetchVaultsAndDocs();
     } catch (err) {
@@ -78,7 +73,6 @@ export function DocumentsView({ user, onLogout }) {
   const handleProcessDocument = async (docId) => {
     const pwd = prompt('Enter Vault Password to decrypt and process text chunks:');
     if (!pwd) return;
-
     setProcessingDocId(docId);
     try {
       const res = await CipherixAPI.request(`/vaults/${selectedVaultId}/documents/${docId}/process`, {
@@ -97,7 +91,6 @@ export function DocumentsView({ user, onLogout }) {
   const handleDownloadDocument = async (docId, filename) => {
     const pwd = prompt('Enter Vault Password to stream-decrypt document:');
     if (!pwd) return;
-
     try {
       const blob = await CipherixAPI.request(`/vaults/${selectedVaultId}/documents/${docId}`, {
         method: 'GET',
@@ -107,9 +100,7 @@ export function DocumentsView({ user, onLogout }) {
       if (blob instanceof Blob) {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.click();
+        a.href = url; a.download = filename; a.click();
       } else {
         alert('Decrypted stream download initiated!');
       }
@@ -121,14 +112,26 @@ export function DocumentsView({ user, onLogout }) {
   const handleDeleteDocument = async () => {
     if (!deleteDocId || !selectedVaultId) return;
     try {
-      await CipherixAPI.request(`/vaults/${selectedVaultId}/documents/${deleteDocId}`, {
-        method: 'DELETE',
-      });
+      await CipherixAPI.request(`/vaults/${selectedVaultId}/documents/${deleteDocId}`, { method: 'DELETE' });
       setDeleteDocId(null);
       fetchVaultsAndDocs();
     } catch (err) {
       alert('Delete Error: ' + err.message);
     }
+  };
+
+  const inputStyle = {
+    width: '100%',
+    background: 'var(--bg-input)',
+    border: '1px solid rgba(255,255,255,0.10)',
+    borderRadius: '10px',
+    padding: '10px 14px',
+    fontSize: '0.8125rem',
+    color: 'var(--text-primary)',
+    outline: 'none',
+    transition: 'border-color 160ms ease, box-shadow 160ms ease',
+    boxSizing: 'border-box',
+    fontFamily: 'inherit',
   };
 
   return (
@@ -143,9 +146,10 @@ export function DocumentsView({ user, onLogout }) {
         <VaultSelector vaults={vaults} selectedVaultId={selectedVaultId} onChange={setSelectedVaultId} />
         <button
           onClick={() => setUploadModalOpen(true)}
-          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-500 to-cyan-500 text-black font-bold text-xs flex items-center gap-2 hover:opacity-90 transition-opacity"
+          className="btn btn-primary"
+          style={{ background: 'linear-gradient(135deg, #A855F7, #22D3EE)' }}
         >
-          <Upload className="w-4 h-4" />
+          <Upload style={{ width: 14, height: 14 }} />
           <span>Upload Document</span>
         </button>
       </PageHeader>
@@ -157,70 +161,108 @@ export function DocumentsView({ user, onLogout }) {
       ) : documents.length === 0 ? (
         <EmptyState
           title="No Documents In Vault"
-          description="Upload a TXT, PDF, or DOCX document to store it securely."
+          description="Upload a TXT, PDF, or DOCX document to store it securely with AES-256-GCM encryption."
           actionLabel="Upload File"
           onAction={() => setUploadModalOpen(true)}
         />
       ) : (
-        <div className="glass-panel overflow-hidden p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+        <div
+          className="glass-panel"
+          style={{ padding: 0, overflow: 'hidden' }}
+        >
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data-table">
               <thead>
-                <tr className="bg-slate-900/80 text-slate-400 uppercase font-bold text-[11px] border-b border-slate-800">
-                  <th className="p-4">Filename</th>
-                  <th className="p-4">MIME / Size</th>
-                  <th className="p-4">SHA-256 Integrity Hash</th>
-                  <th className="p-4">RAG Status</th>
-                  <th className="p-4 text-right">Actions</th>
+                <tr>
+                  <th>Filename</th>
+                  <th>MIME / Size</th>
+                  <th>SHA-256 Hash</th>
+                  <th>RAG Status</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody>
                 {documents.map((d) => (
-                  <tr key={d.document_id} className="hover:bg-slate-900/40 transition-colors">
-                    <td className="p-4 font-semibold text-slate-100">
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-purple-400 flex-shrink-0" />
-                        <span className="truncate max-w-[200px]">{d.filename}</span>
+                  <tr key={d.document_id}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <FileText style={{ width: 15, height: 15, color: 'var(--accent-purple)', flexShrink: 0 }} />
+                        <span
+                          style={{
+                            fontWeight: 600,
+                            color: 'var(--text-primary)',
+                            maxWidth: '200px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            display: 'block',
+                          }}
+                        >
+                          {d.filename}
+                        </span>
                       </div>
                     </td>
-                    <td className="p-4 text-slate-400">
-                      <div>{d.mime_type}</div>
-                      <div className="text-[10px]">{(d.file_size_bytes / 1024).toFixed(1)} KB</div>
+                    <td>
+                      <div style={{ color: 'var(--text-secondary)' }}>{d.mime_type}</div>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                        {(d.file_size_bytes / 1024).toFixed(1)} KB
+                      </div>
                     </td>
-                    <td className="p-4">
-                      <div className="font-mono text-[11px] text-cyan-400 truncate max-w-[220px]" title={d.integrity_hash}>
+                    <td>
+                      <div
+                        title={d.integrity_hash}
+                        style={{
+                          fontFamily: "'JetBrains Mono', monospace",
+                          fontSize: '0.6875rem',
+                          color: 'var(--accent-cyan)',
+                          maxWidth: '200px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
                         {d.integrity_hash}
                       </div>
                     </td>
-                    <td className="p-4">
+                    <td>
                       <span className={`badge-tag ${d.processing_status === 'processed' ? 'badge-emerald' : 'badge-amber'}`}>
-                        {d.processing_status === 'processed' ? <Check className="w-3 h-3" /> : <RefreshCw className="w-3 h-3 animate-spin" />}
-                        <span>{d.processing_status || 'uploaded'}</span>
+                        {d.processing_status === 'processed'
+                          ? <Check style={{ width: 10, height: 10 }} />
+                          : <RefreshCw style={{ width: 10, height: 10 }} />
+                        }
+                        {d.processing_status || 'uploaded'}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <div className="flex items-center justify-end gap-1.5">
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
                         <button
                           onClick={() => handleProcessDocument(d.document_id)}
                           disabled={processingDocId === d.document_id}
-                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-purple-300 hover:border-purple-500/40 transition-colors"
+                          className="btn btn-secondary"
+                          style={{ fontSize: '0.75rem', padding: '5px 10px', color: 'var(--accent-purple)' }}
                           title="Extract & Chunk Text for RAG"
                         >
-                          <Play className="w-3.5 h-3.5 inline mr-1" />Process
+                          <Play style={{ width: 11, height: 11 }} />
+                          Process
                         </button>
                         <button
                           onClick={() => handleDownloadDocument(d.document_id, d.filename)}
-                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-200 hover:text-cyan-400 transition-colors"
+                          className="btn btn-secondary"
+                          style={{ fontSize: '0.75rem', padding: '5px 10px' }}
                           title="Decrypt & Stream Download"
                         >
-                          <Download className="w-3.5 h-3.5 inline mr-1" />Decrypt
+                          <Download style={{ width: 11, height: 11 }} />
+                          Decrypt
                         </button>
                         <button
                           onClick={() => setDeleteDocId(d.document_id)}
-                          className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-500 hover:text-rose-400 transition-colors"
+                          className="btn btn-ghost"
+                          style={{ padding: '5px 8px', color: 'var(--text-muted)' }}
                           title="Delete Document"
+                          onMouseEnter={e => (e.currentTarget.style.color = '#f87171')}
+                          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 style={{ width: 13, height: 13 }} />
                         </button>
                       </div>
                     </td>
@@ -234,73 +276,106 @@ export function DocumentsView({ user, onLogout }) {
 
       {/* Upload Modal */}
       {uploadModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-panel max-w-md w-full p-6 flex flex-col gap-4 relative border-slate-800">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold font-outfit text-slate-100">Upload Encrypted Document</h3>
+        <div className="modal-backdrop">
+          <div className="modal-panel" style={{ maxWidth: '460px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Upload Encrypted Document</h3>
               <button
                 onClick={() => setUploadModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
+                style={{
+                  width: 30, height: 30, borderRadius: 8,
+                  background: 'transparent', border: 'none',
+                  color: 'var(--text-muted)', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 160ms',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
               >
-                <X className="w-5 h-5" />
+                <X style={{ width: 16, height: 16 }} />
               </button>
             </div>
 
-            <form onSubmit={handleUpload} className="flex flex-col gap-4">
-              {/* Drag and Drop Zone */}
+            <form onSubmit={handleUpload} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Drop zone */}
               <div
-                onDragOver={(e) => e.preventDefault()}
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
                 onDrop={(e) => {
                   e.preventDefault();
-                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                    setUploadFile(e.dataTransfer.files[0]);
-                  }
+                  setDragOver(false);
+                  if (e.dataTransfer.files?.[0]) setUploadFile(e.dataTransfer.files[0]);
                 }}
-                className="border-2 border-dashed border-slate-700 hover:border-cyan-500 rounded-2xl p-6 text-center flex flex-col items-center gap-2 cursor-pointer transition-colors bg-slate-900/40"
+                style={{
+                  borderRadius: '12px',
+                  border: `2px dashed ${dragOver ? 'rgba(34,211,238,0.55)' : uploadFile ? 'rgba(16,185,129,0.40)' : 'rgba(255,255,255,0.12)'}`,
+                  background: dragOver
+                    ? 'rgba(34,211,238,0.05)'
+                    : uploadFile ? 'rgba(16,185,129,0.04)' : 'rgba(255,255,255,0.02)',
+                  padding: '28px 20px',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 180ms ease',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '10px',
+                }}
               >
-                <Upload className="w-8 h-8 text-cyan-400" />
-                <div className="text-xs text-slate-200 font-medium">
+                <CloudUpload style={{ width: 32, height: 32, color: uploadFile ? 'var(--accent-emerald)' : 'var(--accent-cyan)', opacity: 0.8 }} />
+                <div style={{ fontSize: '0.8125rem', color: uploadFile ? 'var(--accent-emerald)' : 'var(--text-secondary)', fontWeight: 500 }}>
                   {uploadFile ? uploadFile.name : 'Drag & drop TXT, PDF, or DOCX file here'}
                 </div>
                 <input
                   type="file"
-                  onChange={(e) => e.target.files && setUploadFile(e.target.files[0])}
+                  onChange={(e) => e.target.files?.[0] && setUploadFile(e.target.files[0])}
                   className="hidden"
                   id="file-input"
                 />
                 <label
                   htmlFor="file-input"
-                  className="inline-block px-3 py-1 rounded-lg bg-slate-800 text-[11px] text-cyan-400 font-semibold cursor-pointer hover:bg-slate-700 transition-colors"
+                  style={{
+                    display: 'inline-block',
+                    padding: '5px 14px',
+                    borderRadius: '8px',
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.10)',
+                    fontSize: '0.75rem',
+                    color: 'var(--accent-cyan)',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 160ms',
+                  }}
                 >
                   Browse Files
                 </label>
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-400 mb-1.5">Vault Unlock Password</label>
+                <label className="form-label">Vault Unlock Password</label>
                 <input
                   type="password"
                   value={vaultPassword}
                   onChange={(e) => setVaultPassword(e.target.value)}
                   placeholder="Password required to derive Master Key..."
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500"
+                  style={inputStyle}
+                  onFocus={e => { e.target.style.borderColor = 'rgba(34,211,238,0.45)'; e.target.style.boxShadow = '0 0 0 3px rgba(34,211,238,0.08)'; }}
+                  onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.10)'; e.target.style.boxShadow = 'none'; }}
                 />
               </div>
 
-              {statusMsg && <div className="text-xs text-cyan-400 animate-pulse font-medium text-center">{statusMsg}</div>}
+              {statusMsg && (
+                <div style={{ fontSize: '0.8rem', color: 'var(--accent-cyan)', textAlign: 'center', fontWeight: 600 }}>
+                  {statusMsg}
+                </div>
+              )}
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setUploadModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors"
-                >
+              <div className="modal-footer" style={{ paddingTop: 0, marginTop: 0, border: 'none' }}>
+                <button type="button" onClick={() => setUploadModalOpen(false)} className="btn btn-secondary" style={{ fontSize: '0.8rem' }}>
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-cyan-500 text-black text-xs font-bold hover:bg-cyan-400 transition-colors"
-                >
+                <button type="submit" className="btn btn-primary" style={{ fontSize: '0.8rem' }}>
+                  <Upload style={{ width: 13, height: 13 }} />
                   Encrypt & Upload
                 </button>
               </div>

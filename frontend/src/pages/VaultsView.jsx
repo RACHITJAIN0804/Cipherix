@@ -3,7 +3,7 @@ import { PageLayout } from '../components/PageLayout';
 import { PageHeader } from '../components/PageHeader';
 import { LoadingState, EmptyState, ErrorState, ConfirmDialog } from '../components/CommonUI';
 import { CipherixAPI } from '../api';
-import { Vault, Plus, Lock, Unlock, Key, Trash2, ArrowRight, X } from 'lucide-react';
+import { Vault, Plus, Lock, Unlock, Trash2, ArrowRight, X, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export function VaultsView({ user, onLogout }) {
@@ -12,13 +12,11 @@ export function VaultsView({ user, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Modals state
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [unlockModalOpen, setUnlockModalOpen] = useState(false);
   const [deleteVaultId, setDeleteVaultId] = useState(null);
   const [selectedVault, setSelectedVault] = useState(null);
 
-  // Form states
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [unlockPassword, setUnlockPassword] = useState('');
@@ -37,32 +35,20 @@ export function VaultsView({ user, onLogout }) {
     }
   };
 
-  useEffect(() => {
-    fetchVaults();
-  }, []);
+  useEffect(() => { fetchVaults(); }, []);
 
   const handleCreateVault = async (e) => {
     e.preventDefault();
-    if (!name.trim() || !password.trim()) {
-      alert('Please provide both name and password.');
-      return;
-    }
+    if (!name.trim() || !password.trim()) { alert('Please provide both name and password.'); return; }
     try {
       const res = await CipherixAPI.request('/vaults', {
         method: 'POST',
         body: JSON.stringify({ name, password }),
       });
-      if (res.seed) {
-        setCreatedSeed(res.seed);
-      } else {
-        setCreateModalOpen(false);
-      }
-      setName('');
-      setPassword('');
+      if (res.seed) { setCreatedSeed(res.seed); } else { setCreateModalOpen(false); }
+      setName(''); setPassword('');
       fetchVaults();
-    } catch (err) {
-      alert('Create Vault Error: ' + err.message);
-    }
+    } catch (err) { alert('Create Vault Error: ' + err.message); }
   };
 
   const handleUnlockVault = async (e) => {
@@ -73,32 +59,38 @@ export function VaultsView({ user, onLogout }) {
         method: 'POST',
         body: JSON.stringify({ password: unlockPassword }),
       });
-      setUnlockModalOpen(false);
-      setUnlockPassword('');
-      fetchVaults();
-    } catch (err) {
-      alert('Unlock Error: ' + err.message);
-    }
+      setUnlockModalOpen(false); setUnlockPassword(''); fetchVaults();
+    } catch (err) { alert('Unlock Error: ' + err.message); }
   };
 
   const handleLockVault = async (vaultId) => {
     try {
       await CipherixAPI.request(`/vaults/${vaultId}/lock`, { method: 'POST' });
       fetchVaults();
-    } catch (err) {
-      alert('Lock Error: ' + err.message);
-    }
+    } catch (err) { alert('Lock Error: ' + err.message); }
   };
 
   const handleDeleteVault = async () => {
     if (!deleteVaultId) return;
     try {
       await CipherixAPI.request(`/vaults/${deleteVaultId}`, { method: 'DELETE' });
-      setDeleteVaultId(null);
-      fetchVaults();
-    } catch (err) {
-      alert('Delete Error: ' + err.message);
-    }
+      setDeleteVaultId(null); fetchVaults();
+    } catch (err) { alert('Delete Error: ' + err.message); }
+  };
+
+  /* ---- shared modal input style ---- */
+  const inputStyle = {
+    width: '100%',
+    background: 'var(--bg-input)',
+    border: '1px solid rgba(255,255,255,0.10)',
+    borderRadius: '10px',
+    padding: '10px 14px',
+    fontSize: '0.8125rem',
+    color: 'var(--text-primary)',
+    outline: 'none',
+    transition: 'border-color 160ms ease, box-shadow 160ms ease',
+    boxSizing: 'border-box',
+    fontFamily: 'inherit',
   };
 
   return (
@@ -112,9 +104,9 @@ export function VaultsView({ user, onLogout }) {
       >
         <button
           onClick={() => { setCreatedSeed(''); setCreateModalOpen(true); }}
-          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 text-black font-bold text-xs flex items-center gap-2 hover:opacity-90 transition-opacity shadow-lg shadow-cyan-500/20"
+          className="btn btn-primary"
         >
-          <Plus className="w-4 h-4" />
+          <Plus style={{ width: 15, height: 15 }} />
           <span>Create New Vault</span>
         </button>
       </PageHeader>
@@ -122,7 +114,7 @@ export function VaultsView({ user, onLogout }) {
       {error && <ErrorState message={error} onRetry={fetchVaults} />}
 
       {loading ? (
-        <LoadingState message="Fetching user vaults..." />
+        <LoadingState message="Fetching encrypted vaults..." />
       ) : vaults.length === 0 ? (
         <EmptyState
           title="No Vaults Found"
@@ -133,59 +125,131 @@ export function VaultsView({ user, onLogout }) {
       ) : (
         <div className="cards-grid">
           {vaults.map((v) => (
-            <div key={v.vault_id} className="glass-panel p-6 flex flex-col gap-4 border-cyan-500/20">
-              {/* Vault Header */}
-              <div className="flex justify-between items-start">
-                <div className="w-11 h-11 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 flex items-center justify-center flex-shrink-0">
-                  <Vault className="w-6 h-6" />
+            <div
+              key={v.vault_id}
+              className="glass-panel"
+              style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}
+            >
+              {/* Card header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: '13px',
+                    background: 'rgba(34,211,238,0.09)',
+                    border: '1px solid rgba(34,211,238,0.22)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Vault style={{ width: 22, height: 22, color: 'var(--accent-cyan)' }} />
                 </div>
-                <div className="flex items-center gap-2">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span className={`badge-tag ${v.status === 'unlocked' ? 'badge-emerald' : 'badge-amber'}`}>
-                    {v.status === 'unlocked' ? <Unlock className="w-3 h-3 mr-1" /> : <Lock className="w-3 h-3 mr-1" />}
+                    {v.status === 'unlocked'
+                      ? <Unlock style={{ width: 10, height: 10 }} />
+                      : <Lock style={{ width: 10, height: 10 }} />
+                    }
                     {v.status.toUpperCase()}
                   </span>
                   <button
                     onClick={() => setDeleteVaultId(v.vault_id)}
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 30,
+                      height: 30,
+                      borderRadius: '8px',
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      transition: 'all 160ms',
+                    }}
                     title="Delete Vault"
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = 'rgba(239,68,68,0.10)';
+                      e.currentTarget.style.color = '#f87171';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.color = 'var(--text-muted)';
+                    }}
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 style={{ width: 14, height: 14 }} />
                   </button>
                 </div>
               </div>
 
-              {/* Vault Info */}
-              <div className="flex-1">
-                <h3 className="text-base font-bold font-outfit text-slate-100">{v.name}</h3>
-                <div className="text-xs text-slate-400 font-mono mt-1 truncate">ID: {v.vault_id}</div>
+              {/* Vault info */}
+              <div style={{ flex: 1 }}>
+                <h3
+                  style={{
+                    fontSize: '0.9375rem',
+                    fontWeight: 700,
+                    fontFamily: "'Outfit', sans-serif",
+                    color: 'var(--text-primary)',
+                    margin: '0 0 4px 0',
+                  }}
+                >
+                  {v.name}
+                </h3>
+                <div
+                  style={{
+                    fontSize: '0.6875rem',
+                    color: 'var(--text-muted)',
+                    fontFamily: "'JetBrains Mono', monospace",
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {v.vault_id}
+                </div>
               </div>
 
-              {/* Vault Metadata */}
-              <div className="text-xs flex flex-col gap-1.5 text-slate-400 pt-3 border-t border-slate-800/80">
-                <div className="flex justify-between">
-                  <span>Key Derivation:</span>
-                  <span className="text-emerald-400 font-semibold">Argon2id (m=64MB)</span>
+              {/* Metadata */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  fontSize: '0.78125rem',
+                  color: 'var(--text-secondary)',
+                  paddingTop: '12px',
+                  borderTop: '1px solid rgba(255,255,255,0.06)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Key Derivation</span>
+                  <span style={{ color: 'var(--accent-emerald)', fontWeight: 600 }}>Argon2id (m=64MB)</span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Cipher Algorithm:</span>
-                  <span className="text-purple-400 font-semibold">AES-256-GCM</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Cipher</span>
+                  <span style={{ color: 'var(--accent-purple)', fontWeight: 600 }}>AES-256-GCM</span>
                 </div>
               </div>
 
-              {/* Vault Actions */}
-              <div className="flex gap-2 pt-1">
+              {/* Action buttons */}
+              <div style={{ display: 'flex', gap: '8px' }}>
                 {v.status === 'unlocked' ? (
                   <>
                     <button
                       onClick={() => navigate('/documents')}
-                      className="flex-1 py-2 px-3 rounded-xl bg-cyan-500 text-black text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-cyan-400 transition-colors"
+                      className="btn btn-primary"
+                      style={{ flex: 1, fontSize: '0.8rem' }}
                     >
                       <span>Open Documents</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
+                      <ArrowRight style={{ width: 13, height: 13 }} />
                     </button>
                     <button
                       onClick={() => handleLockVault(v.vault_id)}
-                      className="py-2 px-3 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-amber-400 hover:border-amber-500/40 transition-colors"
+                      className="btn btn-secondary"
+                      style={{ fontSize: '0.8rem', color: 'var(--accent-amber)' }}
                     >
                       Lock
                     </button>
@@ -193,8 +257,10 @@ export function VaultsView({ user, onLogout }) {
                 ) : (
                   <button
                     onClick={() => { setSelectedVault(v); setUnlockModalOpen(true); }}
-                    className="w-full py-2 px-3 rounded-xl bg-slate-900 border border-slate-800 text-xs font-bold text-slate-200 hover:border-cyan-500/40 transition-colors"
+                    className="btn btn-secondary"
+                    style={{ flex: 1, fontSize: '0.8rem' }}
                   >
+                    <Unlock style={{ width: 13, height: 13 }} />
                     Unlock Vault
                   </button>
                 )}
@@ -206,69 +272,92 @@ export function VaultsView({ user, onLogout }) {
 
       {/* Create Vault Modal */}
       {createModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-panel max-w-md w-full p-6 flex flex-col gap-4 relative border-slate-800">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold font-outfit text-slate-100">Create Encrypted Vault</h3>
+        <div className="modal-backdrop">
+          <div className="modal-panel" style={{ maxWidth: '440px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Create Encrypted Vault</h3>
               <button
                 onClick={() => setCreateModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
+                style={{
+                  width: 30, height: 30, borderRadius: 8,
+                  background: 'transparent', border: 'none',
+                  color: 'var(--text-muted)', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 160ms',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
               >
-                <X className="w-5 h-5" />
+                <X style={{ width: 16, height: 16 }} />
               </button>
             </div>
 
             {createdSeed ? (
-              <div className="flex flex-col gap-4 text-xs">
-                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-300">
-                  <strong>Important!</strong> Your vault has been created. Below is your 16-word BIP-39 recovery seed. Store it offline safely. It will NOT be shown again.
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div
+                  style={{
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    background: 'rgba(245,158,11,0.08)',
+                    border: '1px solid rgba(245,158,11,0.30)',
+                    color: '#fcd34d',
+                    fontSize: '0.8rem',
+                    lineHeight: 1.6,
+                  }}
+                >
+                  <strong>Important!</strong> Your vault has been created. Below is your 16-word BIP-39 recovery seed.
+                  Store it offline safely. It will <strong>NOT</strong> be shown again.
                 </div>
-                <div className="font-mono text-cyan-400 p-3 bg-black rounded-xl border border-slate-800 leading-relaxed select-all">
+                <div
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: '0.8125rem',
+                    color: 'var(--accent-cyan)',
+                    padding: '14px 16px',
+                    background: 'rgba(0,0,0,0.40)',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(255,255,255,0.07)',
+                    lineHeight: 1.7,
+                    wordBreak: 'break-word',
+                    userSelect: 'all',
+                  }}
+                >
                   {createdSeed}
                 </div>
-                <button
-                  onClick={() => setCreateModalOpen(false)}
-                  className="w-full py-2.5 rounded-xl bg-cyan-500 text-black font-bold text-xs hover:bg-cyan-400 transition-colors"
-                >
+                <button onClick={() => setCreateModalOpen(false)} className="btn btn-primary" style={{ width: '100%' }}>
+                  <ShieldCheck style={{ width: 14, height: 14 }} />
                   I Have Saved My Seed
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleCreateVault} className="flex flex-col gap-4">
+              <form onSubmit={handleCreateVault} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-400 mb-1.5">Vault Name</label>
+                  <label className="form-label">Vault Name</label>
                   <input
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="e.g. Financial Security Vault"
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500"
+                    style={inputStyle}
+                    onFocus={e => { e.target.style.borderColor = 'rgba(34,211,238,0.45)'; e.target.style.boxShadow = '0 0 0 3px rgba(34,211,238,0.08)'; }}
+                    onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.10)'; e.target.style.boxShadow = 'none'; }}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-400 mb-1.5">Vault Unlock Password</label>
+                  <label className="form-label">Vault Unlock Password</label>
                   <input
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Strong password..."
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500"
+                    style={inputStyle}
+                    onFocus={e => { e.target.style.borderColor = 'rgba(34,211,238,0.45)'; e.target.style.boxShadow = '0 0 0 3px rgba(34,211,238,0.08)'; }}
+                    onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.10)'; e.target.style.boxShadow = 'none'; }}
                   />
                 </div>
-                <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => setCreateModalOpen(false)}
-                    className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 rounded-xl bg-cyan-500 text-black text-xs font-bold hover:bg-cyan-400 transition-colors"
-                  >
-                    Create Vault
-                  </button>
+                <div className="modal-footer" style={{ paddingTop: 0, marginTop: 0, border: 'none' }}>
+                  <button type="button" onClick={() => setCreateModalOpen(false)} className="btn btn-secondary" style={{ fontSize: '0.8rem' }}>Cancel</button>
+                  <button type="submit" className="btn btn-primary" style={{ fontSize: '0.8rem' }}>Create Vault</button>
                 </div>
               </form>
             )}
@@ -278,41 +367,43 @@ export function VaultsView({ user, onLogout }) {
 
       {/* Unlock Vault Modal */}
       {unlockModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-panel max-w-sm w-full p-6 flex flex-col gap-4 relative border-slate-800">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold font-outfit text-slate-100">Unlock {selectedVault?.name}</h3>
+        <div className="modal-backdrop">
+          <div className="modal-panel" style={{ maxWidth: '380px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Unlock {selectedVault?.name}</h3>
               <button
                 onClick={() => setUnlockModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
+                style={{
+                  width: 30, height: 30, borderRadius: 8,
+                  background: 'transparent', border: 'none',
+                  color: 'var(--text-muted)', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 160ms',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
               >
-                <X className="w-5 h-5" />
+                <X style={{ width: 16, height: 16 }} />
               </button>
             </div>
-
-            <form onSubmit={handleUnlockVault} className="flex flex-col gap-4">
+            <form onSubmit={handleUnlockVault} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-400 mb-1.5">Vault Password</label>
+                <label className="form-label">Vault Password</label>
                 <input
                   type="password"
                   value={unlockPassword}
                   onChange={(e) => setUnlockPassword(e.target.value)}
                   placeholder="Enter vault password..."
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500"
+                  style={inputStyle}
+                  onFocus={e => { e.target.style.borderColor = 'rgba(34,211,238,0.45)'; e.target.style.boxShadow = '0 0 0 3px rgba(34,211,238,0.08)'; }}
+                  onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.10)'; e.target.style.boxShadow = 'none'; }}
+                  autoFocus
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setUnlockModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-cyan-500 text-black text-xs font-bold hover:bg-cyan-400 transition-colors"
-                >
+              <div className="modal-footer" style={{ paddingTop: 0, marginTop: 0, border: 'none' }}>
+                <button type="button" onClick={() => setUnlockModalOpen(false)} className="btn btn-secondary" style={{ fontSize: '0.8rem' }}>Cancel</button>
+                <button type="submit" className="btn btn-primary" style={{ fontSize: '0.8rem' }}>
+                  <Unlock style={{ width: 13, height: 13 }} />
                   Unlock
                 </button>
               </div>

@@ -1,7 +1,56 @@
 import React from 'react';
 import { PageLayout } from '../components/PageLayout';
 import { PageHeader } from '../components/PageHeader';
-import { Settings } from 'lucide-react';
+import { Settings, Server, Clock, Link, Cpu, ShieldAlert } from 'lucide-react';
+
+function ConfigCard({ label, value, valueColor, description, icon: Icon, iconColor }) {
+  return (
+    <div
+      style={{
+        padding: '18px 20px',
+        borderRadius: '12px',
+        background: 'rgba(7,10,18,0.50)',
+        border: '1px solid rgba(255,255,255,0.07)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px',
+        transition: 'border-color 160ms ease',
+      }}
+      onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.13)')}
+      onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)')}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {Icon && <Icon style={{ width: 13, height: 13, color: iconColor || 'var(--text-muted)', flexShrink: 0 }} />}
+        <span
+          style={{
+            fontSize: '0.6875rem',
+            fontWeight: 700,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            color: 'var(--text-muted)',
+          }}
+        >
+          {label}
+        </span>
+      </div>
+      <div
+        style={{
+          fontFamily: "'JetBrains Mono', 'Courier New', monospace",
+          fontSize: '0.9rem',
+          fontWeight: 700,
+          color: valueColor || 'var(--accent-cyan)',
+        }}
+      >
+        {value}
+      </div>
+      {description && (
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+          {description}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function SettingsView({ user, onLogout }) {
   return (
@@ -14,49 +63,120 @@ export function SettingsView({ user, onLogout }) {
         description="Runtime configuration, security policy parameters, and system-level settings."
       />
 
-      {/* Settings Cards */}
-      <div className="glass-panel p-6 flex flex-col gap-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col gap-1">
-            <div className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">APP ENVIRONMENT</div>
-            <div className="font-mono text-cyan-400 font-bold text-sm">DEVELOPMENT</div>
-            <div className="text-slate-400 text-[10px]">Production configuration guard active</div>
-          </div>
+      {/* Runtime Config */}
+      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <h3 className="section-title">
+          <Server style={{ width: 16, height: 16, color: 'var(--accent-cyan)' }} />
+          Runtime Configuration
+        </h3>
 
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col gap-1">
-            <div className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">JWT EXPIRATION</div>
-            <div className="font-mono text-purple-400 font-bold text-sm">30 Minutes</div>
-            <div className="text-slate-400 text-[10px]">Refresh token rotation enabled</div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col gap-1">
-            <div className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">BLOCKCHAIN NETWORK</div>
-            <div className="font-mono text-amber-400 font-bold text-sm">local-development</div>
-            <div className="text-slate-400 text-[10px]">Deterministic HMAC notarization</div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col gap-1">
-            <div className="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">LOCAL LLM BACKEND</div>
-            <div className="font-mono text-emerald-400 font-bold text-sm">Ollama (llama3.2:1b)</div>
-            <div className="text-slate-400 text-[10px]">Zero-knowledge local inference</div>
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+          <ConfigCard
+            label="App Environment"
+            value="DEVELOPMENT"
+            valueColor="var(--accent-cyan)"
+            description="Production guard active"
+            icon={Server}
+            iconColor="var(--accent-cyan)"
+          />
+          <ConfigCard
+            label="JWT Expiration"
+            value="30 Minutes"
+            valueColor="var(--accent-purple)"
+            description="Refresh token rotation enabled"
+            icon={Clock}
+            iconColor="var(--accent-purple)"
+          />
+          <ConfigCard
+            label="Blockchain Network"
+            value="local-development"
+            valueColor="var(--accent-amber)"
+            description="Deterministic HMAC notarization"
+            icon={Link}
+            iconColor="var(--accent-amber)"
+          />
+          <ConfigCard
+            label="Local LLM Backend"
+            value="llama3.2:1b"
+            valueColor="var(--accent-emerald)"
+            description="Zero-knowledge local inference"
+            icon={Cpu}
+            iconColor="var(--accent-emerald)"
+          />
         </div>
+      </div>
 
-        <div className="p-5 rounded-xl bg-slate-900/40 border border-slate-800 flex flex-col gap-3 text-xs">
-          <h3 className="font-bold text-slate-200">Rate Throttling Protections</h3>
-          <p className="text-slate-400">
-            Sliding window rate limiters enforce security against brute-force attacks:
-          </p>
-          <ul className="list-disc list-inside text-slate-300 flex flex-col gap-1 font-mono text-[11px]">
-            <li>
-              Auth Endpoints (/login, /register):{' '}
-              <strong>10 requests / minute</strong>
-            </li>
-            <li>
-              Expensive Endpoints (/search, /rag, /blockchain, /computer-access):{' '}
-              <strong>30 requests / minute</strong>
-            </li>
-          </ul>
+      {/* Rate Limiting */}
+      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <h3 className="section-title">
+          <ShieldAlert style={{ width: 16, height: 16, color: 'var(--accent-danger)' }} />
+          Rate Throttling Protections
+        </h3>
+
+        <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>
+          Sliding window rate limiters protect against brute-force and DoS attacks.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {[
+            {
+              endpoint: '/login, /register',
+              limit: '10 req / min',
+              label: 'Auth Endpoints',
+              color: 'var(--accent-danger)',
+            },
+            {
+              endpoint: '/search, /rag, /blockchain, /computer-access',
+              limit: '30 req / min',
+              label: 'Expensive Endpoints',
+              color: 'var(--accent-amber)',
+            },
+          ].map((rule) => (
+            <div
+              key={rule.label}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: '16px',
+                padding: '14px 18px',
+                borderRadius: '10px',
+                background: 'rgba(7,10,18,0.50)',
+                border: '1px solid rgba(255,255,255,0.06)',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                  {rule.label}
+                </div>
+                <div
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: '0.6875rem',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  {rule.endpoint}
+                </div>
+              </div>
+              <span
+                style={{
+                  padding: '4px 12px',
+                  borderRadius: '9999px',
+                  background: `${rule.color}18`,
+                  border: `1px solid ${rule.color}40`,
+                  color: rule.color,
+                  fontSize: '0.8125rem',
+                  fontWeight: 700,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
+                {rule.limit}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
     </PageLayout>

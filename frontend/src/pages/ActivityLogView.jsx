@@ -3,7 +3,19 @@ import { PageLayout } from '../components/PageLayout';
 import { PageHeader } from '../components/PageHeader';
 import { LoadingState, EmptyState, ErrorState } from '../components/CommonUI';
 import { CipherixAPI } from '../api';
-import { History, ShieldCheck, Filter } from 'lucide-react';
+import { History, ShieldCheck, Filter, RefreshCw } from 'lucide-react';
+
+const CATEGORIES = ['ALL', 'AUTH', 'VAULT', 'BLOCKCHAIN', 'COMPUTERACCESS'];
+
+function categoryColor(cat) {
+  switch ((cat || '').toUpperCase()) {
+    case 'AUTH': return 'badge-blue';
+    case 'VAULT': return 'badge-cyan';
+    case 'BLOCKCHAIN': return 'badge-amber';
+    case 'COMPUTERACCESS': return 'badge-purple';
+    default: return 'badge-cyan';
+  }
+}
 
 export function ActivityLogView({ user, onLogout }) {
   const [logs, setLogs] = useState([]);
@@ -17,12 +29,10 @@ export function ActivityLogView({ user, onLogout }) {
     try {
       const secLogs = await CipherixAPI.request('/security/audit-logs');
       const compLogs = await CipherixAPI.request('/computer-access/audit');
-
       const combined = [
         ...(Array.isArray(secLogs) ? secLogs : []),
         ...(Array.isArray(compLogs) ? compLogs : []),
       ];
-
       setLogs(combined);
     } catch (err) {
       setError('Failed to fetch audit logs: ' + err.message);
@@ -31,14 +41,27 @@ export function ActivityLogView({ user, onLogout }) {
     }
   };
 
-  useEffect(() => {
-    fetchLogs();
-  }, []);
+  useEffect(() => { fetchLogs(); }, []);
 
-  const filteredLogs = logs.filter((log) => {
-    if (categoryFilter === 'ALL') return true;
-    return (log.category || '').toUpperCase() === categoryFilter.toUpperCase();
-  });
+  const filteredLogs = logs.filter((log) =>
+    categoryFilter === 'ALL' || (log.category || '').toUpperCase() === categoryFilter.toUpperCase()
+  );
+
+  const selectStyle = {
+    background: 'var(--bg-input)',
+    border: '1px solid rgba(255,255,255,0.10)',
+    borderRadius: '10px',
+    padding: '7px 32px 7px 10px',
+    fontSize: '0.8rem',
+    color: 'var(--text-primary)',
+    cursor: 'pointer',
+    outline: 'none',
+    transition: 'border-color 160ms ease',
+    appearance: 'none',
+    backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'right 8px center',
+  };
 
   return (
     <PageLayout title="Activity Log & Audit Stream" user={user} onLogout={onLogout}>
@@ -49,12 +72,14 @@ export function ActivityLogView({ user, onLogout }) {
         title="System Activity & Audit Log Stream"
         description="Structured audit events across authentication, vault key operations, document access, and computer actions."
       >
-        <div className="flex items-center gap-2">
-          <Filter className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Filter style={{ width: 13, height: 13, color: 'var(--text-muted)', flexShrink: 0 }} />
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-cyan-500 transition-colors"
+            style={selectStyle}
+            onFocus={e => (e.currentTarget.style.borderColor = 'rgba(34,211,238,0.40)')}
+            onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.10)')}
           >
             <option value="ALL">All Categories</option>
             <option value="AUTH">Authentication</option>
@@ -64,9 +89,18 @@ export function ActivityLogView({ user, onLogout }) {
           </select>
         </div>
         <span className="badge-tag badge-emerald">
-          <ShieldCheck className="w-3.5 h-3.5" />
+          <ShieldCheck style={{ width: 12, height: 12 }} />
           <span>Zero Secrets Logged</span>
         </span>
+        <button
+          onClick={fetchLogs}
+          className="btn btn-secondary"
+          style={{ fontSize: '0.78rem', padding: '7px 12px' }}
+          title="Refresh logs"
+        >
+          <RefreshCw style={{ width: 13, height: 13, ...(loading ? { animation: 'spin 1s linear infinite' } : {}) }} />
+          Refresh
+        </button>
       </PageHeader>
 
       {error && <ErrorState message={error} onRetry={fetchLogs} />}
@@ -74,34 +108,86 @@ export function ActivityLogView({ user, onLogout }) {
       {loading ? (
         <LoadingState message="Fetching system audit stream..." />
       ) : filteredLogs.length === 0 ? (
-        <EmptyState title="No Audit Events Recorded" description="No activity logs match the selected filter." />
+        <EmptyState
+          title="No Audit Events Recorded"
+          description="No activity logs match the selected filter. Events will appear here as system operations are performed."
+        />
       ) : (
-        <div className="glass-panel overflow-hidden p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+        <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+          {/* Summary bar */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 20px',
+              borderBottom: '1px solid rgba(255,255,255,0.06)',
+              background: 'rgba(0,0,0,0.25)',
+            }}
+          >
+            <span style={{ fontSize: '0.78125rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+              {filteredLogs.length} event{filteredLogs.length !== 1 ? 's' : ''} recorded
+            </span>
+            {categoryFilter !== 'ALL' && (
+              <span className={`badge-tag ${categoryColor(categoryFilter)}`}>
+                {categoryFilter}
+              </span>
+            )}
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data-table">
               <thead>
-                <tr className="bg-slate-900/80 text-slate-400 uppercase font-bold text-[11px] border-b border-slate-800">
-                  <th className="p-4">Timestamp</th>
-                  <th className="p-4">Category</th>
-                  <th className="p-4">Action</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4">Event Details</th>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Category</th>
+                  <th>Action</th>
+                  <th>Status</th>
+                  <th>Event Details</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody>
                 {filteredLogs.map((log, index) => (
-                  <tr key={log.id || index} className="hover:bg-slate-900/40 transition-colors">
-                    <td className="p-4 text-slate-400 font-mono text-[11px]">
-                      {new Date(log.timestamp).toLocaleString()}
+                  <tr key={log.id || index}>
+                    <td>
+                      <span
+                        style={{
+                          fontFamily: "'JetBrains Mono', monospace",
+                          fontSize: '0.6875rem',
+                          color: 'var(--text-muted)',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {new Date(log.timestamp).toLocaleString()}
+                      </span>
                     </td>
-                    <td className="p-4 font-semibold text-slate-100">{log.category || 'System'}</td>
-                    <td className="p-4 text-cyan-400 font-mono">{log.action}</td>
-                    <td className="p-4">
+                    <td>
+                      <span className={`badge-tag ${categoryColor(log.category)}`} style={{ fontSize: '0.6875rem' }}>
+                        {log.category || 'System'}
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        style={{
+                          fontFamily: "'JetBrains Mono', monospace",
+                          fontSize: '0.78125rem',
+                          color: 'var(--accent-cyan)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {log.action}
+                      </span>
+                    </td>
+                    <td>
                       <span className={`badge-tag ${log.status === 'SUCCESS' ? 'badge-emerald' : 'badge-rose'}`}>
                         {log.status || 'SUCCESS'}
                       </span>
                     </td>
-                    <td className="p-4 text-slate-300 text-xs">{log.details}</td>
+                    <td>
+                      <span style={{ fontSize: '0.78125rem', color: 'var(--text-secondary)' }}>
+                        {log.details}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PageLayout } from '../components/PageLayout';
 import { PageHeader } from '../components/PageHeader';
 import { VaultSelector, ErrorState } from '../components/CommonUI';
 import { CipherixAPI } from '../api';
-import { Brain, ShieldCheck, Send, Bot, User, Trash2, AlertTriangle } from 'lucide-react';
+import { Brain, ShieldCheck, Send, Bot, User, Trash2, AlertTriangle, Sparkles } from 'lucide-react';
 
 export function AIAssistantView({ user, onLogout }) {
   const [vaults, setVaults] = useState([]);
@@ -12,13 +12,14 @@ export function AIAssistantView({ user, onLogout }) {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      text: 'Hello! I am your Cipherix AI Security Assistant. Select a vault and ask any question—I will retrieve relevant encrypted document chunks and generate grounded answers using local Ollama LLM.',
+      text: 'Hello! I am your Cipherix AI Security Assistant. Select a vault and ask any question — I will retrieve relevant encrypted document chunks and generate grounded answers using local Ollama LLM.',
       sources: [],
       model: 'llama3.2:1b',
     },
   ]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const messagesEndRef = useRef(null);
 
   useEffect(() => {
     async function loadVaults() {
@@ -26,15 +27,16 @@ export function AIAssistantView({ user, onLogout }) {
         const data = await CipherixAPI.request('/vaults');
         const vList = Array.isArray(data) ? data : [];
         setVaults(vList);
-        if (vList.length > 0 && !selectedVaultId) {
-          setSelectedVaultId(vList[0].vault_id);
-        }
-      } catch (err) {
-        console.warn(err);
-      }
+        if (vList.length > 0 && !selectedVaultId) setSelectedVaultId(vList[0].vault_id);
+      } catch (err) { console.warn(err); }
     }
     loadVaults();
   }, []);
+
+  // Auto-scroll to bottom on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, loading]);
 
   const handleSend = async (e) => {
     if (e) e.preventDefault();
@@ -56,7 +58,6 @@ export function AIAssistantView({ user, onLogout }) {
           similarity_threshold: 0.3,
         }),
       });
-
       setMessages((prev) => [
         ...prev,
         {
@@ -89,91 +90,190 @@ export function AIAssistantView({ user, onLogout }) {
     }
   };
 
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
   return (
     <PageLayout title="AI Security Assistant (Local RAG)" user={user} onLogout={onLogout} flexContent>
-      {/* Top Bar: status badges + vault selector */}
-      <div className="flex flex-wrap justify-between items-center gap-3">
-        <div className="flex items-center gap-3">
+      {/* Top Bar */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+        <PageHeader
+          icon={Brain}
+          iconColor="text-emerald-400"
+          title="AI Security Assistant"
+          description="Local RAG · Vault-isolated · Zero external data leak"
+        />
+        {/* Right side controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
           <span className="badge-tag badge-emerald">
-            <ShieldCheck className="w-3.5 h-3.5" />
+            <ShieldCheck style={{ width: 12, height: 12 }} />
             <span>Prompt Injection Shield Active</span>
           </span>
-          <span className="text-xs text-slate-400 font-medium hidden sm:inline">
-            Local Ollama Model: <strong className="text-slate-200">llama3.2:1b</strong>
+          <span style={{ fontSize: '0.78125rem', color: 'var(--text-muted)', fontWeight: 500 }} className="hidden sm:inline">
+            Model: <strong style={{ color: 'var(--text-secondary)' }}>llama3.2:1b</strong>
           </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <VaultSelector vaults={vaults} selectedVaultId={selectedVaultId} onChange={setSelectedVaultId} />
+          <VaultSelector vaults={vaults} selectedVaultId={selectedVaultId} onChange={setSelectedVaultId} label="" />
           <button
             onClick={() => setMessages([])}
-            className="p-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-900 border border-transparent hover:border-slate-800 transition-all"
-            title="Clear Chat Stream"
+            className="btn btn-ghost"
+            style={{ padding: '7px 10px' }}
+            title="Clear chat"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 style={{ width: 14, height: 14 }} />
           </button>
         </div>
       </div>
 
       {error && <ErrorState message={error} />}
 
-      {/* Chat Container — fills remaining vertical space */}
-      <div className="glass-panel flex flex-col overflow-hidden border-emerald-500/20" style={{ flex: '1 1 0', minHeight: '400px' }}>
-        {/* Chat Info Bar */}
-        <div className="px-4 py-2.5 border-b border-slate-800 text-[11px] text-slate-400 flex justify-between items-center bg-slate-900/50 flex-shrink-0">
-          <span>Answers are grounded strictly in the selected vault documents. Zero external data leak.</span>
-          <span className="text-emerald-400 font-semibold font-mono">Vault Isolated</span>
+      {/* Chat Container */}
+      <div
+        className="glass-panel"
+        style={{
+          flex: '1 1 0',
+          minHeight: '400px',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          borderColor: 'rgba(16,185,129,0.15)',
+        }}
+      >
+        {/* Info Bar */}
+        <div
+          style={{
+            padding: '10px 18px',
+            borderBottom: '1px solid rgba(255,255,255,0.06)',
+            background: 'rgba(0,0,0,0.25)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ fontSize: '0.78125rem', color: 'var(--text-muted)' }}>
+            Answers are grounded strictly in selected vault documents.
+          </span>
+          <span style={{ fontSize: '0.78125rem', color: 'var(--accent-emerald)', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>
+            Vault Isolated
+          </span>
         </div>
 
-        {/* Message Stream */}
-        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+        {/* Message stream */}
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+          }}
+        >
           {messages.map((m, i) => (
             <div
               key={i}
-              className={`flex gap-3 max-w-[88%] ${m.role === 'user' ? 'ml-auto flex-row-reverse' : ''}`}
+              style={{
+                display: 'flex',
+                gap: '12px',
+                maxWidth: '88%',
+                ...(m.role === 'user' ? { marginLeft: 'auto', flexDirection: 'row-reverse' } : {}),
+              }}
             >
+              {/* Avatar */}
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs flex-shrink-0 ${
-                  m.role === 'user'
-                    ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40'
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  border: '1px solid',
+                  ...(m.role === 'user'
+                    ? { background: 'rgba(34,211,238,0.15)', borderColor: 'rgba(34,211,238,0.35)', color: 'var(--accent-cyan)' }
                     : m.isWarning
-                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
-                    : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                }`}
+                    ? { background: 'rgba(245,158,11,0.15)', borderColor: 'rgba(245,158,11,0.35)', color: 'var(--accent-amber)' }
+                    : { background: 'rgba(16,185,129,0.15)', borderColor: 'rgba(16,185,129,0.35)', color: 'var(--accent-emerald)' }
+                  ),
+                }}
               >
                 {m.role === 'user' ? (
-                  <User className="w-4 h-4" />
+                  <User style={{ width: 15, height: 15 }} />
                 ) : m.isWarning ? (
-                  <AlertTriangle className="w-4 h-4" />
+                  <AlertTriangle style={{ width: 15, height: 15 }} />
                 ) : (
-                  <Bot className="w-4 h-4" />
+                  <Bot style={{ width: 15, height: 15 }} />
                 )}
               </div>
 
+              {/* Bubble */}
               <div
-                className={`p-4 rounded-2xl border text-xs flex flex-col gap-2 ${
-                  m.role === 'user'
-                    ? 'bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border-cyan-500/30 text-slate-100'
+                style={{
+                  padding: '14px 16px',
+                  borderRadius: '16px',
+                  border: '1px solid',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  ...(m.role === 'user'
+                    ? {
+                        background: 'linear-gradient(135deg, rgba(34,211,238,0.10), rgba(168,85,247,0.10))',
+                        borderColor: 'rgba(34,211,238,0.25)',
+                        color: 'var(--text-primary)',
+                        borderTopRightRadius: '4px',
+                      }
                     : m.isWarning
-                    ? 'bg-amber-500/5 border-amber-500/30 text-amber-200'
-                    : 'bg-slate-900/90 border-slate-800 text-slate-200'
-                }`}
+                    ? {
+                        background: 'rgba(245,158,11,0.06)',
+                        borderColor: 'rgba(245,158,11,0.25)',
+                        color: '#fcd34d',
+                        borderTopLeftRadius: '4px',
+                      }
+                    : {
+                        background: 'rgba(7,10,18,0.70)',
+                        borderColor: 'rgba(255,255,255,0.07)',
+                        color: 'var(--text-primary)',
+                        borderTopLeftRadius: '4px',
+                      }
+                  ),
+                }}
               >
                 {m.model && (
-                  <div className="text-[10px] text-slate-400 font-mono">Engine: {m.model}</div>
+                  <div
+                    style={{
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: '0.6875rem',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    Engine: {m.model}
+                  </div>
                 )}
-                <p className="leading-relaxed whitespace-pre-wrap">{m.text}</p>
+                <p style={{ fontSize: '0.875rem', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {m.text}
+                </p>
 
                 {m.sources && m.sources.length > 0 && (
-                  <div className="pt-2 border-t border-slate-800 flex flex-wrap gap-1.5 text-[10px]">
-                    <span className="text-slate-400 font-semibold">Grounded Sources:</span>
+                  <div
+                    style={{
+                      paddingTop: '10px',
+                      borderTop: '1px solid rgba(255,255,255,0.08)',
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '6px',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Sources:</span>
                     {m.sources.map((s, idx) => (
-                      <span
-                        key={idx}
-                        className="badge-tag badge-purple text-[10px]"
-                        title={`Chunk #${s.chunk_index}`}
-                      >
-                        📄 {s.filename} ({(s.similarity * 100).toFixed(0)}%)
+                      <span key={idx} className="badge-tag badge-purple" style={{ fontSize: '0.6875rem' }} title={`Chunk #${s.chunk_index}`}>
+                        <Sparkles style={{ width: 9, height: 9 }} />
+                        {s.filename} ({(s.similarity * 100).toFixed(0)}%)
                       </span>
                     ))}
                   </div>
@@ -182,37 +282,110 @@ export function AIAssistantView({ user, onLogout }) {
             </div>
           ))}
 
+          {/* Typing indicator */}
           {loading && (
-            <div className="flex gap-3 max-w-[85%]">
-              <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center flex-shrink-0">
-                <Bot className="w-4 h-4" />
+            <div style={{ display: 'flex', gap: '12px', maxWidth: '85%' }}>
+              <div
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: '50%',
+                  background: 'rgba(16,185,129,0.15)',
+                  border: '1px solid rgba(16,185,129,0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Bot style={{ width: 15, height: 15, color: 'var(--accent-emerald)' }} />
               </div>
-              <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 text-xs text-emerald-400 animate-pulse flex items-center gap-2">
-                <Brain className="w-4 h-4 animate-spin" />
-                <span>Retrieving context chunks & generating Ollama answer...</span>
+              <div
+                style={{
+                  padding: '14px 16px',
+                  borderRadius: '16px',
+                  borderTopLeftRadius: '4px',
+                  background: 'rgba(7,10,18,0.70)',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  color: 'var(--accent-emerald)',
+                  fontSize: '0.8125rem',
+                }}
+              >
+                <Brain style={{ width: 15, height: 15, animation: 'spin 1.5s linear infinite' }} />
+                <span>Retrieving vault context & generating answer...</span>
               </div>
             </div>
           )}
+
+          <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Bar */}
+        {/* Input bar */}
         <form
           onSubmit={handleSend}
-          className="px-4 py-3 border-t border-slate-800 flex gap-3 bg-slate-950/80 flex-shrink-0"
+          style={{
+            padding: '14px 16px',
+            borderTop: '1px solid rgba(255,255,255,0.07)',
+            background: 'rgba(4,6,12,0.60)',
+            display: 'flex',
+            gap: '10px',
+            flexShrink: 0,
+            alignItems: 'flex-end',
+          }}
         >
-          <input
-            type="text"
+          <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Ask a question about your encrypted vault documents..."
-            className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 transition-colors"
+            onKeyDown={handleKeyDown}
+            placeholder="Ask a question about your encrypted vault documents... (Enter to send, Shift+Enter for newline)"
+            rows={1}
+            style={{
+              flex: 1,
+              background: 'var(--bg-input)',
+              border: '1px solid rgba(255,255,255,0.10)',
+              borderRadius: '12px',
+              padding: '11px 14px',
+              fontSize: '0.875rem',
+              color: 'var(--text-primary)',
+              outline: 'none',
+              resize: 'none',
+              fontFamily: 'inherit',
+              lineHeight: 1.5,
+              transition: 'border-color 160ms ease, box-shadow 160ms ease',
+              maxHeight: '120px',
+              overflow: 'auto',
+            }}
+            onFocus={e => {
+              e.target.style.borderColor = 'rgba(16,185,129,0.40)';
+              e.target.style.boxShadow = '0 0 0 3px rgba(16,185,129,0.07)';
+            }}
+            onBlur={e => {
+              e.target.style.borderColor = 'rgba(255,255,255,0.10)';
+              e.target.style.boxShadow = 'none';
+            }}
           />
           <button
             type="submit"
             disabled={loading || !selectedVaultId}
-            className="px-6 py-3 rounded-xl bg-emerald-500 text-black font-bold text-xs flex items-center gap-2 hover:bg-emerald-400 transition-colors disabled:opacity-60"
+            className="btn"
+            style={{
+              background: 'var(--accent-emerald)',
+              color: '#050a12',
+              padding: '11px 18px',
+              borderRadius: '12px',
+              gap: '7px',
+              flexShrink: 0,
+              alignSelf: 'flex-end',
+              boxShadow: '0 4px 14px rgba(16,185,129,0.22)',
+              transition: 'all 160ms',
+            }}
+            onMouseEnter={e => { if (!loading) { e.currentTarget.style.background = '#34d399'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'var(--accent-emerald)'; e.currentTarget.style.transform = 'translateY(0)'; }}
           >
-            <Send className="w-4 h-4" />
+            <Send style={{ width: 15, height: 15 }} />
             <span>Ask RAG</span>
           </button>
         </form>

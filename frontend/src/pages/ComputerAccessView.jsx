@@ -3,7 +3,7 @@ import { PageLayout } from '../components/PageLayout';
 import { PageHeader } from '../components/PageHeader';
 import { ErrorState } from '../components/CommonUI';
 import { CipherixAPI } from '../api';
-import { Terminal, Play, Folder, FileText, CheckCircle2 } from 'lucide-react';
+import { Terminal, Play, FolderOpen, ShieldCheck, ShieldOff, Folder } from 'lucide-react';
 
 export function ComputerAccessView({ user, onLogout }) {
   const [enabled, setEnabled] = useState(false);
@@ -25,19 +25,13 @@ export function ComputerAccessView({ user, onLogout }) {
       setEnabled(statusRes.enabled ?? false);
       if (statusRes.workspace_root) setWorkspaceRoot(statusRes.workspace_root);
       if (statusRes.actions_allowlist) setAllowlist(statusRes.actions_allowlist);
-
       const auditRes = await CipherixAPI.request('/computer-access/audit');
       setAuditLogs(Array.isArray(auditRes) ? auditRes : []);
-    } catch (err) {
-      console.warn(err);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { console.warn(err); }
+    finally { setLoading(false); }
   };
 
-  useEffect(() => {
-    fetchStatus();
-  }, []);
+  useEffect(() => { fetchStatus(); }, []);
 
   const handleToggle = async () => {
     try {
@@ -46,25 +40,17 @@ export function ComputerAccessView({ user, onLogout }) {
         body: JSON.stringify({ enabled: !enabled }),
       });
       setEnabled(res.enabled ?? !enabled);
-    } catch (err) {
-      alert('Toggle Error: ' + err.message);
-    }
+    } catch (err) { alert('Toggle Error: ' + err.message); }
   };
 
   const handleExecuteAction = async (e) => {
     e.preventDefault();
     if (!enabled) {
-      alert(
-        'Computer Access is currently DISABLED. Toggle Master Access to ENABLE before executing actions.'
-      );
+      alert('Computer Access is DISABLED. Toggle Master Access to ENABLE before executing actions.');
       return;
     }
-
     const params = { path: pathParam };
-    if (selectedAction === 'create_text_file') {
-      params.content = contentParam;
-    }
-
+    if (selectedAction === 'create_text_file') params.content = contentParam;
     setError('');
     try {
       const res = await CipherixAPI.request('/computer-access/action', {
@@ -73,9 +59,31 @@ export function ComputerAccessView({ user, onLogout }) {
       });
       setActionResult(res);
       fetchStatus();
-    } catch (err) {
-      setError('Action Execution Rejected: ' + err.message);
-    }
+    } catch (err) { setError('Action Execution Rejected: ' + err.message); }
+  };
+
+  const inputStyle = {
+    width: '100%',
+    background: 'var(--bg-input)',
+    border: '1px solid rgba(255,255,255,0.10)',
+    borderRadius: '10px',
+    padding: '10px 14px',
+    fontSize: '0.8125rem',
+    color: 'var(--text-primary)',
+    outline: 'none',
+    transition: 'border-color 160ms ease, box-shadow 160ms ease',
+    boxSizing: 'border-box',
+    fontFamily: 'inherit',
+  };
+
+  const selectStyle = {
+    ...inputStyle,
+    appearance: 'none',
+    backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")",
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'right 12px center',
+    paddingRight: '36px',
+    cursor: 'pointer',
   };
 
   return (
@@ -89,12 +97,24 @@ export function ComputerAccessView({ user, onLogout }) {
       >
         <button
           onClick={handleToggle}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
-            enabled
-              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/30'
-              : 'bg-rose-500/20 text-rose-400 border-rose-500/40 hover:bg-rose-500/30'
-          }`}
+          className="btn"
+          style={{
+            background: enabled ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+            border: `1px solid ${enabled ? 'rgba(16,185,129,0.35)' : 'rgba(239,68,68,0.35)'}`,
+            color: enabled ? 'var(--accent-emerald)' : '#f87171',
+            transition: 'all 160ms',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = enabled ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = enabled ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)';
+          }}
         >
+          {enabled
+            ? <ShieldCheck style={{ width: 14, height: 14 }} />
+            : <ShieldOff style={{ width: 14, height: 14 }} />
+          }
           MASTER ACCESS: {enabled ? 'ENABLED' : 'DISABLED'}
         </button>
       </PageHeader>
@@ -102,118 +122,184 @@ export function ComputerAccessView({ user, onLogout }) {
       {error && <ErrorState message={error} />}
 
       {/* Status Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-        <div className="glass-panel p-4 flex flex-col gap-1">
-          <div className="text-slate-400 font-semibold">Workspace Boundary</div>
-          <div className="font-mono text-cyan-400 font-bold truncate">{workspaceRoot}</div>
-          <div className="text-[10px] text-slate-400">PathGuard traversal strictly blocked</div>
-        </div>
-
-        <div className="glass-panel p-4 flex flex-col gap-1">
-          <div className="text-slate-400 font-semibold">Action Allowlist</div>
-          <div className="font-bold text-purple-400">{allowlist.join(' • ')}</div>
-          <div className="text-[10px] text-slate-400">Arbitrary command execution blocked</div>
-        </div>
-
-        <div className="glass-panel p-4 flex flex-col gap-1">
-          <div className="text-slate-400 font-semibold">Audit Compliance</div>
-          <div className="font-bold text-emerald-400">Zero Secrets Logged</div>
-          <div className="text-[10px] text-slate-400">Structured Audit Trail Stream</div>
-        </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+        {[
+          {
+            label: 'Workspace Boundary',
+            value: workspaceRoot,
+            valueColor: 'var(--accent-cyan)',
+            note: 'PathGuard traversal strictly blocked',
+            icon: Folder,
+          },
+          {
+            label: 'Action Allowlist',
+            value: allowlist.join(' • '),
+            valueColor: 'var(--accent-purple)',
+            note: 'Arbitrary command execution blocked',
+            icon: ShieldCheck,
+          },
+          {
+            label: 'Audit Compliance',
+            value: 'Zero Secrets Logged',
+            valueColor: 'var(--accent-emerald)',
+            note: 'Structured Audit Trail Stream',
+            icon: ShieldCheck,
+          },
+        ].map(({ label, value, valueColor, note, icon: Icon }) => (
+          <div
+            key={label}
+            className="glass-panel"
+            style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '8px' }}
+          >
+            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{label}</div>
+            <div
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '0.825rem',
+                fontWeight: 700,
+                color: valueColor,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+              title={value}
+            >
+              {value}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{note}</div>
+          </div>
+        ))}
       </div>
 
       {/* Action Execution Panel */}
-      <div className="glass-panel p-6 flex flex-col gap-6 border-blue-500/20">
-        <h3 className="text-sm font-bold font-outfit text-slate-100">Execute Allowlisted Action</h3>
+      <div
+        className="glass-panel"
+        style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', borderColor: 'rgba(59,130,246,0.15)' }}
+      >
+        <h3 className="section-title">
+          <Play style={{ width: 15, height: 15, color: 'var(--accent-blue)' }} />
+          Execute Allowlisted Action
+        </h3>
 
-        <form onSubmit={handleExecuteAction} className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <form onSubmit={handleExecuteAction} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
             <div>
-              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1.5">
-                Action Name
-              </label>
+              <label className="form-label">Action Name</label>
               <select
                 value={selectedAction}
                 onChange={(e) => setSelectedAction(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-blue-500 transition-colors"
+                style={selectStyle}
+                onFocus={e => { e.target.style.borderColor = 'rgba(59,130,246,0.45)'; e.target.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.08)'; }}
+                onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.10)'; e.target.style.boxShadow = 'none'; }}
               >
                 {allowlist.map((act) => (
-                  <option key={act} value={act}>
-                    {act}
-                  </option>
+                  <option key={act} value={act}>{act}</option>
                 ))}
               </select>
             </div>
-
             <div>
-              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1.5">
-                Target Relative Path
-              </label>
+              <label className="form-label">Target Relative Path</label>
               <input
                 type="text"
                 value={pathParam}
                 onChange={(e) => setPathParam(e.target.value)}
                 placeholder="e.g. 'notes/todo.txt' or '.'"
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-blue-500 transition-colors"
+                style={inputStyle}
+                onFocus={e => { e.target.style.borderColor = 'rgba(59,130,246,0.45)'; e.target.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.08)'; }}
+                onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.10)'; e.target.style.boxShadow = 'none'; }}
               />
             </div>
-
-            <div className="flex items-end">
+            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
               <button
                 type="submit"
-                className="w-full px-4 py-2.5 rounded-xl bg-blue-500 text-black font-bold text-xs flex items-center justify-center gap-2 hover:bg-blue-400 transition-colors"
+                className="btn"
+                style={{
+                  width: '100%',
+                  background: 'var(--accent-blue)',
+                  color: '#050a12',
+                  boxShadow: '0 4px 14px rgba(59,130,246,0.22)',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#60a5fa'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--accent-blue)'; e.currentTarget.style.transform = 'translateY(0)'; }}
               >
-                <Play className="w-3.5 h-3.5" />
-                <span>Execute Action</span>
+                <Play style={{ width: 13, height: 13 }} />
+                Execute Action
               </button>
             </div>
           </div>
 
           {selectedAction === 'create_text_file' && (
-            <div className="flex flex-col gap-3 pt-2 border-t border-slate-800">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', paddingTop: '14px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
               <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1.5">
-                  File Content
-                </label>
+                <label className="form-label">File Content</label>
                 <textarea
                   value={contentParam}
                   onChange={(e) => setContentParam(e.target.value)}
                   placeholder="Text content to write inside workspace file..."
-                  className="w-full h-20 bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-blue-500 transition-colors resize-none"
+                  rows={4}
+                  style={{ ...inputStyle, resize: 'vertical', minHeight: '80px' }}
+                  onFocus={e => { e.target.style.borderColor = 'rgba(59,130,246,0.45)'; e.target.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.08)'; }}
+                  onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.10)'; e.target.style.boxShadow = 'none'; }}
                 />
               </div>
-
-              <div className="flex items-center gap-2">
+              <label
+                style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
+              >
                 <input
                   type="checkbox"
                   id="approved-check"
                   checked={approvedParam}
                   onChange={(e) => setApprovedParam(e.target.checked)}
-                  className="accent-blue-500 w-4 h-4"
+                  style={{ accentColor: 'var(--accent-blue)', width: 16, height: 16, cursor: 'pointer' }}
                 />
-                <label
-                  htmlFor="approved-check"
-                  className="text-xs text-slate-300 font-semibold cursor-pointer"
-                >
+                <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
                   Explicit User Approval Confirmed
-                </label>
-              </div>
+                </span>
+              </label>
             </div>
           )}
         </form>
 
         {/* Result Box */}
         {actionResult && (
-          <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-col gap-2 text-xs">
-            <div className="flex justify-between items-center">
-              <span className="font-bold text-emerald-400">
+          <div
+            style={{
+              padding: '16px',
+              borderRadius: '10px',
+              background: 'rgba(0,0,0,0.40)',
+              border: '1px solid rgba(255,255,255,0.07)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--accent-emerald)' }}>
                 Action Result ({actionResult.status})
               </span>
-              <span className="font-mono text-[10px] text-slate-500">
+              <span
+                style={{
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: '0.6875rem',
+                  color: 'var(--text-muted)',
+                }}
+              >
                 ID: {actionResult.action_id}
               </span>
             </div>
-            <pre className="font-mono text-cyan-300 p-3 bg-black rounded-lg text-[11px] overflow-x-auto">
+            <pre
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '0.8rem',
+                color: 'var(--accent-cyan)',
+                padding: '12px 14px',
+                background: 'rgba(0,0,0,0.50)',
+                borderRadius: '8px',
+                overflow: 'auto',
+                margin: 0,
+                lineHeight: 1.6,
+              }}
+            >
               {JSON.stringify(actionResult.result, null, 2)}
             </pre>
           </div>

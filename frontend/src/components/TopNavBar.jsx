@@ -1,36 +1,112 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, ArrowLeft } from 'lucide-react';
+import { Shield, ArrowLeft, ChevronRight } from 'lucide-react';
 import { UserProfile } from './UserProfile';
 
 export function TopNavBar({ title, user, onLogout }) {
   const navigate = useNavigate();
 
   return (
-    <header className="sticky top-0 z-40 bg-[#080B12]/90 backdrop-blur-xl border-b border-slate-800/80 px-6 py-3">
-      <div className="max-w-[1400px] mx-auto flex items-center justify-between">
-        {/* Left: Back to Command Center & Page Title */}
-        <div className="flex items-center gap-4">
+    <header
+      style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 40,
+        background: 'rgba(8, 11, 18, 0.92)',
+        backdropFilter: 'blur(20px)',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.07)',
+        WebkitBackdropFilter: 'blur(20px)',
+      }}
+    >
+      <div
+        style={{
+          maxWidth: '1360px',
+          margin: '0 auto',
+          padding: '0 28px',
+          height: '58px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '16px',
+        }}
+      >
+        {/* Left: Back breadcrumb + page title */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
           <button
             onClick={() => navigate('/')}
-            className="flex items-center gap-2 text-xs font-semibold text-slate-300 hover:text-cyan-400 px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-cyan-500/40 transition-all group"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              borderRadius: '10px',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              color: '#94A3B8',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 180ms ease',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.color = '#22D3EE';
+              e.currentTarget.style.borderColor = 'rgba(34,211,238,0.30)';
+              e.currentTarget.style.background = 'rgba(34,211,238,0.06)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.color = '#94A3B8';
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+              e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+            }}
           >
-            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
-            <span>Command Center</span>
+            <ArrowLeft style={{ width: 13, height: 13, flexShrink: 0 }} />
+            <span className="hidden sm:inline">Command Center</span>
           </button>
 
-          <div className="h-5 w-[1px] bg-slate-800 hidden sm:block"></div>
+          {/* Divider */}
+          <ChevronRight style={{ width: 14, height: 14, color: '#334155', flexShrink: 0 }} />
 
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 flex items-center justify-center">
-              <Shield className="w-4 h-4 text-cyan-400" />
+          {/* Page title with icon */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: '9px',
+                background: 'rgba(34,211,238,0.09)',
+                border: '1px solid rgba(34,211,238,0.22)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <Shield style={{ width: 15, height: 15, color: '#22D3EE' }} />
             </div>
-            <h1 className="text-lg font-bold font-outfit text-slate-100">{title}</h1>
+            <h1
+              style={{
+                fontFamily: "'Outfit', sans-serif",
+                fontSize: '1rem',
+                fontWeight: 700,
+                color: '#E2E8F0',
+                margin: 0,
+                letterSpacing: '-0.01em',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {title}
+            </h1>
           </div>
         </div>
 
-        {/* Right: User Profile */}
-        <UserProfile user={user} onLogout={onLogout} />
+        {/* Right: User profile */}
+        <div style={{ flexShrink: 0 }}>
+          <UserProfile user={user} onLogout={onLogout} />
+        </div>
       </div>
     </header>
   );

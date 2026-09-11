@@ -5,12 +5,20 @@ import React from 'react';
  *
  * Props:
  *  - icon       : A Lucide icon component (e.g. Shield)
- *  - iconColor  : Tailwind text color class for the icon (default: 'text-cyan-400')
+ *  - iconColor  : CSS color string or Tailwind class for the icon (default: '#22D3EE')
+ *  - iconBg     : CSS background for icon container (optional)
+ *  - iconBorder : CSS border for icon container (optional)
  *  - title      : Main section heading text
  *  - description: Subtitle / description below the title
  *  - children   : Right-side slot — action buttons, selectors, badges, etc.
  */
-export function PageHeader({ icon: Icon, iconColor = 'text-cyan-400', title, description, children }) {
+export function PageHeader({
+  icon: Icon,
+  iconColor = 'text-cyan-400',
+  title,
+  description,
+  children,
+}) {
   return (
     <div className="page-header-bar">
       <div className="page-header-left">
@@ -19,7 +27,7 @@ export function PageHeader({ icon: Icon, iconColor = 'text-cyan-400', title, des
             <Icon className="w-5 h-5" />
           </div>
         )}
-        <div>
+        <div className="page-header-text">
           <h2 className="page-header-title">{title}</h2>
           {description && (
             <p className="page-header-desc">{description}</p>
