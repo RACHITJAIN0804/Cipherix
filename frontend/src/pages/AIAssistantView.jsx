@@ -99,34 +99,29 @@ export function AIAssistantView({ user, onLogout }) {
 
   return (
     <PageLayout title="AI Security Assistant (Local RAG)" user={user} onLogout={onLogout} flexContent>
-      {/* Top Bar */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
-        <PageHeader
-          icon={Brain}
-          iconColor="text-emerald-400"
-          title="AI Security Assistant"
-          description="Local RAG · Vault-isolated · Zero external data leak"
-        />
-        {/* Right side controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-          <span className="badge-tag badge-emerald">
-            <ShieldCheck style={{ width: 12, height: 12 }} />
-            <span>Prompt Injection Shield Active</span>
-          </span>
-          <span style={{ fontSize: '0.78125rem', color: 'var(--text-muted)', fontWeight: 500 }} className="hidden sm:inline">
-            Model: <strong style={{ color: 'var(--text-secondary)' }}>llama3.2:1b</strong>
-          </span>
-          <VaultSelector vaults={vaults} selectedVaultId={selectedVaultId} onChange={setSelectedVaultId} label="" />
-          <button
-            onClick={() => setMessages([])}
-            className="btn btn-ghost"
-            style={{ padding: '7px 10px' }}
-            title="Clear chat"
-          >
-            <Trash2 style={{ width: 14, height: 14 }} />
-          </button>
-        </div>
-      </div>
+
+      {/* Page Header — controls placed as children (right slot) */}
+      <PageHeader
+        icon={Brain}
+        iconColor="text-emerald-400"
+        title="AI Security Assistant"
+        description="Local RAG · Vault-isolated · Zero external data leak"
+      >
+        <span className="badge-tag badge-emerald" style={{ whiteSpace: 'nowrap' }}>
+          <ShieldCheck style={{ width: 12, height: 12 }} />
+          <span>Injection Shield</span>
+        </span>
+        <VaultSelector vaults={vaults} selectedVaultId={selectedVaultId} onChange={setSelectedVaultId} label="" />
+        <button
+          onClick={() => setMessages([])}
+          className="btn btn-ghost"
+          style={{ padding: '7px 10px' }}
+          title="Clear chat history"
+        >
+          <Trash2 style={{ width: 14, height: 14 }} />
+          <span style={{ fontSize: '0.78rem' }}>Clear</span>
+        </button>
+      </PageHeader>
 
       {error && <ErrorState message={error} />}
 
@@ -135,7 +130,7 @@ export function AIAssistantView({ user, onLogout }) {
         className="glass-panel"
         style={{
           flex: '1 1 0',
-          minHeight: '400px',
+          minHeight: '420px',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -145,20 +140,32 @@ export function AIAssistantView({ user, onLogout }) {
         {/* Info Bar */}
         <div
           style={{
-            padding: '10px 18px',
+            padding: '10px 20px',
             borderBottom: '1px solid rgba(255,255,255,0.06)',
             background: 'rgba(0,0,0,0.25)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
             flexShrink: 0,
+            gap: '8px',
           }}
         >
           <span style={{ fontSize: '0.78125rem', color: 'var(--text-muted)' }}>
-            Answers are grounded strictly in selected vault documents.
+            Answers grounded strictly in selected vault documents. Model:{' '}
+            <strong style={{ color: 'var(--text-secondary)', fontFamily: "'JetBrains Mono', monospace" }}>
+              llama3.2:1b
+            </strong>
           </span>
-          <span style={{ fontSize: '0.78125rem', color: 'var(--accent-emerald)', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>
-            Vault Isolated
+          <span
+            style={{
+              fontSize: '0.6875rem',
+              fontWeight: 700,
+              color: 'var(--accent-emerald)',
+              fontFamily: "'JetBrains Mono', monospace",
+              whiteSpace: 'nowrap',
+            }}
+          >
+            VAULT ISOLATED
           </span>
         </div>
 
@@ -271,7 +278,12 @@ export function AIAssistantView({ user, onLogout }) {
                   >
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Sources:</span>
                     {m.sources.map((s, idx) => (
-                      <span key={idx} className="badge-tag badge-purple" style={{ fontSize: '0.6875rem' }} title={`Chunk #${s.chunk_index}`}>
+                      <span
+                        key={idx}
+                        className="badge-tag badge-purple"
+                        style={{ fontSize: '0.6875rem' }}
+                        title={`Chunk #${s.chunk_index}`}
+                      >
                         <Sparkles style={{ width: 9, height: 9 }} />
                         {s.filename} ({(s.similarity * 100).toFixed(0)}%)
                       </span>
@@ -314,8 +326,8 @@ export function AIAssistantView({ user, onLogout }) {
                   fontSize: '0.8125rem',
                 }}
               >
-                <Brain style={{ width: 15, height: 15, animation: 'spin 1.5s linear infinite' }} />
-                <span>Retrieving vault context & generating answer...</span>
+                <Brain style={{ width: 15, height: 15, animation: 'spin 2s linear infinite' }} />
+                <span>Retrieving vault context &amp; generating answer...</span>
               </div>
             </div>
           )}
@@ -340,7 +352,7 @@ export function AIAssistantView({ user, onLogout }) {
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask a question about your encrypted vault documents... (Enter to send, Shift+Enter for newline)"
+            placeholder="Ask a question about your encrypted vault documents… (Enter to send, Shift+Enter for newline)"
             rows={1}
             style={{
               flex: 1,
@@ -381,12 +393,13 @@ export function AIAssistantView({ user, onLogout }) {
               alignSelf: 'flex-end',
               boxShadow: '0 4px 14px rgba(16,185,129,0.22)',
               transition: 'all 160ms',
+              opacity: (loading || !selectedVaultId) ? 0.6 : 1,
             }}
             onMouseEnter={e => { if (!loading) { e.currentTarget.style.background = '#34d399'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
             onMouseLeave={e => { e.currentTarget.style.background = 'var(--accent-emerald)'; e.currentTarget.style.transform = 'translateY(0)'; }}
           >
             <Send style={{ width: 15, height: 15 }} />
-            <span>Ask RAG</span>
+            <span>Ask</span>
           </button>
         </form>
       </div>
