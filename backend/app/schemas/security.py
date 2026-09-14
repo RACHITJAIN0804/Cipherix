@@ -1,32 +1,8 @@
-"""
-schemas/security.py
--------------------
-Pydantic models for the public API contract of security operations.
-
-Keeping security schemas separate from ``schemas/vault.py`` leaves room
-for future additions: recovery seed responses, hardware key registration
-requests, multi-device sync tokens, etc.
-
-No cryptographic material — keys, salts, or hashes — ever appears in
-these models.  Passwords are used ephemerally and discarded before any
-response is constructed.
-"""
 
 from pydantic import BaseModel, Field
 
 
-
 class ChangePasswordRequest(BaseModel):
-    """
-    Validated payload for ``POST /vaults/{vault_id}/change-password``.
-
-    Pydantic enforces minimum length before the request reaches the service
-    layer.  The service layer performs additional cryptographic verification:
-    ``old_password`` must successfully decrypt the Vault Key before
-    ``new_password`` is used to re-wrap it.
-
-    Neither password is ever logged, stored, or included in any response.
-    """
 
     old_password: str = Field(
         ...,
@@ -46,24 +22,7 @@ class ChangePasswordRequest(BaseModel):
     )
 
 
-
 class ChangePasswordResponse(BaseModel):
-    """
-    Minimal receipt returned by ``POST /vaults/{vault_id}/change-password``
-    (HTTP 200).
-
-    Contains no cryptographic material — only the vault identifier and the
-    timestamp of the completed re-wrap operation.
-
-    Extensibility
-    -------------
-    * **Recovery seed**: add ``recovery_seed_invalidated: bool`` to signal
-      that a previously issued seed is now stale and must be regenerated.
-    * **Hardware key**: add ``hardware_key_rewrap_required: bool`` to
-      indicate that hardware-key-wrapped copies of the Vault Key need
-      updating.
-    * **Audit**: add ``event_id: str`` for correlation with an audit log.
-    """
 
     vault_id: str = Field(
         ...,
@@ -79,32 +38,7 @@ class ChangePasswordResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-
 class RecoverySeedResponse(BaseModel):
-    """
-    Returned by ``POST /vaults/{vault_id}/recovery-seed`` (HTTP 201).
-
-    This is the **only** API response that contains the plaintext recovery
-    seed.  It is returned exactly once, immediately after generation.  It
-    is never stored server-side and cannot be retrieved again.
-
-    The client is responsible for displaying the seed to the user and
-    instructing them to write it down and store it securely.
-
-    Attributes
-    ----------
-    vault_id:
-        UUID4 of the vault for which the seed was generated.
-    seed:
-        Space-separated 24-word BIP-39 mnemonic.  Present only in this
-        response — never stored, never logged.
-    algorithm:
-        The generation standard used (``"BIP39-24-SHA256"``).
-    word_count:
-        Number of words in the mnemonic (always 24).
-    created_at:
-        UTC ISO-8601 timestamp of generation.
-    """
 
     vault_id: str = Field(
         ...,
@@ -136,14 +70,7 @@ class RecoverySeedResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-
 class VerifySeedRequest(BaseModel):
-    """
-    Request payload for ``POST /vaults/{vault_id}/recovery-seed/verify``.
-
-    The seed is used only to compute and compare a fingerprint.  It is
-    never stored or logged.
-    """
 
     seed: str = Field(
         ...,
@@ -156,14 +83,6 @@ class VerifySeedRequest(BaseModel):
 
 
 class VerifySeedResponse(BaseModel):
-    """
-    Returned by ``POST /vaults/{vault_id}/recovery-seed/verify`` (HTTP 200).
-
-    A ``valid=True`` result confirms only that the seed is a valid BIP-39
-    mnemonic AND that its fingerprint matches the stored fingerprint.  It
-    does not grant access to any key material — actual vault recovery is a
-    future milestone.
-    """
 
     vault_id: str = Field(
         ...,

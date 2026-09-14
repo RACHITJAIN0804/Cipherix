@@ -1,11 +1,3 @@
-"""
-services/computer_access/executor.py
-------------------------------------
-Main execution coordinator for safe local-computer access system.
-
-Integrates authentication, server-side permission checks, ActionRegistry allowed-list
-dispatching, PathGuard filesystem sandboxing, explicit user approvals, and privacy-preserving audit logging.
-"""
 
 import json
 import uuid
@@ -44,9 +36,6 @@ logger = get_logger(__name__)
 
 
 class ComputerAccessExecutor:
-    """
-    Coordinator executing only registered, safe, sandboxed computer access actions.
-    """
 
     def __init__(
         self,
@@ -59,9 +48,6 @@ class ComputerAccessExecutor:
         )
 
     def get_user_path_guard(self, user_id: str) -> PathGuard:
-        """
-        Get PathGuard initialized with per-user workspace directory for isolation.
-        """
         workspace = settings.COMPUTER_ACCESS_WORKSPACE_DIR / user_id
         return PathGuard(workspace)
 
@@ -76,11 +62,8 @@ class ComputerAccessExecutor:
         approval_status: str,
         details: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """
-        Write non-sensitive audit event to SQLite database and structured logger.
-        """
         try:
-            # Filter sensitive fields from details before serialization
+
             safe_details = {}
             if details:
                 for k, v in details.items():
@@ -116,17 +99,7 @@ class ComputerAccessExecutor:
     def execute_action(
         self, db: Session, user_id: str, request: ActionRequest
     ) -> ActionResponse:
-        """
-        Main execution flow:
-        1. Check computer-access permission toggle.
-        2. Lookup action in ActionRegistry.
-        3. Validate parameters schema.
-        4. Validate path sandboxing via PathGuard.
-        5. Check user approval requirement.
-        6. Dispatch to registered handler.
-        7. Audit log event.
-        """
-        # 1. Permission check
+
         if not self.permission_service.is_computer_access_enabled(db, user_id):
             self._create_audit_log(
                 db=db,
@@ -142,22 +115,22 @@ class ComputerAccessExecutor:
                 "Computer access is currently disabled for your account."
             )
 
-        # 2. Action Registry Lookup
+
         action_def: ActionDefinition = self.registry.get_action(request.action)
 
-        # 3. Validate Parameters
+
         validated_params = self.registry.validate_parameters(
             request.action, request.parameters
         )
 
-        # 4. Path Guard Sandboxing
+
         path_guard = self.get_user_path_guard(user_id)
         path_param = getattr(validated_params, "path", getattr(validated_params, "src_path", None))
 
-        # 5. User Approval Check
+
         approval_status = "not_required"
         if action_def.requires_approval:
-            # Check if explicit user approval is granted or approval_id is provided and valid
+
             is_approved = False
 
             if request.approved:
@@ -171,7 +144,7 @@ class ComputerAccessExecutor:
                     approval_status = "approved"
 
             if not is_approved:
-                # Create approval request
+
                 approval_req = self.permission_service.create_approval_request(
                     db=db,
                     user_id=user_id,
@@ -197,7 +170,7 @@ class ComputerAccessExecutor:
                     error=f"Explicit user approval is required to execute write action '{request.action}'.",
                 )
 
-        # 6. Execute registered safe action
+
         try:
             result_data: Dict[str, Any] = {}
             if request.action == "list_directory":
@@ -231,7 +204,7 @@ class ComputerAccessExecutor:
             else:
                 raise ActionNotAllowedError(f"Handler for action '{request.action}' not implemented.")
 
-            # 7. Audit log success
+
             self._create_audit_log(
                 db=db,
                 user_id=user_id,

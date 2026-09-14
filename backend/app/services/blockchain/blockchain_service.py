@@ -1,11 +1,3 @@
-"""
-services/blockchain/blockchain_service.py
------------------------------------------
-Blockchain integrity and verification service layer for Cipherix.
-
-Provides privacy-preserving document integrity hash anchoring, retrieval,
-and multi-tier verification (Disk Ciphertext Hash vs. SQLite Metadata vs. Blockchain Ledger).
-"""
 
 import hmac
 import uuid
@@ -34,9 +26,6 @@ logger = get_logger(__name__)
 
 
 class BlockchainService:
-    """
-    Service managing document integrity hash anchoring and verification.
-    """
 
     def __init__(self, adapter: Optional[BlockchainAdapter] = None) -> None:
         self.adapter: BlockchainAdapter = adapter or LocalBlockchainAdapter(
@@ -45,12 +34,6 @@ class BlockchainService:
         self._enc_mgr = EncryptionManager()
 
     def get_privacy_reference(self, user_id: str, document_id: str) -> str:
-        """
-        Derive a privacy-preserving reference hash using secret-keyed SHA-256 HMAC.
-
-        Ensures raw document UUIDs or internal filesystem references are never
-        published directly on-chain.
-        """
         secret_bytes = settings.jwt_secret_key.encode("utf-8")
         msg = f"cipherix:privacy_ref:{user_id}:{document_id}".encode("utf-8")
         return hmac.new(secret_bytes, msg, "sha256").hexdigest()
@@ -58,16 +41,6 @@ class BlockchainService:
     def _verify_document_ownership(
         self, db: Session, user_id: str, vault_id: str, document_id: str
     ) -> DocumentRecord:
-        """
-        Verify that vault exists, belongs to user_id, and document belongs to vault.
-
-        Raises
-        ------
-        VaultNotFoundError
-            If vault does not exist or belong to user.
-        DocumentNotFoundError
-            If document does not exist or belong to vault.
-        """
         vault = db.get(VaultRecord, vault_id)
         if vault is None or (vault.user_id is not None and vault.user_id != user_id):
             raise VaultNotFoundError(f"Vault '{vault_id}' not found.")
@@ -81,12 +54,6 @@ class BlockchainService:
     def anchor_document(
         self, db: Session, user_id: str, vault_id: str, document_id: str
     ) -> AnchorResponse:
-        """
-        Anchor document's SHA-256 integrity hash on the blockchain.
-
-        Integrity hash is obtained authoritatively from the document record / ciphertext.
-        Client-supplied hashes are NEVER trusted.
-        """
         if not settings.blockchain_enabled:
             raise BlockchainUnavailableError(
                 "Blockchain anchoring is currently disabled in configuration."
@@ -99,10 +66,10 @@ class BlockchainService:
 
         doc = self._verify_document_ownership(db, user_id, vault_id, document_id)
 
-        # Obtain authoritative document integrity hash
+
         integrity_hash = doc.integrity_hash
         if not integrity_hash:
-            # Attempt recalculation from disk blob
+
             vault_root = settings.VAULT_DIR / vault_id
             doc_mgr = DocumentManager(vault_root)
             try:
@@ -117,7 +84,7 @@ class BlockchainService:
 
         privacy_ref = self.get_privacy_reference(user_id, document_id)
 
-        # Check if record already exists in DB
+
         existing_record = (
             db.query(BlockchainAnchorRecord)
             .filter(BlockchainAnchorRecord.document_id == document_id)
@@ -137,7 +104,7 @@ class BlockchainService:
                 anchored_at=existing_record.created_at,
             )
 
-        # Perform blockchain anchoring via adapter
+
         receipt = self.adapter.anchor_hash(
             privacy_reference=privacy_ref, integrity_hash=integrity_hash
         )
@@ -179,16 +146,10 @@ class BlockchainService:
     def verify_document_anchor(
         self, db: Session, user_id: str, vault_id: str, document_id: str
     ) -> VerifyAnchorResponse:
-        """
-        Perform 3-tier verification:
-        1. Recalculate SHA-256 directly from encrypted disk blob.
-        2. Compare against stored SQLite DB integrity_hash.
-        3. Compare against Blockchain network anchored hash.
-        """
         doc = self._verify_document_ownership(db, user_id, vault_id, document_id)
         privacy_ref = self.get_privacy_reference(user_id, document_id)
 
-        # 1. Recalculate hash from disk ciphertext
+
         vault_root = settings.VAULT_DIR / vault_id
         doc_mgr = DocumentManager(vault_root)
         try:
@@ -202,7 +163,7 @@ class BlockchainService:
         stored_hash = doc.integrity_hash or ""
         integrity_match = bool(stored_hash) and hmac.compare_digest(stored_hash, current_hash)
 
-        # Fetch anchor record from DB
+
         anchor_record = (
             db.query(BlockchainAnchorRecord)
             .filter(BlockchainAnchorRecord.document_id == document_id)
@@ -254,9 +215,6 @@ class BlockchainService:
     def get_document_anchor(
         self, db: Session, user_id: str, vault_id: str, document_id: str
     ) -> AnchorResponse:
-        """
-        Retrieve anchor record for document.
-        """
         self._verify_document_ownership(db, user_id, vault_id, document_id)
 
         record = (

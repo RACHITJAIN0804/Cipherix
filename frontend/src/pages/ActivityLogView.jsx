@@ -27,13 +27,20 @@ export function ActivityLogView({ user, onLogout }) {
     setLoading(true);
     setError('');
     try {
-      const secLogs = await CipherixAPI.request('/security/audit-logs');
-      const compLogs = await CipherixAPI.request('/computer-access/audit');
-      const combined = [
-        ...(Array.isArray(secLogs) ? secLogs : []),
-        ...(Array.isArray(compLogs) ? compLogs : []),
-      ];
-      setLogs(combined);
+      const data = await CipherixAPI.request('/computer-access/audit-logs');
+      const rawList = Array.isArray(data) ? data : [];
+      const normalized = rawList.map((log) => ({
+        id: log.id,
+        timestamp: log.created_at,
+        category: 'ComputerAccess',
+        action: log.action || 'System Event',
+        status: (log.result_status || 'SUCCESS').toUpperCase(),
+        details:
+          log.details_json ||
+          log.relative_path ||
+          (log.vault_id ? `Vault: ${log.vault_id}` : 'Access event recorded'),
+      }));
+      setLogs(normalized);
     } catch (err) {
       setError('Failed to fetch audit logs: ' + err.message);
     } finally {
@@ -65,7 +72,7 @@ export function ActivityLogView({ user, onLogout }) {
 
   return (
     <PageLayout title="Activity Log & Audit Stream" user={user} onLogout={onLogout}>
-      {/* Page Header */}
+      {}
       <PageHeader
         icon={History}
         iconColor="text-cyan-400"
@@ -114,7 +121,7 @@ export function ActivityLogView({ user, onLogout }) {
         />
       ) : (
         <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
-          {/* Summary bar */}
+          {}
           <div
             style={{
               display: 'flex',

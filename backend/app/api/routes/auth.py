@@ -1,23 +1,3 @@
-"""
-api/routes/auth.py
-------------------
-FastAPI route handlers for user authentication.
-
-Pattern (consistent with existing route modules)
--------------------------------------------------
-1. Extract and forward request data to :class:`~app.services.auth_service.AuthService`.
-2. Map domain exceptions to HTTP status codes via ``_map_auth_exception``.
-3. Return the appropriate response schema.
-
-No business logic, no cryptography, and no database queries belong here.
-
-Password handling
------------------
-Passwords are received as JSON body fields.  They are forwarded immediately
-to the service layer and are never logged, stored in a route parameter,
-or returned in any response body.
-"""
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -57,7 +37,6 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 _auth_service = AuthService()
-
 
 
 def _map_auth_exception(exc: Exception) -> None:
@@ -198,9 +177,6 @@ async def recover(
     payload: RecoverVaultRequest,
     db: Session = Depends(get_db),
 ) -> TokenResponse:
-    """
-    ``POST /auth/recover`` — recover vault access and establish a new password.
-    """
     try:
         sec_service = SecurityService(vault_base_dir=settings.VAULT_DIR)
         return sec_service.recover_vault(
@@ -211,4 +187,3 @@ async def recover(
         )
     except Exception as exc:  # noqa: BLE001
         _map_auth_exception(exc)
-

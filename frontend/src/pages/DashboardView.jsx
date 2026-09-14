@@ -7,7 +7,7 @@ import {
   Lock, RefreshCw, LayoutDashboard, TrendingUp,
 } from 'lucide-react';
 
-/* Stat card with accent top stripe */
+
 function StatCard({ label, value, valueColor, icon: Icon, iconBg, iconBorder, iconColor, footnote, footnoteColor, accentGradient }) {
   return (
     <div
@@ -99,7 +99,7 @@ export function DashboardView({ user, onLogout }) {
 
   return (
     <PageLayout title="Dashboard Overview" user={user} onLogout={onLogout}>
-      {/* Page Header */}
+      {}
       <PageHeader
         icon={LayoutDashboard}
         iconColor="text-cyan-400"
@@ -138,7 +138,7 @@ export function DashboardView({ user, onLogout }) {
         </button>
       </PageHeader>
 
-      {/* Stat Cards */}
+      {}
       <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
         <StatCard
           label="Active Vaults"
@@ -187,7 +187,7 @@ export function DashboardView({ user, onLogout }) {
         />
       </div>
 
-      {/* Vault Status Panel */}
+      {}
       <div className="glass-panel p-6">
         <div
           style={{

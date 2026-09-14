@@ -96,9 +96,12 @@ def client(db_session: Session):
         yield db_session
 
     app.dependency_overrides[get_db] = _override_get_db
+    from app.core.rate_limiter import _limiter
+    _limiter.clear()
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c
     app.dependency_overrides.clear()
+    _limiter.clear()
 
 
 # ---------------------------------------------------------------------------

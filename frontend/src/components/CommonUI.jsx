@@ -1,9 +1,7 @@
 import React from 'react';
 import { Loader2, AlertTriangle, Info, CheckCircle2, X, ShieldOff } from 'lucide-react';
 
-/* -------------------------------------------------------
-   LoadingState
-   ------------------------------------------------------- */
+
 export function LoadingState({ message = 'Loading secure data...' }) {
   return (
     <div
@@ -48,9 +46,7 @@ export function LoadingState({ message = 'Loading secure data...' }) {
   );
 }
 
-/* -------------------------------------------------------
-   EmptyState
-   ------------------------------------------------------- */
+
 export function EmptyState({
   title = 'No items found',
   description = 'Click the action button above to create or upload items.',
@@ -125,9 +121,7 @@ export function EmptyState({
   );
 }
 
-/* -------------------------------------------------------
-   ErrorState
-   ------------------------------------------------------- */
+
 export function ErrorState({ message, onRetry }) {
   return (
     <div
@@ -173,9 +167,7 @@ export function ErrorState({ message, onRetry }) {
   );
 }
 
-/* -------------------------------------------------------
-   ConfirmDialog
-   ------------------------------------------------------- */
+
 export function ConfirmDialog({
   isOpen,
   title,
@@ -240,9 +232,7 @@ export function ConfirmDialog({
   );
 }
 
-/* -------------------------------------------------------
-   VaultSelector
-   ------------------------------------------------------- */
+
 export function VaultSelector({ vaults = [], selectedVaultId, onChange, label = 'Vault' }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -296,9 +286,7 @@ export function VaultSelector({ vaults = [], selectedVaultId, onChange, label = 
   );
 }
 
-/* -------------------------------------------------------
-   Toast
-   ------------------------------------------------------- */
+
 export function Toast({ message, type = 'success', onClose }) {
   if (!message) return null;
   return (

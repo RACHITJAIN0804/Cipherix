@@ -1,24 +1,3 @@
-"""
-api/routes/security.py
------------------------
-FastAPI route handlers for vault security operations.
-
-Each handler follows the project pattern:
-
-1. Extract and forward request data to :class:`~app.services.security_service.SecurityService`.
-2. Map domain exceptions to HTTP status codes.
-3. Return the appropriate response.
-
-No business logic, no filesystem code, and no cryptography belongs here.
-
-Password handling
------------------
-Passwords and recovery seeds are supplied as JSON body fields.  They are
-forwarded immediately to the service layer and are never logged, stored,
-or echoed in any response other than the single, one-time seed generation
-response.
-"""
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -53,28 +32,11 @@ router = APIRouter(
 )
 
 
-
 def _get_security_service() -> SecurityService:
-    """
-    FastAPI dependency that constructs :class:`SecurityService` per request.
-
-    Reading ``settings.VAULT_DIR`` at request time (not at module import)
-    means the value can be overridden in tests via ``app.dependency_overrides``.
-    """
     return SecurityService(vault_base_dir=settings.VAULT_DIR)
 
 
-
 def _map_security_exception(exc: Exception) -> None:
-    """
-    Map a domain exception to the appropriate :class:`HTTPException`.
-
-    Raises
-    ------
-    HTTPException
-        Always.  Non-domain exceptions are re-raised unmodified so the global
-        handler in ``main.py`` can log the full traceback.
-    """
     if isinstance(exc, VaultNotFoundError):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=exc.detail
@@ -91,7 +53,6 @@ def _map_security_exception(exc: Exception) -> None:
         ) from exc
 
     if isinstance(exc, PasswordChangeError):
-        # Wrong old password -> 401; storage/crypto failures -> 500.
         if "old password" in exc.detail.lower() or "incorrect" in exc.detail.lower():
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail=exc.detail
@@ -116,7 +77,6 @@ def _map_security_exception(exc: Exception) -> None:
         ) from exc
 
     raise exc
-
 
 
 @router.post(
@@ -145,9 +105,6 @@ async def change_password(
     service: SecurityService = Depends(_get_security_service),
     db: Session = Depends(get_db),
 ) -> ChangePasswordResponse:
-    """
-    ``POST /vaults/{vault_id}/change-password`` — rewrap the Vault Key.
-    """
     try:
         result = service.change_password(
             vault_id=vault.id,
@@ -187,9 +144,6 @@ async def generate_recovery_seed(
     service: SecurityService = Depends(_get_security_service),
     db: Session = Depends(get_db),
 ) -> RecoverySeedResponse:
-    """
-    ``POST /vaults/{vault_id}/recovery-seed`` — generate and return the seed.
-    """
     try:
         result = service.generate_recovery_seed(vault_id=vault.id, db=db)
         logger.info(
@@ -226,9 +180,6 @@ async def verify_recovery_seed(
     service: SecurityService = Depends(_get_security_service),
     db: Session = Depends(get_db),
 ) -> VerifySeedResponse:
-    """
-    ``POST /vaults/{vault_id}/recovery-seed/verify`` — validate a seed.
-    """
     try:
         result = service.verify_recovery_seed(
             vault_id=vault.id,

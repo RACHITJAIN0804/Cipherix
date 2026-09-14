@@ -1,8 +1,3 @@
-"""
-services/document_processing/chunker.py
------------------------------------------
-Deterministic text chunking for RAG pipeline.
-"""
 
 import hashlib
 from dataclasses import dataclass
@@ -15,7 +10,6 @@ logger = get_logger(__name__)
 
 @dataclass
 class DocumentChunk:
-    """In-memory representation of a document text chunk."""
 
     chunk_id: str
     document_id: str
@@ -26,9 +20,6 @@ class DocumentChunk:
 
 
 class TextChunker:
-    """
-    Splits text into deterministic, ordered chunks with configurable overlap.
-    """
 
     def __init__(self, default_chunk_size: int = 500, default_chunk_overlap: int = 50) -> None:
         self._default_chunk_size: int = default_chunk_size
@@ -58,7 +49,7 @@ class TextChunker:
         chunks: list[DocumentChunk] = []
 
         if page_blocks and len(page_blocks) > 0 and any(p is not None for _, p in page_blocks):
-            # Paginated chunking for PDF
+
             idx = 0
             for block_text, page_num in page_blocks:
                 sub_chunks = self._split_single_block(block_text, size, overlap)
@@ -78,7 +69,7 @@ class TextChunker:
                     )
                     idx += 1
         else:
-            # Single-pass chunking for TXT / DOCX
+
             sc_texts = self._split_single_block(text, size, overlap)
             for idx, sc_text in enumerate(sc_texts):
                 if not sc_text.strip():
@@ -119,7 +110,7 @@ class TextChunker:
                 chunks.append(text[start:])
                 break
 
-            # Try to break at paragraph boundary or sentence boundary (. / ? / ! / \n)
+
             best_break = -1
             search_window = text[start + (chunk_size // 2) : end]
             for delim in ("\n\n", "\n", ". ", "? ", "! "):

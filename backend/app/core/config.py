@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = [
         "http://localhost:3000",
-        "http://localhost:5173",
+        "http://127.0.0.1:3000",
     ]
     cors_allow_credentials: bool = True
     cors_allow_methods: list[str] = ["*"]
@@ -52,27 +52,16 @@ class Settings(BaseSettings):
     SCRIPTS_DIR: Path = BASE_DIR / "scripts"
     COMPUTER_ACCESS_WORKSPACE_DIR: Path = BASE_DIR / "CIPHERIX_WORKSPACE"
 
-    # SQLite database filename — relative to DATABASE_DIR.
-    # Override via DATABASE_FILENAME env var to point at a different file
-    # (e.g. "cipherix_test.db" in tests).
     database_filename: str = "cipherix.db"
-    # Secret used to sign JWTs.  MUST be overridden in production via the
-    # JWT_SECRET_KEY environment variable.  The default is intentionally
-    # weak and flagged in the field description.
     jwt_secret_key: str = Field(
         default="change_this_jwt_secret_in_production",
         description="HS256 signing secret for JWTs.  Override in production.",
     )
-    # HMAC-SHA256 — fast, widely supported, and sufficient for server-side
-    # JWTs where we control both signing and verification.
     jwt_algorithm: str = Field(default="HS256")
 
-    # Access token lifetime.  Short-lived to limit the blast radius of a
-    # stolen token.  Refresh tokens are longer-lived and separated by type.
     access_token_expire_minutes: int = Field(default=30)
     refresh_token_expire_days: int = Field(default=7)
 
-    # RAG Document Processing Settings
     rag_chunk_size: int = Field(default=500, description="Default character size per chunk.")
     rag_chunk_overlap: int = Field(default=50, description="Default character overlap between consecutive chunks.")
     max_document_processing_size_bytes: int = Field(
@@ -88,7 +77,6 @@ class Settings(BaseSettings):
         description="Allowed MIME types for document processing pipeline.",
     )
 
-    # Embedding and Vector Storage Settings
     embedding_model_name: str = Field(
         default="all-MiniLM-L6-v2",
         description="Local Sentence Transformers embedding model name.",
@@ -106,7 +94,6 @@ class Settings(BaseSettings):
         description="Default number of top semantic search results to return.",
     )
 
-    # LLM Settings
     llm_provider: str = Field(
         default="ollama",
         description="Local LLM backend provider. Supported: 'ollama', 'disabled'.",
@@ -136,7 +123,6 @@ class Settings(BaseSettings):
         description="HTTP timeout in seconds for Ollama generation requests.",
     )
 
-    # RAG Pipeline Settings
     rag_max_chunks: int = Field(
         default=5,
         ge=1,
@@ -155,7 +141,6 @@ class Settings(BaseSettings):
         description="Minimum cosine similarity score for a chunk to be included in RAG context.",
     )
 
-    # Blockchain Settings
     blockchain_enabled: bool = Field(
         default=True,
         description="Whether blockchain document integrity anchoring is enabled.",
@@ -169,7 +154,6 @@ class Settings(BaseSettings):
         description="Blockchain network identifier label.",
     )
 
-    # Rate Limiting Settings
     rate_limit_auth_per_minute: int = Field(
         default=10,
         description="Maximum auth requests (login/register) allowed per minute per IP.",
@@ -181,7 +165,6 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":
-        """Assert that default placeholder secrets are never used in production or staging."""
         from app.core.exceptions import ConfigurationError
 
         if self.app_env in (Environment.PRODUCTION, Environment.STAGING):
@@ -199,13 +182,6 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:
-        """
-        SQLAlchemy-compatible SQLite URL built from DATABASE_DIR and filename.
-
-        Uses three slashes for a relative path from the DB file's perspective.
-        The path is absolute so SQLAlchemy opens the same file regardless of
-        the process working directory.
-        """
         db_path = self.DATABASE_DIR / self.database_filename
         return f"sqlite:///{db_path}"
 

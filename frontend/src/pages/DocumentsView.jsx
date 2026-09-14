@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { PageLayout } from '../components/PageLayout';
 import { PageHeader } from '../components/PageHeader';
 import { LoadingState, EmptyState, ErrorState, ConfirmDialog, VaultSelector } from '../components/CommonUI';
@@ -6,8 +7,10 @@ import { CipherixAPI } from '../api';
 import { FileText, Download, Check, Upload, Trash2, Play, RefreshCw, X, CloudUpload } from 'lucide-react';
 
 export function DocumentsView({ user, onLogout }) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [vaults, setVaults] = useState([]);
-  const [selectedVaultId, setSelectedVaultId] = useState('');
+  const [selectedVaultId, setSelectedVaultId] = useState(() => location.state?.vaultId || '');
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -20,6 +23,12 @@ export function DocumentsView({ user, onLogout }) {
   const [statusMsg, setStatusMsg] = useState('');
   const [dragOver, setDragOver] = useState(false);
 
+  useEffect(() => {
+    if (location.state?.vaultId) {
+      setSelectedVaultId(location.state.vaultId);
+    }
+  }, [location.state]);
+
   const fetchVaultsAndDocs = async () => {
     setLoading(true);
     setError('');
@@ -28,12 +37,28 @@ export function DocumentsView({ user, onLogout }) {
       const vArray = Array.isArray(vaultList) ? vaultList : [];
       setVaults(vArray);
 
-      const targetVaultId = selectedVaultId || (vArray.length > 0 ? vArray[0].vault_id : '');
-      if (!selectedVaultId && targetVaultId) setSelectedVaultId(targetVaultId);
+      if (vArray.length === 0) {
+        setDocuments([]);
+        setSelectedVaultId('');
+        return;
+      }
+
+      const targetVaultId = selectedVaultId && vArray.some(v => v.vault_id === selectedVaultId)
+        ? selectedVaultId
+        : vArray[0].vault_id;
+
+      if (targetVaultId !== selectedVaultId) {
+        setSelectedVaultId(targetVaultId);
+      }
 
       if (targetVaultId) {
         const docList = await CipherixAPI.request(`/vaults/${targetVaultId}/documents`);
-        setDocuments(Array.isArray(docList) ? docList : []);
+        const docs = docList?.documents
+          ? (Array.isArray(docList.documents) ? docList.documents : [])
+          : (Array.isArray(docList) ? docList : []);
+        setDocuments(docs);
+      } else {
+        setDocuments([]);
       }
     } catch (err) {
       setError('Failed to load documents: ' + err.message);
@@ -136,7 +161,7 @@ export function DocumentsView({ user, onLogout }) {
 
   return (
     <PageLayout title="Encrypted Document Storage" user={user} onLogout={onLogout}>
-      {/* Page Header */}
+      {}
       <PageHeader
         icon={FileText}
         iconColor="text-purple-400"
@@ -198,14 +223,14 @@ export function DocumentsView({ user, onLogout }) {
                             display: 'block',
                           }}
                         >
-                          {d.filename}
+                          {d.original_filename || d.filename || 'Untitled'}
                         </span>
                       </div>
                     </td>
                     <td>
                       <div style={{ color: 'var(--text-secondary)' }}>{d.mime_type}</div>
                       <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-                        {(d.file_size_bytes / 1024).toFixed(1)} KB
+                        {(((d.size ?? d.file_size_bytes ?? 0)) / 1024).toFixed(1)} KB
                       </div>
                     </td>
                     <td>
@@ -221,7 +246,7 @@ export function DocumentsView({ user, onLogout }) {
                           whiteSpace: 'nowrap',
                         }}
                       >
-                        {d.integrity_hash}
+                        {d.integrity_hash || '-'}
                       </div>
                     </td>
                     <td>
@@ -246,7 +271,7 @@ export function DocumentsView({ user, onLogout }) {
                           Process
                         </button>
                         <button
-                          onClick={() => handleDownloadDocument(d.document_id, d.filename)}
+                          onClick={() => handleDownloadDocument(d.document_id, d.original_filename || d.filename || 'download')}
                           className="btn btn-secondary"
                           style={{ fontSize: '0.75rem', padding: '5px 10px' }}
                           title="Decrypt & Stream Download"
@@ -274,7 +299,7 @@ export function DocumentsView({ user, onLogout }) {
         </div>
       )}
 
-      {/* Upload Modal */}
+      {}
       {uploadModalOpen && (
         <div className="modal-backdrop">
           <div className="modal-panel" style={{ maxWidth: '460px' }}>
@@ -297,7 +322,7 @@ export function DocumentsView({ user, onLogout }) {
             </div>
 
             <form onSubmit={handleUpload} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* Drop zone */}
+              {}
               <div
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
@@ -384,7 +409,7 @@ export function DocumentsView({ user, onLogout }) {
         </div>
       )}
 
-      {/* Delete Confirmation */}
+      {}
       <ConfirmDialog
         isOpen={!!deleteDocId}
         title="Delete Encrypted Document"

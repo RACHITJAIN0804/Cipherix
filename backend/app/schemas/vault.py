@@ -1,36 +1,10 @@
-"""
-schemas/vault.py
-----------------
-Pydantic models that define the public contract for vault-related API
-endpoints.
-
-Separating schemas from domain objects (VaultManager, etc.) means:
-
-* The API layer can evolve its wire format without touching business logic.
-* Validation rules live in one place — not scattered across routes or
-  services.
-* Response models provide an explicit allow-list of fields that are safe
-  to return to clients, preventing accidental data leakage.
-"""
 
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
 
-
 class CreateVaultRequest(BaseModel):
-    """
-    Validated payload for ``POST /vaults``.
-
-    Pydantic trims leading/trailing whitespace via ``str.strip()`` in
-    the validator *before* the length check runs, so a name of ``"  ab  "``
-    is normalised to ``"ab"`` and then rejected for being too short.
-
-    The ``password`` field is used solely to initialise the Argon2id key
-    derivation for this vault.  It is **never** echoed in any response,
-    logged in plaintext, or stored on disk.
-    """
 
     name: str = Field(
         ...,
@@ -51,18 +25,6 @@ class CreateVaultRequest(BaseModel):
     @field_validator("name", mode="before")
     @classmethod
     def strip_whitespace(cls, value: str) -> str:
-        """
-        Normalise the name before length constraints are evaluated.
-
-        Stripping here (``mode="before"``) means Pydantic's built-in
-        ``min_length`` / ``max_length`` checks operate on the *clean*
-        string, not the raw user input.
-
-        Raises
-        ------
-        ValueError
-            If the value is not a string, or is empty after stripping.
-        """
         if not isinstance(value, str):
             raise ValueError("name must be a string")
         stripped = value.strip()
@@ -71,19 +33,7 @@ class CreateVaultRequest(BaseModel):
         return stripped
 
 
-
 class _VaultBase(BaseModel):
-    """
-    Internal base model holding the four fields common to every vault
-    response shape.
-
-    Using a private base class eliminates field duplication while keeping
-    :class:`VaultResponse` and :class:`VaultSummary` as independent public
-    types.  Each subclass can add, override, or remove fields freely without
-    affecting the other.
-
-    This class is intentionally not exported.
-    """
 
     vault_id: str = Field(
         ...,
@@ -108,57 +58,15 @@ class _VaultBase(BaseModel):
     model_config = {"from_attributes": True}
 
 
-
 class VaultResponse(_VaultBase):
-    """
-    Serialised vault data returned to the API consumer after successful
-    creation (``POST /vaults`` — HTTP 201).
-
-    Only the fields that are safe and relevant for clients are exposed
-    here.  Internal implementation details (filesystem paths, encryption
-    keys, etc.) must never appear in this model.
-    """
-
+    pass
 
 
 class VaultSummary(_VaultBase):
-    """
-    Compact vault representation used in ``GET /vaults`` list responses
-    (HTTP 200).
-
-    Intentionally a separate class from :class:`VaultResponse` even though
-    the fields are currently identical.  The two models serve different
-    semantic roles:
-
-    * :class:`VaultResponse` is a **creation receipt** — returned once,
-      immediately after a vault is scaffolded.
-    * :class:`VaultSummary` is a **list item** — one entry in the array
-      returned by the listing endpoint.
-
-    Keeping them separate means adding a field to one (e.g. ``file_count``
-    to ``VaultSummary``) never forces a change to the other.
-    """
-
+    pass
 
 
 class VaultStateResponse(BaseModel):
-    """
-    Returned by ``POST /vaults/{vault_id}/lock`` and
-    ``POST /vaults/{vault_id}/unlock``.
-
-    Intentionally minimal — a state-transition receipt only needs to
-    confirm *which* vault was affected and what its *new* status is.
-    Callers should not need to re-fetch the full vault listing just to
-    learn the outcome of a lock/unlock call.
-
-    Attributes
-    ----------
-    vault_id:
-        UUID4 string that identifies the vault whose state was changed.
-    status:
-        The vault's current status after the operation.
-        Either ``"locked"`` or ``"unlocked"``.
-    """
 
     vault_id: str = Field(
         ...,

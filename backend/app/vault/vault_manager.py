@@ -1,40 +1,3 @@
-"""
-vault/vault_manager.py
-----------------------
-Filesystem orchestrator for vault operations.
-
-:class:`VaultManager` is responsible for all filesystem interactions:
-creating the directory tree for a new vault, discovering and reading
-existing vaults from disk, and permanently deleting vault directories.
-It knows nothing about HTTP, Pydantic, or business rules.
-
-Vault layout on disk
---------------------
-::
-
-    vaults/
-    └── <vault_uuid>/
-        ├── encrypted/      # future: AES-encrypted file blobs
-        ├── metadata/       # future: per-file metadata records
-        ├── temp/           # staging area for in-progress operations
-        ├── manifest.json        # vault identity & status (written by VaultManifest)
-        ├── security.json        # cryptographic algorithm & init state (written by SecurityMetadataManager)
-        ├── key.json             # key metadata & wrapped Vault Key (written by KeyManager)
-        └── password_meta.json  # Argon2id salt & KDF parameters (written by PasswordManager)
-
-Design decisions
-----------------
-* **UUID4 as the folder name** — user-supplied names are never used as
-  directory names, preventing path-traversal attacks and filesystem
-  encoding issues.
-* **pathlib throughout** — ``Path`` objects compose cleanly, work on
-  all platforms, and avoid the string-concatenation bugs that plague
-  ``os.path`` code.
-* **Atomic-ish creation** — all ``mkdir`` calls use ``exist_ok=False``
-  on the vault root so that a pre-existing UUID (practically impossible
-  but theoretically conceivable) raises :class:`VaultAlreadyExistsError`
-  before any subdirectory is created.
-"""
 
 import shutil
 from pathlib import Path
@@ -63,16 +26,6 @@ _VAULT_SUBDIRS: tuple[str, ...] = ("encrypted", "metadata", "temp")
 
 
 class VaultManager:
-    """
-    Handles all filesystem operations for vault management.
-
-    Parameters
-    ----------
-    vault_base_dir:
-        The top-level ``vaults/`` directory.  Injected rather than
-        hard-coded so that tests can point the manager at a temporary
-        directory without touching the real filesystem.
-    """
 
     def __init__(self, vault_base_dir: Path) -> None:
         self._base: Path = vault_base_dir
@@ -83,51 +36,6 @@ class VaultManager:
         manifest: VaultManifest,
         password: str,
     ) -> Path:
-        """
-        Scaffold the vault directory tree and write all metadata files.
-
-        Creation sequence
-        -----------------
-        1. Create the vault root directory (``<base>/<vault_id>/``).
-        2. Create the standard subdirectories (``encrypted/``, ``metadata/``,
-           ``temp/``).
-        3. Write ``manifest.json`` (vault identity and status).
-        4. Write ``security.json`` (cryptographic algorithm and init state).
-        5. Generate a secure random Vault Key, derive the Master Key from the
-           user's password + salt, encrypt the Vault Key with AES-256-GCM,
-           and write ``key.json`` (stores only ciphertext + nonce; the raw
-           Vault Key and Master Key are discarded immediately).
-        6. Generate a per-vault Argon2id salt and write
-           ``password_meta.json`` (salt + KDF parameters; password and
-           derived Master Key are never stored).
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 string used as the vault's folder name.
-        manifest:
-            Pre-built :class:`~app.vault.manifest.VaultManifest` to
-            serialise as ``manifest.json`` inside the vault root.
-        password:
-            The user's chosen vault password.  Used solely to generate and
-            validate the Argon2id salt written to ``password_meta.json``.
-            The password and any derived Master Key are **never** stored on
-            disk.
-
-        Returns
-        -------
-        Path
-            Absolute path to the newly created vault root directory.
-
-        Raises
-        ------
-        VaultAlreadyExistsError
-            If a directory already exists at the target path.
-        VaultCreationError
-            If any filesystem error occurs during creation (directory
-            creation, manifest write, security metadata write, key
-            metadata write, or password metadata write).
-        """
         vault_root = self._base / vault_id
 
         logger.debug("Creating vault root at %s", vault_root)
@@ -136,10 +44,8 @@ class VaultManager:
         self._create_subdirectories(vault_root, vault_id)
         self._write_manifest(vault_root, manifest, vault_id)
         self._write_security_metadata(vault_root, vault_id)
-        # _write_key_metadata owns both key.json and password_meta.json:
-        # it generates the vault key, derives the master key, encrypts the
-        # vault key with AES-256-GCM, writes key.json (ciphertext + nonce),
-        # and writes password_meta.json (salt + KDF params) in one atomic flow.
+
+
         self._write_key_metadata(vault_root, vault_id, password)
 
         logger.info("Vault %r scaffolded at %s", manifest.name, vault_root)
@@ -147,33 +53,6 @@ class VaultManager:
 
 
     def delete_vault(self, vault_id: str) -> None:
-        """
-        Permanently and recursively delete a vault directory from disk.
-
-        Pre-deletion checks
-        -------------------
-        1. The vault directory (``<base>/<vault_id>/``) must exist.
-        2. A ``manifest.json`` must be present inside it.
-
-        These two checks together ensure we never silently delete an
-        unrelated directory that somehow shares the path — the manifest
-        is the authoritative marker that a path belongs to Cipherix.
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 string identifying the vault folder to remove.
-
-        Raises
-        ------
-        VaultNotFoundError
-            If the vault directory does not exist.
-        VaultManifestError
-            If the directory exists but contains no ``manifest.json``
-            (invalid vault structure).
-        VaultDeletionError
-            If the OS refuses to remove the directory tree.
-        """
         vault_root = self._base / vault_id
 
         logger.debug("Attempting to delete vault at %s", vault_root)
@@ -185,27 +64,6 @@ class VaultManager:
         logger.info("Vault '%s' deleted successfully from %s", vault_id, vault_root)
 
     def list_vaults(self) -> list[VaultManifest]:
-        """
-        Discover and read all valid vaults from the base directory.
-
-        A vault directory is considered **valid** if it satisfies both:
-
-        1. It is a directory (not a stray file).
-        2. It contains a ``manifest.json`` file.
-
-        Directories that fail either criterion are silently skipped.
-        Directories whose ``manifest.json`` exists but cannot be parsed
-        raise :class:`~app.core.exceptions.VaultManifestError` internally;
-        the caller (service layer) is responsible for catching that,
-        logging it, and continuing with the remaining vaults.
-
-        Returns
-        -------
-        list[VaultManifest]
-            One :class:`~app.vault.manifest.VaultManifest` per valid vault,
-            in filesystem-iteration order (unsorted — the service layer
-            is responsible for ordering).
-        """
         if not self._base.exists():
             logger.debug("Vault base directory does not exist: %s", self._base)
             return []
@@ -228,9 +86,8 @@ class VaultManager:
                 manifest = self._read_manifest(manifest_path, entry.name)
                 manifests.append(manifest)
             except VaultManifestError as exc:
-                # One corrupt vault must never abort the entire listing.
-                # Log the problem at WARNING level so operators can investigate,
-                # then continue processing the remaining vaults.
+
+
                 logger.warning(
                     "Skipping vault '%s': %s", entry.name, exc.detail
                 )
@@ -240,59 +97,9 @@ class VaultManager:
         return manifests
 
     def read_manifest(self, vault_id: str) -> VaultManifest:
-        """
-        Read and return the current ``manifest.json`` for a single vault.
-
-        This method is the canonical way for upper layers (e.g.
-        :class:`~app.services.vault_service.VaultService`) to inspect a
-        vault's state without touching the filesystem path directly.
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 string that identifies the vault folder.
-
-        Returns
-        -------
-        VaultManifest
-            The deserialised manifest as it currently exists on disk.
-
-        Raises
-        ------
-        VaultNotFoundError
-            If the vault directory does not exist.
-        VaultManifestError
-            If ``manifest.json`` is absent, unreadable, or malformed JSON.
-        """
         return self._load_manifest(vault_id)
 
     def update_vault_status(self, vault_id: str, new_status: str) -> None:
-        """
-        Mutate the ``status`` field in ``manifest.json`` and write it back.
-
-        This is the single, authoritative method for changing a vault's
-        lock state.  It reads the current manifest, applies the status
-        change in memory, then overwrites ``manifest.json`` on disk.
-
-        No encryption, password verification, or key management is
-        performed here — this is a pure state-flag update.
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 string identifying the target vault.
-        new_status:
-            The new status string to write.  Expected values are
-            ``"locked"`` and ``"unlocked"``.
-
-        Raises
-        ------
-        VaultNotFoundError
-            If the vault directory does not exist.
-        VaultManifestError
-            If ``manifest.json`` is absent, unreadable, malformed, or
-            cannot be written back (e.g. permission denied, disk full).
-        """
         manifest = self._load_manifest(vault_id)
         manifest_path = self._base / vault_id / "manifest.json"
 
@@ -319,31 +126,6 @@ class VaultManager:
         logger.debug("manifest.json updated for vault '%s' (status=%s)", vault_id, new_status)
 
     def _load_manifest(self, vault_id: str) -> VaultManifest:
-        """
-        Assert the vault exists and its manifest is present, then parse it.
-
-        This is the single, shared read pipeline used by both
-        :meth:`read_manifest` and :meth:`update_vault_status`.  Centralising
-        the three steps here means future changes (e.g. caching, retries)
-        only need to be made in one place.
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 string identifying the target vault.
-
-        Returns
-        -------
-        VaultManifest
-            The deserialised manifest.
-
-        Raises
-        ------
-        VaultNotFoundError
-            If the vault directory does not exist.
-        VaultManifestError
-            If ``manifest.json`` is absent, unreadable, or malformed JSON.
-        """
         vault_root = self._base / vault_id
         manifest_path = vault_root / "manifest.json"
 
@@ -353,12 +135,6 @@ class VaultManager:
         return self._read_manifest(manifest_path, vault_id)
 
     def _assert_vault_exists(self, vault_root: Path, vault_id: str) -> None:
-        """Raise :class:`VaultNotFoundError` if the vault directory is absent.
-
-        ``Path.is_dir()`` returns ``False`` for both missing paths *and*
-        non-directory entries (files, symlinks), so a single call is
-        sufficient to guard against both cases without a TOCTOU split.
-        """
         if not vault_root.is_dir():
             raise VaultNotFoundError(
                 f"Vault directory not found: {vault_root}",
@@ -366,13 +142,6 @@ class VaultManager:
             )
 
     def _assert_manifest_present(self, vault_root: Path, vault_id: str) -> None:
-        """
-        Raise :class:`VaultManifestError` if ``manifest.json`` is missing.
-
-        A vault directory without a manifest is considered structurally
-        invalid.  This guard applies to all operations that require a
-        well-formed vault (read, delete, lock, unlock).
-        """
         manifest_path = vault_root / "manifest.json"
         if not manifest_path.is_file():
             raise VaultManifestError(
@@ -384,13 +153,6 @@ class VaultManager:
             )
 
     def _delete_vault_tree(self, vault_root: Path, vault_id: str) -> None:
-        """
-        Recursively remove the vault root directory and all its contents.
-
-        Uses :func:`shutil.rmtree` internally.  On Windows, files inside
-        the tree that are marked read-only will cause an ``OSError``;
-        this is surfaced as a :class:`VaultDeletionError`.
-        """
         try:
             shutil.rmtree(vault_root)
             logger.debug("Vault tree removed at %s", vault_root)
@@ -404,7 +166,6 @@ class VaultManager:
             ) from exc
 
     def _create_vault_root(self, vault_root: Path, vault_id: str) -> None:
-        """Create the top-level ``<vault_uuid>/`` directory."""
         try:
             vault_root.mkdir(parents=True, exist_ok=False)
         except FileExistsError as exc:
@@ -419,7 +180,6 @@ class VaultManager:
             ) from exc
 
     def _create_subdirectories(self, vault_root: Path, vault_id: str) -> None:
-        """Create ``encrypted/``, ``metadata/``, and ``temp/`` inside the vault root."""
         for sub in _VAULT_SUBDIRS:
             target = vault_root / sub
             try:
@@ -437,7 +197,6 @@ class VaultManager:
     def _write_manifest(
         self, vault_root: Path, manifest: VaultManifest, vault_id: str
     ) -> None:
-        """Serialise the manifest to ``manifest.json`` in the vault root."""
         manifest_path = vault_root / "manifest.json"
         try:
             manifest.write(manifest_path)
@@ -449,15 +208,6 @@ class VaultManager:
             ) from exc
 
     def _write_security_metadata(self, vault_root: Path, vault_id: str) -> None:
-        """
-        Write ``security.json`` to the vault root via
-        :class:`~app.vault.security_manager.SecurityMetadataManager`.
-
-        Delegates all I/O to :class:`SecurityMetadataManager` and re-wraps
-        any :class:`~app.core.exceptions.SecurityMetadataError` as a
-        :class:`~app.core.exceptions.VaultCreationError` so that
-        :meth:`create` exposes a single, consistent failure type.
-        """
         try:
             SecurityMetadataManager(vault_root).create(vault_id)
         except SecurityMetadataError as exc:
@@ -467,26 +217,6 @@ class VaultManager:
             ) from exc
 
     def _write_key_metadata(self, vault_root: Path, vault_id: str, password: str) -> None:
-        """
-        Generate, encrypt, and persist the Vault Key to ``key.json``.
-
-        Sequence
-        --------
-        1. Generate a 32-byte random Vault Key (OS CSPRNG).
-        2. Generate a 32-byte random Argon2id salt (OS CSPRNG).
-        3. Derive the ephemeral 32-byte Master Key from (password, salt)
-           using Argon2id (OWASP profile 2 parameters).
-        4. Generate a fresh 12-byte AES-GCM nonce (OS CSPRNG).
-        5. Encrypt the Vault Key with the Master Key using AES-256-GCM.
-        6. Base64-encode the ciphertext and nonce for JSON storage.
-        7. Write ``key.json`` containing the ciphertext, nonce, and
-           algorithm metadata.  No plaintext key material is written.
-        8. Immediately discard the raw Vault Key, Master Key, and salt
-           by deleting the local variable bindings.
-        Re-wraps any key or encryption exception as a
-        :class:`~app.core.exceptions.VaultCreationError` so that
-        :meth:`create` exposes a single, consistent failure type.
-        """
         from app.core.exceptions import MissingSaltError
 
         key_mgr = KeyManager(vault_root)
@@ -526,16 +256,8 @@ class VaultManager:
                 detail=exc.detail,
             ) from exc
         finally:
-            # Explicitly release sensitive local variable bindings.
-            # CPython's reference counting means del is typically immediate.
-            # We use individual try/except NameError guards because an
-            # exception raised before a binding was created would cause
-            # NameError on the bare 'del' if we tried to delete all at once.
-            #
-            # NOTE: locals() called inside 'finally' does NOT include names
-            # from the 'try' block once the try block has exited, so we
-            # cannot use locals().get() here.  Individual del with NameError
-            # guards is the correct pattern.
+
+
             try:
                 del vault_key_hex
             except NameError:
@@ -564,31 +286,6 @@ class VaultManager:
     def _read_manifest(
         self, manifest_path: Path, vault_dir_name: str
     ) -> VaultManifest:
-        """
-        Attempt to deserialise a ``manifest.json`` and return it.
-
-        On any read or parse failure the method raises
-        :class:`~app.core.exceptions.VaultManifestError`.  The caller
-        (``list_vaults``) is responsible for catching it, logging it, and
-        continuing with the next vault.
-
-        Parameters
-        ----------
-        manifest_path:
-            Absolute path to the ``manifest.json`` file.
-        vault_dir_name:
-            The directory name (vault UUID), used only in error messages.
-
-        Returns
-        -------
-        VaultManifest
-            The deserialised manifest.
-
-        Raises
-        ------
-        VaultManifestError
-            On any I/O or parse error.
-        """
         try:
             return VaultManifest.read(manifest_path)
         except (OSError, ValueError, KeyError, TypeError) as exc:

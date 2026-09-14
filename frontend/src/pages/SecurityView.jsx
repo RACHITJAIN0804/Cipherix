@@ -65,7 +65,7 @@ export function SecurityView({ user, onLogout }) {
 
   return (
     <PageLayout title="Security & Keys" user={user} onLogout={onLogout}>
-      {/* Page Header */}
+      {}
       <PageHeader
         icon={KeyRound}
         iconColor="text-rose-400"
@@ -75,7 +75,7 @@ export function SecurityView({ user, onLogout }) {
         <VaultSelector vaults={vaults} selectedVaultId={selectedVaultId} onChange={setSelectedVaultId} />
       </PageHeader>
 
-      {/* Password Rewrapping Panel */}
+      {}
       <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', borderColor: 'rgba(239,68,68,0.15)' }}>
         <div>
           <h3 className="section-title" style={{ marginBottom: '6px' }}>
@@ -148,7 +148,7 @@ export function SecurityView({ user, onLogout }) {
         </form>
       </div>
 
-      {/* Cryptographic Info */}
+      {}
       <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <h3 className="section-title">
           <ShieldCheck style={{ width: 16, height: 16, color: 'var(--accent-emerald)' }} />

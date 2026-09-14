@@ -1,15 +1,9 @@
-"""
-schemas/search.py
-------------------
-Pydantic schemas for vector-based semantic search API.
-"""
 
 from typing import Optional
 from pydantic import BaseModel, Field
 
 
 class SearchRequest(BaseModel):
-    """Payload for initiating a vault-isolated semantic search query."""
 
     vault_id: str = Field(
         ...,
@@ -32,9 +26,7 @@ class SearchRequest(BaseModel):
     )
 
 
-
 class SearchResultItem(BaseModel):
-    """Matching document text chunk with similarity score and metadata."""
 
     chunk_id: str = Field(..., description="Unique deterministic SHA-256 chunk identifier.")
     document_id: str = Field(..., description="UUID of the parent document.")
@@ -48,7 +40,6 @@ class SearchResultItem(BaseModel):
 
 
 class SearchResponse(BaseModel):
-    """Response containing ranked semantic search results for authorized vault."""
 
     vault_id: str = Field(..., description="UUID of the searched vault.")
     query: str = Field(..., description="Echoed search query string.")

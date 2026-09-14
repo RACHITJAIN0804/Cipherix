@@ -1,8 +1,3 @@
-"""
-services/document_processing/extractor.py
--------------------------------------------
-Text extraction service for TXT, PDF, and DOCX documents.
-"""
 
 import io
 from pathlib import Path
@@ -29,9 +24,6 @@ _SUPPORTED_MIME_TYPES: set[str] = {
 
 
 class DocumentExtractor:
-    """
-    Extracts raw text and optional page associations from document bytes.
-    """
 
     def extract_text(
         self,
@@ -39,14 +31,6 @@ class DocumentExtractor:
         filename: str,
         mime_type: str | None = None,
     ) -> tuple[str, list[tuple[str, Optional[int]]]]:
-        """
-        Extract text from file content bytes.
-
-        Returns
-        -------
-        tuple[str, list[tuple[str, Optional[int]]]]
-            A tuple of (full_raw_text, text_blocks_with_page_numbers).
-        """
         ext = Path(filename).suffix.lower()
 
         if ext not in _SUPPORTED_EXTENSIONS and (

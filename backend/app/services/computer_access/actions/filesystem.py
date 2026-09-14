@@ -1,11 +1,3 @@
-"""
-services/computer_access/actions/filesystem.py
-------------------------------------------------
-Safe filesystem action executors.
-
-All operations execute strictly through PathGuard validation to guarantee
-path sandboxing within CIPHERIX_WORKSPACE.
-"""
 
 import shutil
 from pathlib import Path
@@ -36,7 +28,6 @@ def _get_relative_str(path: Path, root: Path) -> str:
 
 
 def execute_list_directory(path_guard: PathGuard, params: ListDirectoryParams) -> Dict[str, Any]:
-    """Execute list_directory safe action."""
     target_path = path_guard.validate_and_resolve(params.path)
     if not target_path.exists():
         raise ActionExecutionError(f"Directory '{params.path}' does not exist.")
@@ -66,7 +57,6 @@ def execute_list_directory(path_guard: PathGuard, params: ListDirectoryParams) -
 
 
 def execute_read_text_file(path_guard: PathGuard, params: ReadTextFileParams) -> Dict[str, Any]:
-    """Execute read_text_file safe action."""
     target_path = path_guard.validate_and_resolve(params.path)
     if not target_path.exists():
         raise ActionExecutionError(f"File '{params.path}' does not exist.")
@@ -88,7 +78,6 @@ def execute_read_text_file(path_guard: PathGuard, params: ReadTextFileParams) ->
 
 
 def execute_create_directory(path_guard: PathGuard, params: CreateDirectoryParams) -> Dict[str, Any]:
-    """Execute create_directory safe action."""
     target_path = path_guard.validate_and_resolve(params.path)
     root = path_guard.get_workspace_root()
     try:
@@ -102,7 +91,6 @@ def execute_create_directory(path_guard: PathGuard, params: CreateDirectoryParam
 
 
 def execute_create_text_file(path_guard: PathGuard, params: CreateTextFileParams) -> Dict[str, Any]:
-    """Execute create_text_file safe action."""
     target_path = path_guard.validate_and_resolve(params.path)
     root = path_guard.get_workspace_root()
     try:
@@ -118,7 +106,6 @@ def execute_create_text_file(path_guard: PathGuard, params: CreateTextFileParams
 
 
 def execute_write_text_file(path_guard: PathGuard, params: WriteTextFileParams) -> Dict[str, Any]:
-    """Execute write_text_file safe action."""
     target_path = path_guard.validate_and_resolve(params.path)
     root = path_guard.get_workspace_root()
     try:
@@ -134,7 +121,6 @@ def execute_write_text_file(path_guard: PathGuard, params: WriteTextFileParams) 
 
 
 def execute_copy_file(path_guard: PathGuard, params: CopyFileParams) -> Dict[str, Any]:
-    """Execute copy_file safe action."""
     src_path = path_guard.validate_and_resolve(params.src_path)
     dst_path = path_guard.validate_and_resolve(params.dst_path)
 
@@ -157,7 +143,6 @@ def execute_copy_file(path_guard: PathGuard, params: CopyFileParams) -> Dict[str
 
 
 def execute_move_file(path_guard: PathGuard, params: MoveFileParams) -> Dict[str, Any]:
-    """Execute move_file safe action."""
     src_path = path_guard.validate_and_resolve(params.src_path)
     dst_path = path_guard.validate_and_resolve(params.dst_path)
 

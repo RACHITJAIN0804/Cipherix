@@ -1,8 +1,3 @@
-"""
-schemas/computer_access.py
----------------------------
-Pydantic validation schemas for computer access request/response data models.
-"""
 
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -11,7 +6,6 @@ from pydantic import BaseModel, Field, ConfigDict
 
 
 class ToggleAccessRequest(BaseModel):
-    """Request payload to enable or disable computer access for the authenticated user."""
 
     enabled: bool = Field(
         ..., description="True to enable computer access, False to disable."
@@ -19,35 +13,30 @@ class ToggleAccessRequest(BaseModel):
 
 
 class AccessStatusResponse(BaseModel):
-    """Response containing computer access state for the authenticated user."""
 
     enabled: bool = Field(..., description="Whether computer access is currently enabled.")
     workspace_root: str = Field(..., description="Canonical path of the user's workspace directory.")
 
 
 class ListDirectoryParams(BaseModel):
-    """Parameters for list_directory action."""
 
     model_config = ConfigDict(extra="forbid")
     path: str = Field(default="", description="Relative path to directory within workspace.")
 
 
 class ReadTextFileParams(BaseModel):
-    """Parameters for read_text_file action."""
 
     model_config = ConfigDict(extra="forbid")
     path: str = Field(..., description="Relative path to text file within workspace.")
 
 
 class CreateDirectoryParams(BaseModel):
-    """Parameters for create_directory action."""
 
     model_config = ConfigDict(extra="forbid")
     path: str = Field(..., description="Relative path of directory to create within workspace.")
 
 
 class CreateTextFileParams(BaseModel):
-    """Parameters for create_text_file action."""
 
     model_config = ConfigDict(extra="forbid")
     path: str = Field(..., description="Relative path of text file to create within workspace.")
@@ -55,7 +44,6 @@ class CreateTextFileParams(BaseModel):
 
 
 class WriteTextFileParams(BaseModel):
-    """Parameters for write_text_file action."""
 
     model_config = ConfigDict(extra="forbid")
     path: str = Field(..., description="Relative path of text file to write within workspace.")
@@ -63,7 +51,6 @@ class WriteTextFileParams(BaseModel):
 
 
 class CopyFileParams(BaseModel):
-    """Parameters for copy_file action."""
 
     model_config = ConfigDict(extra="forbid")
     src_path: str = Field(..., description="Relative path of source file within workspace.")
@@ -71,7 +58,6 @@ class CopyFileParams(BaseModel):
 
 
 class MoveFileParams(BaseModel):
-    """Parameters for move_file action."""
 
     model_config = ConfigDict(extra="forbid")
     src_path: str = Field(..., description="Relative path of source file within workspace.")
@@ -79,7 +65,6 @@ class MoveFileParams(BaseModel):
 
 
 class ActionRequest(BaseModel):
-    """Structured action proposal / request from user or LLM."""
 
     action: str = Field(..., description="Name of registered action (e.g. read_text_file).")
     parameters: Dict[str, Any] = Field(
@@ -97,7 +82,6 @@ class ActionRequest(BaseModel):
 
 
 class ActionResponse(BaseModel):
-    """Structured action execution or approval challenge response."""
 
     success: bool = Field(..., description="Whether the request succeeded.")
     action: str = Field(..., description="Name of action processed.")
@@ -109,13 +93,11 @@ class ActionResponse(BaseModel):
 
 
 class ApproveActionRequest(BaseModel):
-    """Payload to approve a pending write action by approval ID."""
 
     approval_id: str = Field(..., description="UUID of pending action approval request.")
 
 
 class AuditLogResponse(BaseModel):
-    """Computer access audit log entry response."""
 
     model_config = ConfigDict(from_attributes=True)
 

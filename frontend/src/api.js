@@ -1,12 +1,4 @@
-/*
- Cipherix Frontend API Service Connector
- --------------------------------------
- Connects directly to FastAPI backend (http://localhost:8000/api/v1).
- Seamlessly handles JWT tokens, multipart uploads, X-Vault-Password headers,
- and provides fallback responses when server endpoints are starting up.
-*/
-
-const API_BASE = "http://localhost:8000/api/v1";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1";
 
 export class CipherixAPI {
   static getAuthToken() {
@@ -36,46 +28,93 @@ export class CipherixAPI {
   static async request(endpoint, options = {}) {
     const url = `${API_BASE}${endpoint}`;
     const isFormData = options.body instanceof FormData;
+
+    let response;
     try {
-      const response = await fetch(url, {
+      response = await fetch(url, {
         ...options,
         headers: this.getHeaders(options.headers || {}, isFormData),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(errorData.detail || `HTTP ${response.status}`);
-      }
-
-      if (response.status === 24 || response.status === 204) {
-        return { success: true };
-      }
-
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        return await response.json();
-      }
-      
-      // Blob response for document download
-      if (options.responseType === "blob") {
-        return await response.blob();
-      }
-
-      return await response.text();
-    } catch (err) {
-      console.warn(`Cipherix API [${endpoint}] fallback: ${err.message}`);
-      return this.getFallback(endpoint, options);
+    } catch (networkErr) {
+      console.error(`[CipherixAPI] Network or CORS failure on ${endpoint}:`, networkErr);
+      throw new Error(
+        `Unable to reach backend server at ${API_BASE}. Please ensure the Cipherix backend is running on http://localhost:8000 and CORS is configured for this origin.`
+      );
     }
+
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          const errData = await response.json();
+          if (Array.isArray(errData.detail)) {
+            detail = errData.detail
+              .map((err) => {
+                const field = err.loc ? err.loc.filter((l) => l !== "body").join(" ") : "";
+                return field ? `${field}: ${err.msg}` : err.msg;
+              })
+              .join("; ");
+          } else if (typeof errData.detail === "string") {
+            detail = errData.detail;
+          } else if (errData.message) {
+            detail = errData.message;
+          } else {
+            detail = JSON.stringify(errData);
+          }
+        } else {
+          detail = await response.text();
+        }
+      } catch {
+        detail = response.statusText || `HTTP ${response.status}`;
+      }
+
+      if (!detail) {
+        detail = response.statusText || `Status ${response.status}`;
+      }
+
+      const friendlyMessages = {
+        400: `Validation error (400): ${detail}`,
+        401: `Authentication failed (401): ${detail}`,
+        403: `Access denied (403): ${detail}`,
+        404: `Route not found (404) at ${url}. Verify API route configuration.`,
+        409: `Conflict (409): ${detail}`,
+        422: `Validation error (422): ${detail}`,
+        423: `Resource locked (423): ${detail}`,
+        429: `Rate limit exceeded (429): ${detail}`,
+        500: `Backend error (500): ${detail}`,
+        503: `Service unavailable (503): ${detail}`,
+      };
+
+      throw new Error(friendlyMessages[response.status] || `Request failed (${response.status}): ${detail}`);
+    }
+
+    if (response.status === 204) {
+      return { success: true };
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      try {
+        return await response.json();
+      } catch (jsonErr) {
+        throw new Error(`Invalid response format from ${endpoint}: Expected JSON.`);
+      }
+    }
+    if (options.responseType === "blob") {
+      return await response.blob();
+    }
+    return await response.text();
   }
 
   static getFallback(endpoint, options) {
-    if (endpoint.includes("/auth/login") || endpoint.includes("/auth/register")) {
-      return {
-        access_token: "demo_jwt_access_token_12345",
-        refresh_token: "demo_jwt_refresh_token_67890",
-        token_type: "bearer",
-        user_id: "3fd2d8f6-bec0-45fa-a2fe-09728baf34a6",
-      };
+    if (endpoint.includes('/auth/login') || endpoint.includes('/auth/register')) {
+      throw new Error(
+        'Cannot reach the backend server.\n' +
+        'Make sure Uvicorn is running:\n' +
+        '  cd backend && uvicorn app.main:app --reload\n' +
+        'Expected at: http://localhost:8000'
+      );
     }
 
     if (endpoint.includes("/auth/me")) {
@@ -187,7 +226,7 @@ export class CipherixAPI {
         privacy_reference: "6ac287fd346b2a74e1d82ddd8dc57c2aa8fc0408a95d381f",
         integrity_hash: "7f7c621d36a26039401f8d91a27e4b93108ab34c112233445566778899aabbcc",
         network: "local-development",
-        tx_hash: "0x" + Array.from({length: 64}, () => Math.floor(Math.random()*16).toString(16)).join(''),
+        tx_hash: "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
         block_number: 104,
         status: "anchored",
         anchored_at: new Date().toISOString(),

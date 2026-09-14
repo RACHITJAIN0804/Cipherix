@@ -23,14 +23,14 @@ export function TopNavBar({ title, user, onLogout }) {
           maxWidth: '1360px',
           margin: '0 auto',
           padding: '0 28px',
-          height: '58px',
+          height: '68px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: '16px',
         }}
       >
-        {/* Left: Back breadcrumb + page title */}
+        {}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
           <button
             onClick={() => navigate('/')}
@@ -65,10 +65,10 @@ export function TopNavBar({ title, user, onLogout }) {
             <span className="hidden sm:inline">Command Center</span>
           </button>
 
-          {/* Divider */}
+          {}
           <ChevronRight style={{ width: 14, height: 14, color: '#334155', flexShrink: 0 }} />
 
-          {/* Page title with icon */}
+          {}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
             <div
               style={{
@@ -103,7 +103,7 @@ export function TopNavBar({ title, user, onLogout }) {
           </div>
         </div>
 
-        {/* Right: User profile */}
+        {}
         <div style={{ flexShrink: 0 }}>
           <UserProfile user={user} onLogout={onLogout} />
         </div>

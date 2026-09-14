@@ -53,7 +53,7 @@ export function AISearchView({ user, onLogout }) {
 
   return (
     <PageLayout title="Vault-Isolated AI Search" user={user} onLogout={onLogout}>
-      {/* Page Header */}
+      {}
       <PageHeader
         icon={Search}
         iconColor="text-blue-400"
@@ -63,7 +63,7 @@ export function AISearchView({ user, onLogout }) {
         <VaultSelector vaults={vaults} selectedVaultId={selectedVaultId} onChange={setSelectedVaultId} />
       </PageHeader>
 
-      {/* Search Panel */}
+      {}
       <div
         className="glass-panel"
         style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}
@@ -133,7 +133,7 @@ export function AISearchView({ user, onLogout }) {
           </button>
         </form>
 
-        {/* Top-K slider */}
+        {}
         <div
           style={{
             display: 'flex',
@@ -170,9 +170,9 @@ export function AISearchView({ user, onLogout }) {
 
       {error && <ErrorState message={error} onRetry={handleSearch} />}
 
-      {/* Results Section */}
+      {}
       <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {/* Section header */}
+        {}
         <div
           style={{
             display: 'flex',
@@ -230,7 +230,7 @@ export function AISearchView({ user, onLogout }) {
                   borderColor: 'rgba(168,85,247,0.12)',
                 }}
               >
-                {/* Result header */}
+                {}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                     <FileText style={{ width: 15, height: 15, color: 'var(--accent-purple)', flexShrink: 0 }} />
@@ -248,7 +248,7 @@ export function AISearchView({ user, onLogout }) {
                   </span>
                 </div>
 
-                {/* Snippet */}
+                {}
                 <p
                   style={{
                     fontFamily: "'JetBrains Mono', 'Courier New', monospace",
@@ -267,7 +267,7 @@ export function AISearchView({ user, onLogout }) {
                   "{r.text_snippet}"
                 </p>
 
-                {/* Metadata */}
+                {}
                 <div
                   style={{
                     display: 'flex',

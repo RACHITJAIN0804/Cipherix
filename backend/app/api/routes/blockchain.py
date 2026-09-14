@@ -1,14 +1,3 @@
-"""
-api/routes/blockchain.py
-------------------------
-FastAPI routes for document integrity blockchain anchoring and verification.
-
-Endpoints:
-* POST /api/v1/blockchain/anchor — Anchor a document's SHA-256 integrity hash.
-* POST /api/v1/blockchain/verify — Recalculate hash and verify against DB & blockchain.
-* GET  /api/v1/blockchain/anchor/{document_id} — Retrieve anchor metadata.
-"""
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -45,9 +34,6 @@ def anchor_document_hash(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> AnchorResponse:
-    """
-    Anchor document's SHA-256 integrity hash on the blockchain.
-    """
     try:
         return _blockchain_service.anchor_document(
             db=db,
@@ -78,9 +64,6 @@ def verify_document_anchor(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> VerifyAnchorResponse:
-    """
-    Verify document integrity against stored database hash and blockchain anchor.
-    """
     try:
         return _blockchain_service.verify_document_anchor(
             db=db,
@@ -107,9 +90,6 @@ def get_document_anchor(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> AnchorResponse:
-    """
-    Retrieve blockchain anchor metadata for a document.
-    """
     try:
         return _blockchain_service.get_document_anchor(
             db=db,

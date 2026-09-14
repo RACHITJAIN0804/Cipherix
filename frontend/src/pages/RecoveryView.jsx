@@ -72,7 +72,7 @@ export function RecoveryView({ user, onLogout }) {
 
   return (
     <PageLayout title="BIP-39 Vault Recovery" user={user} onLogout={onLogout}>
-      {/* Page Header */}
+      {}
       <PageHeader
         icon={LifeBuoy}
         iconColor="text-purple-400"
@@ -103,7 +103,7 @@ export function RecoveryView({ user, onLogout }) {
         </div>
       )}
 
-      {/* Section 1: Generate Seed */}
+      {}
       <div
         className="glass-panel"
         style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', borderColor: 'rgba(168,85,247,0.15)' }}
@@ -193,7 +193,7 @@ export function RecoveryView({ user, onLogout }) {
         )}
       </div>
 
-      {/* Section 2: Recover Vault */}
+      {}
       <div
         className="glass-panel"
         style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', borderColor: 'rgba(168,85,247,0.15)' }}

@@ -1,10 +1,3 @@
-"""
-services/vector_store.py
--------------------------
-Local persistent vector storage service using ChromaDB for Cipherix.
-
-Enforces strict vault isolation by requiring vault_id filtering on all vector queries.
-"""
 
 from pathlib import Path
 from typing import Any, Optional
@@ -19,16 +12,13 @@ from app.services.document_processing.chunker import DocumentChunk
 
 logger = get_logger(__name__)
 
-# Module-level cache for ChromaDB client and collection
+
 _client_instance: Optional[chromadb.PersistentClient] = None
 _collection_instance = None
 _COLLECTION_NAME = "cipherix_chunks"
 
 
 def get_vector_store_client(db_dir: Path | None = None) -> chromadb.PersistentClient:
-    """
-    Get or initialize persistent ChromaDB client instance.
-    """
     global _client_instance
     target_dir = db_dir or (settings.VECTOR_DB_DIR / settings.vector_db_dir_name)
 
@@ -49,9 +39,6 @@ def get_vector_store_client(db_dir: Path | None = None) -> chromadb.PersistentCl
 
 
 def get_chunks_collection(db_dir: Path | None = None):
-    """
-    Get or create the ChromaDB collection for chunk embeddings.
-    """
     global _collection_instance
     if _collection_instance is not None and db_dir is None:
         return _collection_instance
@@ -67,9 +54,6 @@ def get_chunks_collection(db_dir: Path | None = None):
 
 
 class VectorStore:
-    """
-    Service wrapper around ChromaDB persistent vector storage for text chunks.
-    """
 
     def __init__(self, db_dir: Path | None = None) -> None:
         self._db_dir = db_dir
@@ -85,22 +69,6 @@ class VectorStore:
         document_id: str,
         embedding_model: str | None = None,
     ) -> None:
-        """
-        Add or replace chunk vector embeddings for a document in ChromaDB.
-
-        Parameters
-        ----------
-        chunks:
-            List of DocumentChunk instances.
-        embeddings:
-            Corresponding embedding float vectors.
-        vault_id:
-            UUID of the target vault.
-        document_id:
-            UUID of the target document.
-        embedding_model:
-            Name of the embedding model used.
-        """
         if not chunks or not embeddings:
             return
 
@@ -133,7 +101,7 @@ class VectorStore:
                     }
                 )
 
-            # First remove existing vectors for this document to ensure clean re-indexing
+
             self.delete_document_vectors(document_id=document_id, vault_id=vault_id)
 
             collection.add(
@@ -158,18 +126,13 @@ class VectorStore:
             ) from exc
 
     def delete_document_vectors(self, document_id: str, vault_id: str | None = None) -> int:
-        """
-        Delete all vector embeddings belonging to a specific document.
-
-        Returns deleted count estimation (or 0).
-        """
         collection = self._get_collection()
         where_clause: dict[str, Any] = {"document_id": document_id}
         if vault_id:
             where_clause = {"$and": [{"document_id": document_id}, {"vault_id": vault_id}]}
 
         try:
-            # Query existing to check if present
+
             existing = collection.get(where={"document_id": document_id})
             count = len(existing.get("ids", []))
             if count > 0:
@@ -184,11 +147,6 @@ class VectorStore:
             ) from exc
 
     def delete_vault_vectors(self, vault_id: str) -> int:
-        """
-        Delete all vector embeddings belonging to a target vault.
-
-        Returns deleted count estimation.
-        """
         collection = self._get_collection()
         try:
             existing = collection.get(where={"vault_id": vault_id})
@@ -210,24 +168,6 @@ class VectorStore:
         vault_id: str,
         top_k: int = 5,
     ) -> list[dict[str, Any]]:
-        """
-        Execute semantic similarity search strictly filtered by vault_id.
-
-        Parameters
-        ----------
-        query_embedding:
-            Embedding vector for search query string.
-        vault_id:
-            Authorized vault UUID.
-        top_k:
-            Maximum number of nearest neighbor chunks to return.
-
-        Returns
-        -------
-        list[dict[str, Any]]:
-            Ranked list of matching result dictionaries containing chunk metadata,
-            similarity score, and text.
-        """
         if not vault_id:
             raise DocumentProcessingError("vault_id is required for vector search.")
 
@@ -237,7 +177,7 @@ class VectorStore:
             results = collection.query(
                 query_embeddings=[query_embedding],
                 n_results=top_k,
-                where={"vault_id": vault_id},  # MANDATORY VAULT ISOLATION FILTER
+                where={"vault_id": vault_id},
                 include=["documents", "metadatas", "distances"],
             )
 
@@ -252,7 +192,7 @@ class VectorStore:
             distances = results["distances"][0] if results.get("distances") else []
 
             for cid, doc_text, meta, dist in zip(ids, documents, metadatas, distances):
-                # Convert cosine distance to cosine similarity: sim = 1.0 - dist
+
                 similarity = max(0.0, min(1.0, 1.0 - float(dist)))
                 page_num = meta.get("page_number")
                 if page_num == -1:

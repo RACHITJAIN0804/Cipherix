@@ -1,17 +1,6 @@
 import React from 'react';
 
-/**
- * PageHeader — Standardized page section header used across all sub-pages.
- *
- * Props:
- *  - icon       : A Lucide icon component (e.g. Shield)
- *  - iconColor  : CSS color string or Tailwind class for the icon (default: '#22D3EE')
- *  - iconBg     : CSS background for icon container (optional)
- *  - iconBorder : CSS border for icon container (optional)
- *  - title      : Main section heading text
- *  - description: Subtitle / description below the title
- *  - children   : Right-side slot — action buttons, selectors, badges, etc.
- */
+
 export function PageHeader({
   icon: Icon,
   iconColor = 'text-cyan-400',

@@ -88,7 +88,7 @@ export function ComputerAccessView({ user, onLogout }) {
 
   return (
     <PageLayout title="Controlled Computer Access" user={user} onLogout={onLogout}>
-      {/* Page Header */}
+      {}
       <PageHeader
         icon={Terminal}
         iconColor="text-blue-400"
@@ -121,7 +121,7 @@ export function ComputerAccessView({ user, onLogout }) {
 
       {error && <ErrorState message={error} />}
 
-      {/* Status Cards */}
+      {}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
         {[
           {
@@ -171,7 +171,7 @@ export function ComputerAccessView({ user, onLogout }) {
         ))}
       </div>
 
-      {/* Action Execution Panel */}
+      {}
       <div
         className="glass-panel"
         style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', borderColor: 'rgba(59,130,246,0.15)' }}
@@ -260,7 +260,7 @@ export function ComputerAccessView({ user, onLogout }) {
           )}
         </form>
 
-        {/* Result Box */}
+        {}
         {actionResult && (
           <div
             style={{

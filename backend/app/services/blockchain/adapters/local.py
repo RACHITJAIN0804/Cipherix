@@ -1,15 +1,3 @@
-"""
-services/blockchain/adapters/local.py
--------------------------------------
-Local development implementation of BlockchainAdapter.
-
-DEVELOPMENT IMPLEMENTATION DISCLAIMER:
--------------------------------------
-This adapter provides a lightweight, local, deterministic simulation of a
-blockchain ledger for offline development and test suites. It DOES NOT provide
-the decentralized consensus or immutable public trust guarantees of an external
-production blockchain network (e.g. Ethereum / Bitcoin / OpenTimestamps).
-"""
 
 import hashlib
 import threading
@@ -24,9 +12,6 @@ logger = get_logger(__name__)
 
 
 class LocalBlockchainAdapter(BlockchainAdapter):
-    """
-    Local in-memory simulated blockchain ledger for development & testing.
-    """
 
     def __init__(self, network: str = "local-development") -> None:
         self._network: str = network
@@ -40,7 +25,6 @@ class LocalBlockchainAdapter(BlockchainAdapter):
         return self._network
 
     def set_available(self, available: bool) -> None:
-        """Helper for unit tests to simulate network outage / recovery."""
         with self._lock:
             self._available = available
 
@@ -51,9 +35,6 @@ class LocalBlockchainAdapter(BlockchainAdapter):
     def anchor_hash(
         self, privacy_reference: str, integrity_hash: str
     ) -> Dict[str, Any]:
-        """
-        Anchor document integrity hash on local simulated ledger.
-        """
         if not self.is_available():
             raise BlockchainUnavailableError(
                 "Local development blockchain network is currently unavailable.",
@@ -65,7 +46,7 @@ class LocalBlockchainAdapter(BlockchainAdapter):
             block_number = self._block_counter
             now_iso = datetime.now(UTC).isoformat()
 
-            # Compute deterministic simulated transaction hash
+
             tx_payload = f"{self._network}:{privacy_reference}:{integrity_hash}:{block_number}:{now_iso}"
             tx_hash = "0x" + hashlib.sha256(tx_payload.encode("utf-8")).hexdigest()
 
@@ -89,9 +70,6 @@ class LocalBlockchainAdapter(BlockchainAdapter):
             return record
 
     def get_anchor(self, tx_hash: str) -> Optional[Dict[str, Any]]:
-        """
-        Retrieve anchor entry from local simulated ledger.
-        """
         if not self.is_available():
             raise BlockchainUnavailableError("Local development blockchain network unavailable.")
 
@@ -102,9 +80,6 @@ class LocalBlockchainAdapter(BlockchainAdapter):
     def verify_anchor(
         self, privacy_reference: str, integrity_hash: str, tx_hash: str
     ) -> bool:
-        """
-        Verify privacy_reference and integrity_hash against transaction record.
-        """
         record = self.get_anchor(tx_hash)
         if record is None:
             return False

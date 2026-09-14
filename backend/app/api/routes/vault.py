@@ -1,32 +1,3 @@
-"""
-api/routes/vault.py
--------------------
-FastAPI route handlers for vault-related endpoints.
-
-This module is intentionally thin.  Each handler:
-
-1. Receives and validates the request (Pydantic does the heavy lifting).
-2. Delegates to :class:`~app.services.vault_service.VaultService`.
-3. Maps domain exceptions to appropriate HTTP responses.
-4. Returns the response model.
-
-No business logic, no filesystem code, no UUID generation lives here.
-
-Dependency wiring
------------------
-``_get_vault_service()`` is a FastAPI dependency that constructs the
-full object graph (VaultManager → VaultService) on every request.
-This is intentionally simple for now; once the project grows, this
-can be replaced with a proper DI container or a singleton pattern
-for the manager.
-
-Shared helpers
---------------
-``_handle_state_transition()`` is a private helper that maps the
-identical exception surface of the lock and unlock handlers to HTTP
-status codes.  Any new exception type only needs to be added here.
-"""
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -61,19 +32,7 @@ router = APIRouter(
 )
 
 
-
 def _get_vault_service() -> VaultService:
-    """
-    FastAPI dependency that wires together the VaultManager and VaultService.
-
-    Constructing the object graph here (rather than at module import time)
-    means:
-
-    * Each request gets a fresh service instance, avoiding shared state.
-    * Tests can override this dependency with ``app.dependency_overrides``.
-    * The vault base directory is read from ``settings`` at request time,
-      respecting any runtime configuration changes.
-    """
     manager = VaultManager(vault_base_dir=settings.VAULT_DIR)
     return VaultService(manager=manager)
 
@@ -83,27 +42,6 @@ def _handle_state_transition(
     vault_id: str,
     result: VaultStateResponse,
 ) -> VaultStateResponse:
-    """
-    Log a successful lock/unlock transition and return the response.
-
-    This tiny helper exists so that ``lock_vault`` and ``unlock_vault``
-    share identical post-call logging without repeating it.
-
-    Parameters
-    ----------
-    action:
-        Human-readable action label for the log line (``"lock"`` or
-        ``"unlock"``).
-    vault_id:
-        The vault identifier, used in the log message.
-    result:
-        The :class:`VaultStateResponse` returned by the service.
-
-    Returns
-    -------
-    VaultStateResponse
-        The unchanged ``result`` object.
-    """
     logger.info("POST /vaults/%s/%s succeeded", vault_id, action)
     return result
 
@@ -113,27 +51,6 @@ def _map_state_exception(
     vault_id: str,
     exc: Exception,
 ) -> None:
-    """
-    Map a domain exception raised during a state transition to an HTTPException.
-
-    Both ``lock_vault`` and ``unlock_vault`` have exactly the same exception
-    surface.  Centralising the mapping here means a new exception type only
-    needs to be handled once.
-
-    Parameters
-    ----------
-    action:
-        Human-readable action label (``"lock"`` or ``"unlock"``) for logs.
-    vault_id:
-        The vault identifier, used in log messages.
-    exc:
-        The caught domain exception.
-
-    Raises
-    ------
-    HTTPException
-        Always.  The status code depends on ``exc``'s type.
-    """
     if isinstance(exc, VaultValidationError):
         logger.warning(
             "%s rejected: invalid vault_id | vault_id=%s | %s",
@@ -179,7 +96,6 @@ def _map_state_exception(
             detail=exc.detail,
         ) from exc
 
-    # CipherixError catch-all — includes any unforeseen domain subclass.
     if isinstance(exc, CipherixError):
         logger.error(
             "Unexpected domain error during %s | %s", action, exc.detail
@@ -189,12 +105,15 @@ def _map_state_exception(
             detail=exc.detail,
         ) from exc
 
-    # Re-raise anything that is not a domain error so the global handler
-    # can catch it and log the full traceback.
     raise exc
 
 
-
+@router.post(
+    "",
+    response_model=VaultResponse,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
 @router.post(
     "/",
     response_model=VaultResponse,
@@ -218,25 +137,6 @@ async def create_vault(
     service: VaultService = Depends(_get_vault_service),
     db: Session = Depends(get_db),
 ) -> VaultResponse:
-    """
-    ``POST /vaults`` — create a new vault.
-
-    Parameters
-    ----------
-    request:
-        Pydantic-validated vault creation payload.
-    current_user:
-        Authenticated user row.
-    service:
-        Injected :class:`~app.services.vault_service.VaultService` instance.
-    db:
-        Injected SQLAlchemy session for DB metadata persistence.
-
-    Returns
-    -------
-    VaultResponse
-        Metadata of the newly created vault, with HTTP 201.
-    """
     try:
         response = service.create_vault(request, user_id=current_user.id, db=db)
         logger.info("POST /vaults succeeded | vault_id=%s | user_id=%s", response.vault_id, current_user.id)
@@ -265,6 +165,12 @@ async def create_vault(
 
 
 @router.get(
+    "",
+    response_model=list[VaultSummary],
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
+@router.get(
     "/",
     response_model=list[VaultSummary],
     status_code=status.HTTP_200_OK,
@@ -285,14 +191,6 @@ async def list_vaults(
     service: VaultService = Depends(_get_vault_service),
     db: Session = Depends(get_db),
 ) -> list[VaultSummary]:
-    """
-    ``GET /vaults`` — list all vaults belonging to the authenticated user.
-
-    Returns
-    -------
-    list[VaultSummary]
-        Zero or more vault summaries ordered newest-first.
-    """
     try:
         vaults = service.list_vaults(user_id=current_user.id, db=db)
         logger.info("GET /vaults succeeded | count=%d | user_id=%s", len(vaults), current_user.id)
@@ -329,9 +227,6 @@ async def delete_vault(
     service: VaultService = Depends(_get_vault_service),
     db: Session = Depends(get_db),
 ) -> Response:
-    """
-    ``DELETE /vaults/{vault_id}`` — permanently delete a vault.
-    """
     try:
         service.delete_vault(vault.id, db=db)
         logger.info("DELETE /vaults/%s succeeded", vault.id)
@@ -404,9 +299,6 @@ async def lock_vault(
     service: VaultService = Depends(_get_vault_service),
     db: Session = Depends(get_db),
 ) -> VaultStateResponse:
-    """
-    ``POST /vaults/{vault_id}/lock`` — transition a vault to locked state.
-    """
     try:
         return _handle_state_transition(
             "lock", vault.id, service.lock_vault(vault.id, db=db)
@@ -438,13 +330,9 @@ async def unlock_vault(
     service: VaultService = Depends(_get_vault_service),
     db: Session = Depends(get_db),
 ) -> VaultStateResponse:
-    """
-    ``POST /vaults/{vault_id}/unlock`` — transition a vault to unlocked state.
-    """
     try:
         return _handle_state_transition(
             "unlock", vault.id, service.unlock_vault(vault.id, db=db)
         )
     except Exception as exc:  # noqa: BLE001
         _map_state_exception("unlock", vault.id, exc)
-

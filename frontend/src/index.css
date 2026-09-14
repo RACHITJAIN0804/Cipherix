@@ -1,8 +1,4 @@
-/* ============================================================
-   Cipherix Cybersecurity Command Center — Design System v2
-   ============================================================ */
 
-/* Google Fonts are loaded via index.html */
 
 :root {
   color-scheme: dark;
@@ -38,9 +34,6 @@
   --shadow-hover: 0 14px 32px -6px rgba(34, 211, 238, 0.12), 0 4px 12px -4px rgba(0, 0, 0, 0.5);
 }
 
-/* ============================================================
-   BASE RESET
-   ============================================================ */
 
 html, body {
   color-scheme: dark;
@@ -64,18 +57,12 @@ html, body {
   box-sizing: border-box;
 }
 
-/* ============================================================
-   SCROLLBAR
-   ============================================================ */
 
 ::-webkit-scrollbar          { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track    { background: var(--bg-main); }
 ::-webkit-scrollbar-thumb    { background: #1e2a3a; border-radius: 9999px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent-cyan); }
 
-/* ============================================================
-   GLASS PANEL / CARD
-   ============================================================ */
 
 .glass-panel {
   background: var(--bg-card);
@@ -94,7 +81,7 @@ html, body {
   transform: translateY(-1px);
 }
 
-/* Section card — glass-panel with standard internal padding + gap */
+
 .section-card {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
@@ -113,7 +100,7 @@ html, body {
   box-shadow: var(--shadow-hover);
 }
 
-/* Stat card — accent top stripe */
+
 .stat-card {
   position: relative;
   overflow: hidden;
@@ -128,9 +115,6 @@ html, body {
   opacity: 0.7;
 }
 
-/* ============================================================
-   DARK OVERRIDES: FORM ELEMENTS
-   ============================================================ */
 
 input, select, textarea, optgroup, option {
   color-scheme: dark;
@@ -153,7 +137,7 @@ option {
   color: #e2e8f0 !important;
 }
 
-/* Fix browser autofill white background */
+
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
@@ -163,16 +147,13 @@ input:-webkit-autofill:active {
   transition: background-color 5000s ease-in-out 0s;
 }
 
-/* Table overrides */
+
 table, tr, th, td {
   background-color: transparent;
   color: var(--text-primary);
   border-color: var(--border-subtle);
 }
 
-/* ============================================================
-   REUSABLE FORM INPUT CLASS
-   ============================================================ */
 
 .form-input {
   width: 100%;
@@ -200,7 +181,7 @@ table, tr, th, td {
   padding-left: 2.5rem;
 }
 
-/* Select styling */
+
 .form-select {
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
@@ -210,13 +191,13 @@ table, tr, th, td {
   cursor: pointer;
 }
 
-/* Textarea */
+
 .form-textarea {
   resize: vertical;
   min-height: 80px;
 }
 
-/* Form field label */
+
 .form-label {
   display: block;
   font-size: 0.6875rem;
@@ -227,9 +208,6 @@ table, tr, th, td {
   margin-bottom: 0.4rem;
 }
 
-/* ============================================================
-   BUTTON SYSTEM
-   ============================================================ */
 
 .btn {
   display: inline-flex;
@@ -259,7 +237,7 @@ table, tr, th, td {
 .btn:active { transform: translateY(1px); }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; pointer-events: none; }
 
-/* Primary: cyan gradient */
+
 .btn-primary {
   background: linear-gradient(135deg, #22D3EE, #8B5CF6);
   color: #050a12;
@@ -271,7 +249,7 @@ table, tr, th, td {
   transform: translateY(-1px);
 }
 
-/* Secondary: ghost bordered */
+
 .btn-secondary {
   background: var(--bg-elevated);
   color: var(--text-primary);
@@ -283,7 +261,7 @@ table, tr, th, td {
   background: rgba(34, 211, 238, 0.06);
 }
 
-/* Ghost: text only */
+
 .btn-ghost {
   background: transparent;
   color: var(--text-secondary);
@@ -295,7 +273,7 @@ table, tr, th, td {
   border-color: var(--border-subtle);
 }
 
-/* Danger */
+
 .btn-danger {
   background: #EF4444;
   color: #050a12;
@@ -305,9 +283,6 @@ table, tr, th, td {
   transform: translateY(-1px);
 }
 
-/* ============================================================
-   BADGE SYSTEM
-   ============================================================ */
 
 .badge-tag {
   display: inline-flex;
@@ -329,11 +304,7 @@ table, tr, th, td {
 .badge-blue    { background: rgba(59, 130, 246, 0.12);   color: var(--accent-blue);    border: 1px solid rgba(59, 130, 246, 0.28); }
 .badge-rose    { background: rgba(239, 68, 68, 0.10);    color: #fca5a5;               border: 1px solid rgba(239, 68, 68, 0.28); }
 
-/* ============================================================
-   PAGE LAYOUT SYSTEM
-   ============================================================ */
 
-/* Full-height page root */
 .page-root {
   min-height: 100vh;
   background-color: var(--bg-main);
@@ -341,7 +312,7 @@ table, tr, th, td {
   flex-direction: column;
 }
 
-/* Centered content column */
+
 .page-main {
   flex: 1;
   width: 100%;
@@ -355,7 +326,7 @@ table, tr, th, td {
   gap: 24px;
 }
 
-/* Flex variant — for chat-style pages that must fill remaining height */
+
 .page-main--flex {
   flex: 1;
   min-height: 0;
@@ -398,9 +369,6 @@ table, tr, th, td {
   }
 }
 
-/* ============================================================
-   PAGE HEADER BAR
-   ============================================================ */
 
 .page-header-bar {
   display: flex;
@@ -428,7 +396,7 @@ table, tr, th, td {
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  /* Background tinted from the icon color via text-* class on parent */
+  
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.10);
   margin-top: 2px;
@@ -465,7 +433,7 @@ table, tr, th, td {
   padding-top: 2px;
 }
 
-/* Section sub-header inside a card */
+
 .section-sub-header {
   display: flex;
   align-items: center;
@@ -486,11 +454,7 @@ table, tr, th, td {
   margin: 0;
 }
 
-/* ============================================================
-   GRID UTILITIES
-   ============================================================ */
 
-/* Stats / info cards */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -499,7 +463,7 @@ table, tr, th, td {
 @media (max-width: 560px) { .stats-grid { grid-template-columns: 1fr 1fr; gap: 12px; } }
 @media (max-width: 380px) { .stats-grid { grid-template-columns: 1fr; } }
 
-/* Vault / document cards */
+
 .cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
@@ -507,9 +471,6 @@ table, tr, th, td {
 }
 @media (max-width: 640px) { .cards-grid { grid-template-columns: 1fr; gap: 14px; } }
 
-/* ============================================================
-   COMMAND CENTER LAYOUT (home page)
-   ============================================================ */
 
 .command-center-container {
   width: 100%;
@@ -520,7 +481,7 @@ table, tr, th, td {
 }
 @media (max-width: 768px) { .command-center-container { padding: 20px 16px; } }
 
-/* Main module grid: 4 → 2 → 1 columns */
+
 .cipherix-module-grid {
   display: grid !important;
   grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
@@ -535,7 +496,7 @@ table, tr, th, td {
   .cipherix-module-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
 }
 
-/* System section grid: 2 → 1 columns */
+
 .cipherix-system-grid {
   display: grid !important;
   grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
@@ -550,9 +511,6 @@ table, tr, th, td {
   .cipherix-system-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
 }
 
-/* ============================================================
-   MODAL UTILITY
-   ============================================================ */
 
 .modal-backdrop {
   position: fixed;
@@ -613,9 +571,6 @@ table, tr, th, td {
   border-top: 1px solid var(--border-subtle);
 }
 
-/* ============================================================
-   INNER SECTION PANEL (inside glass-panel / section-card)
-   ============================================================ */
 
 .inner-panel {
   background: rgba(7, 10, 18, 0.50);
@@ -624,9 +579,6 @@ table, tr, th, td {
   padding: 16px 20px;
 }
 
-/* ============================================================
-   TABLE STYLES
-   ============================================================ */
 
 .data-table {
   width: 100%;
@@ -667,9 +619,6 @@ table, tr, th, td {
   vertical-align: middle;
 }
 
-/* ============================================================
-   REDUCED MOTION
-   ============================================================ */
 
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {
@@ -680,9 +629,6 @@ table, tr, th, td {
   }
 }
 
-/* ============================================================
-   KEYFRAME ANIMATIONS
-   ============================================================ */
 
 @keyframes spin {
   from { transform: rotate(0deg); }
@@ -704,17 +650,13 @@ table, tr, th, td {
   50%       { transform: none; animation-timing-function: cubic-bezier(0, 0, 0.2, 1); }
 }
 
-/* ============================================================
-   UTILITY CLASSES (Tailwind-compatible subset — no Tailwind installed)
-   ============================================================ */
 
-/* Display */
 .hidden       { display: none !important; }
 .block        { display: block; }
 .inline       { display: inline; }
 .inline-flex  { display: inline-flex; }
 
-/* Flex */
+
 .flex-1          { flex: 1 1 0; }
 .flex-shrink-0   { flex-shrink: 0; }
 .flex-col        { flex-direction: column; }
@@ -733,7 +675,7 @@ table, tr, th, td {
 .gap-4      { gap: 1rem; }
 .gap-6      { gap: 1.5rem; }
 
-/* Sizing */
+
 .w-3    { width: 0.75rem; }
 .w-3\.5 { width: 0.875rem; }
 .w-4    { width: 1rem; }
@@ -770,7 +712,7 @@ table, tr, th, td {
 .max-w-\[200px\] { max-width: 200px; }
 .max-w-\[220px\] { max-width: 220px; }
 
-/* Overflow */
+
 .overflow-hidden  { overflow: hidden; }
 .overflow-x-auto  { overflow-x: auto; }
 .overflow-y-auto  { overflow-y: auto; }
@@ -778,7 +720,7 @@ table, tr, th, td {
 .whitespace-pre-wrap { white-space: pre-wrap; }
 .break-word { word-break: break-word; }
 
-/* Spacing */
+
 .p-4     { padding: 1rem; }
 .p-5     { padding: 1.25rem; }
 .p-6     { padding: 1.5rem; }
@@ -802,7 +744,7 @@ table, tr, th, td {
 .space-y-4 > * + * { margin-top: 1rem; }
 .space-y-6 > * + * { margin-top: 1.5rem; }
 
-/* Typography */
+
 .text-xs        { font-size: 0.75rem;   line-height: 1rem; }
 .text-sm        { font-size: 0.875rem;  line-height: 1.25rem; }
 .text-base      { font-size: 1rem;      line-height: 1.5rem; }
@@ -825,7 +767,7 @@ table, tr, th, td {
 .select-all     { user-select: all; }
 .antialiased    { -webkit-font-smoothing: antialiased; }
 
-/* Colors */
+
 .text-slate-100   { color: #F1F5F9; }
 .text-slate-200   { color: #E2E8F0; }
 .text-slate-300   { color: #CBD5E1; }
@@ -845,7 +787,7 @@ table, tr, th, td {
 .text-black       { color: #050a12; }
 .text-white       { color: #fff; }
 
-/* Backgrounds */
+
 .bg-\[\#080B12\]     { background-color: #080B12; }
 .bg-\[\#070a10\]     { background-color: #070a10; }
 .bg-slate-900        { background-color: #0F172A; }
@@ -867,7 +809,7 @@ table, tr, th, td {
 .from-cyan-500       { --tw-gradient-from: #06B6D4; }
 .to-purple-600       { --tw-gradient-to: #9333EA; }
 
-/* Borders */
+
 .border      { border: 1px solid; }
 .border-t    { border-top: 1px solid; }
 .border-b    { border-bottom: 1px solid; }
@@ -878,17 +820,17 @@ table, tr, th, td {
 .rounded-2xl { border-radius: 1rem; }
 .rounded-full { border-radius: 9999px; }
 
-/* Shadow */
+
 .shadow-lg   { box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1); }
 .shadow-2xl  { box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }
 .shadow-cyan-500\/20 { box-shadow: 0 4px 14px rgba(6,182,212,0.20); }
 
-/* Animations */
+
 .animate-spin    { animation: spin 1s linear infinite; }
 .animate-pulse   { animation: pulse 2s cubic-bezier(0.4,0,0.6,1) infinite; }
 .animate-bounce  { animation: bounce 1s infinite; }
 
-/* Position */
+
 .relative { position: relative; }
 .absolute { position: absolute; }
 .fixed    { position: fixed; }
@@ -907,11 +849,11 @@ table, tr, th, td {
 .z-50     { z-index: 50; }
 .z-80     { z-index: 80; }
 
-/* Transform */
+
 .translate-x-\[-50\%\] { transform: translateX(-50%); }
 .-translate-x-1\/2 { transform: translateX(-50%); }
 
-/* Misc */
+
 .pointer-events-none { pointer-events: none; }
 .shrink-0            { flex-shrink: 0; }
 .select-none         { user-select: none; }
@@ -935,18 +877,18 @@ table, tr, th, td {
 .accent-blue-500     { accent-color: #3B82F6; }
 input[type="file"].hidden { display: none !important; }
 
-/* Focus (for accessibility) */
+
 .focus\:outline-none:focus { outline: none; }
 .focus\:border-cyan-500:focus { border-color: #22D3EE; }
 
-/* Hover utilities */
+
 .hover\:opacity-90:hover { opacity: 0.90; }
 .hover\:bg-slate-800:hover { background-color: #1E293B; }
 .hover\:bg-slate-700:hover { background-color: #334155; }
 .hover\:text-slate-100:hover { color: #F1F5F9; }
 .hover\:text-cyan-400:hover  { color: #22D3EE; }
 
-/* Responsive: sm breakpoint = 640px */
+
 @media (min-width: 640px) {
   .sm\:block    { display: block !important; }
   .sm\:inline   { display: inline !important; }
@@ -956,18 +898,13 @@ input[type="file"].hidden { display: none !important; }
   .sm\:text-sm  { font-size: 0.875rem; line-height: 1.25rem; }
 }
 
-/* ============================================================
-   EXTENDED UTILITIES — HOME PAGE COMPONENTS
-   (ModuleCard, CipherixLogo, SystemCard, StatusBar)
-   ============================================================ */
 
-/* Gap extras */
 .gap-1\.5  { gap: 0.375rem; }
 .gap-2\.5  { gap: 0.625rem; }
 .gap-4     { gap: 1rem; }
 .gap-5     { gap: 1.25rem; }
 
-/* Sizing extras */
+
 .w-2   { width: 0.5rem; }
 .h-2   { height: 0.5rem; }
 .w-16  { width: 4rem; }
@@ -977,13 +914,13 @@ input[type="file"].hidden { display: none !important; }
 .h-\[1px\] { height: 1px; }
 .min-h-\[210px\] { min-height: 210px; }
 
-/* Position extras */
+
 .top-6    { top: 1.5rem; }
 .right-8  { right: 2rem; }
 .right-10 { right: 2.5rem; }
 .-inset-1 { top: -4px; right: -4px; bottom: -4px; left: -4px; }
 
-/* Spacing extras */
+
 .my-3     { margin-top: 0.75rem; margin-bottom: 0.75rem; }
 .pt-8     { padding-top: 2rem; }
 .pt-10    { padding-top: 2.5rem; }
@@ -995,7 +932,7 @@ input[type="file"].hidden { display: none !important; }
 .space-y-1   > * + * { margin-top: 0.25rem; }
 .space-y-3   > * + * { margin-top: 0.75rem; }
 
-/* Border & rounded extras */
+
 .border-white\/10 { border-color: rgba(255,255,255,0.10); }
 .border-cyan-500\/30  { border-color: rgba(6,182,212,0.30); }
 .border-cyan-500\/40  { border-color: rgba(6,182,212,0.40); }
@@ -1010,7 +947,7 @@ input[type="file"].hidden { display: none !important; }
 .rounded-2xl { border-radius: 1rem; }
 .rounded-3xl { border-radius: 1.5rem; }
 
-/* Background color extras */
+
 .bg-\[\#101827\]  { background-color: #101827; }
 .bg-\[\#0c111c\]  { background-color: #0c111c; }
 .bg-cyan-500\/10    { background-color: rgba(6,182,212,0.10); }
@@ -1023,7 +960,7 @@ input[type="file"].hidden { display: none !important; }
 .bg-slate-800       { background-color: #1E293B; }
 .bg-emerald-400     { background-color: #34D399; }
 
-/* Text color extras */
+
 .text-cyan-300    { color: #67E8F9; }
 .text-emerald-400 { color: #34D399; }
 .text-slate-300   { color: #CBD5E1; }
@@ -1032,25 +969,25 @@ input[type="file"].hidden { display: none !important; }
 .text-\[\#22D3EE\] { color: #22D3EE; }
 .text-\[\#A855F7\] { color: #A855F7; }
 
-/* Tracking extras */
+
 .tracking-widest { letter-spacing: 0.10em; }
 .tracking-wide   { letter-spacing: 0.025em; }
 
-/* Opacity extras */
+
 .opacity-0   { opacity: 0; }
 .opacity-70  { opacity: 0.70; }
 .opacity-100 { opacity: 1; }
 
-/* Transition duration */
+
 .duration-250 { transition-duration: 250ms; }
 .duration-300 { transition-duration: 300ms; }
 .duration-500 { transition-duration: 500ms; }
 
-/* Stroke width (Lucide icons) */
+
 .stroke-\[2\]   { stroke-width: 2; }
 .stroke-\[2\.2\] { stroke-width: 2.2; }
 
-/* Gradient utilities for text */
+
 .bg-gradient-to-r   { background-image: linear-gradient(to right, var(--tw-gradient-stops)); }
 .bg-gradient-to-bl  { background-image: linear-gradient(to bottom left, var(--tw-gradient-stops)); }
 .bg-gradient-to-l   { background-image: linear-gradient(to left, var(--tw-gradient-stops)); }
@@ -1067,20 +1004,20 @@ input[type="file"].hidden { display: none !important; }
 .text-transparent  { color: transparent; }
 .drop-shadow-sm    { filter: drop-shadow(0 1px 1px rgba(0,0,0,0.05)); }
 
-/* Filter / blur */
+
 .blur-sm  { filter: blur(4px); }
 .blur-md  { filter: blur(12px); }
 .blur-2xl { filter: blur(40px); }
 .blur-3xl { filter: blur(64px); }
 
-/* Transform extras */
+
 .scale-105     { transform: scale(1.05); }
 .rotate-180    { transform: rotate(180deg); }
 .translate-x-1\.5 { transform: translateX(0.375rem); }
 .translate-y-0 { transform: translateY(0); }
 .-translate-y-1\/2 { transform: translateY(-50%); }
 
-/* Line clamp */
+
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1088,30 +1025,26 @@ input[type="file"].hidden { display: none !important; }
   overflow: hidden;
 }
 
-/* z-index extras */
+
 .z-10 { z-index: 10; }
 .z-20 { z-index: 20; }
 
-/* cursor extras */
+
 .cursor-default { cursor: default; }
 
-/* Overflow extras */
+
 .overflow-x-hidden { overflow-x: hidden; }
 
-/* Selection */
+
 .selection\:bg-cyan-500::selection  { background-color: #06B6D4; }
 .selection\:text-black::selection   { color: #000; }
 
-/* Misc */
+
 .shadow-glow   { box-shadow: 0 0 10px rgba(34,211,238,0.35); }
 .shadow-sm     { box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05); }
 .font-normal   { font-weight: 400; }
 
-/* ============================================================
-   GROUP HOVER PATTERNS (for ModuleCard interactive states)
-   ============================================================ */
 
-/* Group hover: border color changes */
 .group:hover .hover\:border-cyan-500\/50,
 .hover\:border-cyan-500\/50:hover      { border-color: rgba(6,182,212,0.50); }
 .hover\:border-emerald-500\/50:hover   { border-color: rgba(16,185,129,0.50); }
@@ -1121,11 +1054,11 @@ input[type="file"].hidden { display: none !important; }
 .hover\:border-rose-500\/50:hover      { border-color: rgba(239,68,68,0.50); }
 .hover\:border-slate-400\/50:hover     { border-color: rgba(148,163,184,0.50); }
 
-/* Group hover: opacity */
+
 .group:hover .group-hover\:opacity-100 { opacity: 1; }
 .group-hover\:opacity-100:hover        { opacity: 1; }
 
-/* Group hover: shadow glow */
+
 .group:hover .group-hover\:shadow-\[0_0_25px_rgba\(34\2c211\2c238\2c0\.18\)\] {
   box-shadow: 0 0 25px rgba(34,211,238,0.18);
 }
@@ -1148,22 +1081,22 @@ input[type="file"].hidden { display: none !important; }
   box-shadow: 0 0 25px rgba(148,163,184,0.15);
 }
 
-/* Group hover: scale */
+
 .group:hover .group-hover\:scale-105 { transform: scale(1.05); }
 
-/* Group hover: translate */
+
 .group:hover .group-hover\:translate-x-1\.5 { transform: translateX(0.375rem); }
 
-/* Group hover: text color */
+
 .group:hover .group-hover\:text-cyan-400   { color: #22D3EE; }
 .group:hover .group-hover\:text-cyan-300   { color: #67E8F9; }
 .group:hover h3.group-hover\:text-cyan-300 { color: #67E8F9; }
 
-/* Transition on hover for group children */
+
 .transition-opacity { transition: opacity 150ms ease; }
 .transition-colors  { transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease; }
 
-/* ModuleCard specific: icon container Tailwind classes */
+
 .bg-cyan-500\/10    { background-color: rgba(6,182,212,0.10); }
 .bg-emerald-500\/10 { background-color: rgba(16,185,129,0.10); }
 .bg-purple-500\/10  { background-color: rgba(168,85,247,0.10); }
@@ -1180,12 +1113,7 @@ input[type="file"].hidden { display: none !important; }
 .border-rose-500\/30    { border-color: rgba(239,68,68,0.30); }
 .border-slate-500\/30   { border-color: rgba(100,116,139,0.30); }
 
-/* ============================================================
-   FINAL MISSING UTILITY CLASSES
-   (UserProfile, SystemCard, CommandCenter components)
-   ============================================================ */
 
-/* Arbitrary font sizes */
 .text-\[10px\]  { font-size: 10px; }
 .text-\[11px\]  { font-size: 11px; }
 .text-\[12px\]  { font-size: 12px; }
@@ -1193,11 +1121,11 @@ input[type="file"].hidden { display: none !important; }
 .text-\[14px\]  { font-size: 14px; }
 .text-4xl       { font-size: 2.25rem; line-height: 2.5rem; }
 
-/* Rounded extras */
+
 .rounded-lg { border-radius: 0.5rem; }
 .rounded-xl { border-radius: 0.75rem; }
 
-/* Background gradient for user profile avatar */
+
 .bg-gradient-to-br { background-image: linear-gradient(to bottom right, var(--tw-gradient-stops)); }
 .from-cyan-500\/20  { --tw-gradient-from: rgba(6,182,212,0.20);    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(6,182,212,0)); }
 .to-purple-500\/20  { --tw-gradient-to: rgba(168,85,247,0.20); }
@@ -1208,37 +1136,37 @@ input[type="file"].hidden { display: none !important; }
 .to-\[\#A855F7\]    { --tw-gradient-to: #A855F7; }
 .to-\[\#10B981\]    { --tw-gradient-to: #10B981; }
 
-/* Hover: rose background for logout button */
+
 .hover\:bg-rose-500\/10:hover { background-color: rgba(239,68,68,0.10); }
 .hover\:border-cyan-500\/50:hover { border-color: rgba(6,182,212,0.50); }
 
-/* Border slash opacity variants (cyan/slate) */
+
 .border-slate-800\/80 { border-color: rgba(30,41,59,0.80); }
 .border-slate-800 { border-color: #1E293B; }
 
-/* Gap with dot */
+
 .gap-0\.5 { gap: 0.125rem; }
 .gap-1\.5 { gap: 0.375rem; }
 .gap-2\.5 { gap: 0.625rem; }
 .mt-0\.5  { margin-top: 0.125rem; }
 
-/* w-56 for dropdown */
+
 .w-56 { width: 14rem; }
 
-/* rotate-180 for chevron */
+
 .rotate-180 { transform: rotate(180deg); }
 
-/* Transition duration for chevron */
+
 .duration-200 { transition-duration: 200ms; }
 
-/* Backdrop for dropdown */
+
 .backdrop-blur-xl { backdrop-filter: blur(24px); }
 
-/* p-2 for dropdown padding */
+
 .p-2 { padding: 0.5rem; }
 .p-3 { padding: 0.75rem; }
 
-/* SystemCard gradient dividers */
+
 .h-\[1px\] { height: 1px; }
 .w-24      { width: 6rem; }
 .bg-gradient-to-r  { background-image: linear-gradient(to right, var(--tw-gradient-stops)); }
@@ -1246,31 +1174,27 @@ input[type="file"].hidden { display: none !important; }
 .from-transparent  { --tw-gradient-from: transparent; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, transparent); }
 .to-slate-700      { --tw-gradient-to: #334155; }
 
-/* Group scale for UserProfile avatar */
+
 .group:hover .group-hover\:scale-105 { transform: scale(1.05); }
 .transition-transform { transition: transform 150ms ease; }
 
-/* ============================================================
-   MD + LG RESPONSIVE BREAKPOINTS
-   ============================================================ */
 
-/* space-y utilities (CommandCenter flex gap fallback) */
 .space-y-8  > * + * { margin-top: 2rem; }
 .space-y-10 > * + * { margin-top: 2.5rem; }
 .space-y-12 > * + * { margin-top: 3rem; }
 .space-y-14 > * + * { margin-top: 3.5rem; }
 
-/* Position classes for CommandCenter floating user profile */
+
 .top-6  { top:    1.5rem; }
 .right-6  { right:  1.5rem; }
 .right-10 { right:  2.5rem; }
 
-/* Padding classes used by CommandCenter header section */
+
 .pt-4 { padding-top:    1rem; }
 .pb-2 { padding-bottom: 0.5rem; }
 .pt-6 { padding-top:    1.5rem; }
 
-/* md: breakpoint — 768px */
+
 @media (min-width: 768px) {
   .md\:space-y-12 > * + * { margin-top: 3rem; }
   .md\:space-y-10 > * + * { margin-top: 2.5rem; }
@@ -1278,13 +1202,13 @@ input[type="file"].hidden { display: none !important; }
   .md\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-/* lg: breakpoint — 1024px */
+
 @media (min-width: 1024px) {
   .lg\:space-y-14 > * + * { margin-top: 3.5rem; }
   .lg\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
-/* xl: breakpoint — 1280px */
+
 @media (min-width: 1280px) {
   .xl\:max-w-7xl { max-width: 80rem; }
 }

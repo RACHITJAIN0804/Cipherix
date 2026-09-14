@@ -1,6 +1,4 @@
-/*
-  Cipherix Cyberpunk Dark Design System
-*/
+
 
 @tailwind base;
 @tailwind components;
@@ -28,7 +26,7 @@ body {
   font-family: 'Inter', sans-serif;
 }
 
-/* Custom Scrollbars */
+
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -44,7 +42,7 @@ body {
   background: var(--cyan);
 }
 
-/* Navigation Items */
+
 .nav-item {
   display: flex;
   items-center: center;
@@ -70,7 +68,7 @@ body {
   box-shadow: 0 0 15px rgba(0, 242, 254, 0.1);
 }
 
-/* Cards & Panels */
+
 .card {
   background-color: var(--surface-1);
   border: 1px solid var(--border);
@@ -106,7 +104,7 @@ body {
   background: linear-gradient(90deg, var(--cyan), var(--purple));
 }
 
-/* Badges */
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -142,7 +140,7 @@ body {
   border: 1px solid rgba(255, 23, 68, 0.3);
 }
 
-/* Buttons */
+
 .btn {
   padding: 0.5rem 1rem;
   border-radius: 0.65rem;
@@ -171,7 +169,7 @@ body {
   color: var(--cyan);
 }
 
-/* Inputs */
+
 .input-text, .input-select {
   width: 100%;
   background-color: var(--surface-2);
@@ -188,7 +186,7 @@ body {
   box-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
 }
 
-/* Views Management */
+
 .view-panel {
   display: none;
 }
@@ -202,7 +200,7 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Chat Messages */
+
 .chat-message {
   display: flex;
   gap: 0.75rem;
@@ -244,7 +242,7 @@ body {
   border-top-right-radius: 0.2rem;
 }
 
-/* Modals */
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

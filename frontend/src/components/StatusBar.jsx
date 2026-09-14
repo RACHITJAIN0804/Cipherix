@@ -5,7 +5,7 @@ export function StatusBar({ username = "rachit_admin", lastLogin = "Active Now" 
   return (
     <div className="w-full max-w-4xl mx-auto pt-8">
       <div className="glass-panel p-4 flex flex-wrap items-center justify-between gap-4 text-xs">
-        {/* JWT Auth Status */}
+        {}
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 flex items-center justify-center">
             <ShieldCheck className="w-4 h-4 text-cyan-400" />
@@ -16,7 +16,7 @@ export function StatusBar({ username = "rachit_admin", lastLogin = "Active Now" 
           </div>
         </div>
 
-        {/* User Info */}
+        {}
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-400 flex items-center justify-center">
             <User className="w-4 h-4 text-purple-400" />
@@ -27,7 +27,7 @@ export function StatusBar({ username = "rachit_admin", lastLogin = "Active Now" 
           </div>
         </div>
 
-        {/* Last Login */}
+        {}
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center">
             <Clock className="w-4 h-4 text-amber-400" />
@@ -38,7 +38,7 @@ export function StatusBar({ username = "rachit_admin", lastLogin = "Active Now" 
           </div>
         </div>
 
-        {/* System Health */}
+        {}
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
             <Activity className="w-4 h-4 text-emerald-400" />

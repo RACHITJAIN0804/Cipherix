@@ -1,9 +1,3 @@
-"""
-api/routes/search.py
---------------------
-FastAPI router for semantic similarity search over encrypted document vaults.
-"""
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -56,9 +50,6 @@ async def search_vault(
     db: Session = Depends(get_db),
     search_service: SearchService = Depends(_get_search_service),
 ) -> SearchResponse:
-    """
-    ``POST /api/v1/search`` — vault-isolated semantic vector search.
-    """
     try:
         response = search_service.search(
             request=request,

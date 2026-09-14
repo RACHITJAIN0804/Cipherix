@@ -1,79 +1,3 @@
-"""
-services/security_service.py
-------------------------------
-Business-logic layer for vault security operations.
-
-:class:`SecurityService` is the single orchestrator for the password-change
-(Vault Key rewrap) flow.  Its responsibilities are:
-
-1. **Validate** vault state: exists, unlocked.
-2. **Authenticate** the old password by decrypting the Vault Key.
-3. **Re-wrap** the Vault Key under a newly derived Master Key.
-4. **Persist** the new salt and the new encrypted Vault Key atomically.
-5. **Never** decrypt, re-encrypt, or touch any document.
-
-Why only the Vault Key is re-encrypted
----------------------------------------
-Cipherix uses a two-layer key hierarchy::
-
-    User Password  ──► Argon2id ──► Master Key (ephemeral, never stored)
-                                         │
-                                         │ AES-256-GCM key-wrap
-                                         ▼
-                                   Vault Key (stored encrypted in key.json)
-                                         │
-                                         │ AES-256-GCM per-document
-                                         ▼
-                               Encrypted Documents (in encrypted/*.bin)
-
-When the user changes their password:
-
-* **A new Master Key** is derived from ``new_password`` + a fresh salt.
-* **The Vault Key is re-wrapped** (decrypted with the old Master Key,
-  re-encrypted with the new Master Key).
-* **Documents are untouched** — they are encrypted with the Vault Key,
-  not the Master Key.  Because the Vault Key itself does not change,
-  all existing documents remain decryptable immediately.
-
-This is the essential property of the two-layer hierarchy: password
-rotation has O(1) cost regardless of how many documents are stored.
-Re-encrypting all documents would be O(n) and would risk data loss on
-partial failure.
-
-Architecture
-------------
-* Cryptographic operations (key derivation, AES-GCM) belong in
-  :class:`~app.security.encryption.EncryptionManager` and
-  :class:`~app.security.password_manager.PasswordManager`.
-* Filesystem operations (reading/writing key.json, password_meta.json)
-  belong in :class:`~app.security.key_manager.KeyManager` and
-  :class:`~app.security.password_manager.PasswordManager`.
-* This service orchestrates — it contains no raw crypto and no raw I/O.
-
-Scalability
------------
-Because documents are never touched during a password change, the
-operation completes in constant time:
-
-* 2 x Argon2id derivations (old + new password).
-* 1 x AES-256-GCM decryption  (32-byte Vault Key).
-* 1 x AES-256-GCM encryption  (32-byte Vault Key).
-* 2 x small JSON file writes   (key.json + password_meta.json).
-
-A vault with 10 million documents takes exactly as long as a vault with
-zero documents.
-
-Future compatibility
---------------------
-* **Recovery seed**: after re-wrap, call a recovery-seed service to
-  re-encrypt the *same* new Vault Key under the seed.
-* **Hardware key**: call a hardware-key adapter to re-wrap the Vault Key
-  under the device's public key.
-* **Multi-device sync**: broadcast the new wrapped Vault Key to peer
-  devices via the sync channel.
-* **Key rotation**: extend this flow to generate a *new* Vault Key,
-  re-encrypt all documents, and then discard the old Vault Key.
-"""
 
 from datetime import UTC, datetime
 from pathlib import Path
@@ -109,20 +33,7 @@ _STATUS_LOCKED: str = "locked"
 _STATUS_UNLOCKED: str = "unlocked"
 
 
-
 class SecurityService:
-    """
-    Orchestrates vault security operations.
-
-    Currently implements Vault Key rewrap (password change).  Designed to
-    be extended with recovery seed, hardware key, and multi-device sync
-    operations without changing the existing method signatures.
-
-    Parameters
-    ----------
-    vault_base_dir:
-        Root directory under which all vault subdirectories live.
-    """
 
     def __init__(self, vault_base_dir: Path) -> None:
         self._vault_base_dir: Path = vault_base_dir
@@ -135,57 +46,6 @@ class SecurityService:
         new_password: str,
         db: Session | None = None,
     ) -> ChangePasswordResponse:
-        """
-        Change the vault password by re-wrapping the Vault Key.
-
-        The Vault Key is decrypted with the old Master Key and immediately
-        re-encrypted with a new Master Key derived from ``new_password`` and
-        a freshly generated salt.  No document is ever touched.
-
-        Flow
-        ----
-        1. Assert vault exists.
-        2. Assert vault is unlocked.
-        3. Load stored salt + KDF params from ``password_meta.json``.
-        4. Derive Old Master Key from (``old_password``, stored salt).
-        5. Read encrypted Vault Key envelope from ``key.json``.
-        6. Validate the envelope (structural check before decryption).
-        7. Decrypt the Vault Key using the Old Master Key (AES-256-GCM).
-        8. Generate a new random salt.
-        9. Derive New Master Key from (``new_password``, new salt).
-        10. Generate a new random nonce.
-        11. Re-encrypt the Vault Key using the New Master Key.
-        12. Write the new encrypted Vault Key to ``key.json``.
-        13. Write the new salt + KDF params to ``password_meta.json``.
-        14. Discard both Master Keys.
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 identifying the target vault.
-        old_password:
-            Current vault password.  Must decrypt the existing Vault Key.
-            Never stored or logged.
-        new_password:
-            New vault password.  Must be non-empty and non-whitespace-only
-            (enforced by :class:`~app.security.password_manager.PasswordManager`).
-            Never stored or logged.
-
-        Returns
-        -------
-        ChangePasswordResponse
-            Confirmation receipt with ``vault_id`` and ``changed_at`` timestamp.
-
-        Raises
-        ------
-        VaultNotFoundError
-            If the vault directory does not exist.
-        VaultLockedError
-            If the vault is not in the ``unlocked`` state.
-        PasswordChangeError
-            If ``old_password`` is wrong, the Vault Key is corrupt, the
-            new password fails validation, or any storage write fails.
-        """
         vault_root = self._assert_vault_unlocked(vault_id)
 
         try:
@@ -244,10 +104,7 @@ class SecurityService:
             )
             new_nonce_b64: str = self._enc_mgr.encode_for_storage(new_nonce)
 
-            # Write key.json first.  If password_meta.json then fails, the vault
-            # still contains a valid wrapped Vault Key (under the new Master Key),
-            # but the stored salt is stale.  The recommended recovery path is to
-            # retry the password change — both files will be overwritten cleanly.
+
             key_mgr.create(
                 vault_id=vault_id,
                 vault_key_hex="",
@@ -258,11 +115,7 @@ class SecurityService:
 
             changed_at: str = datetime.now(UTC).isoformat()
 
-            # Update DB SecurityMetadata record.
-            # This is non-atomic with the disk writes (disk goes first).
-            # If DB update fails, log a warning: the vault is still usable
-            # (the disk files are authoritative) but the DB record is stale.
-            # The stale record will be reconciled on the next password change.
+
             if db is not None:
                 try:
                     sec_record = db.get(SecurityMetadataRecord, vault_id)
@@ -516,45 +369,6 @@ class SecurityService:
         candidate_seed: str,
         db: Session | None = None,
     ) -> VerifySeedResponse:
-        """
-        Validate a candidate recovery seed against the stored fingerprint.
-
-        Verification does **not** grant access to any key material.  It only
-        confirms that the candidate is the same seed that was generated for
-        this vault.  Actual vault recovery is a future milestone.
-
-        When ``db`` is provided, the seed fingerprint is compared against the
-        value stored in the SQLite ``security_metadata`` table, falling back
-        to the on-disk ``recovery_meta.json`` file when ``db`` is ``None``.
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 identifying the target vault.
-        candidate_seed:
-            The recovery seed provided by the user.
-        db:
-            SQLAlchemy session.  When provided, the stored seed fingerprint
-            and recovery version are fetched from SQLite.
-
-        Returns
-        -------
-        VerifySeedResponse
-            ``valid=True`` if the seed is a valid BIP-39 mnemonic that
-            matches the stored fingerprint; ``False`` if the fingerprint
-            does not match.
-
-        Raises
-        ------
-        VaultNotFoundError
-            If the vault directory does not exist.
-        InvalidRecoverySeedError
-            If the candidate fails BIP-39 structural validation.
-        RecoveryMetadataMissingError
-            If no recovery seed has been generated for this vault.
-        UnsupportedRecoveryVersionError
-            If the stored ``recovery_version`` is not supported.
-        """
         vault_root = self._assert_vault_exists(vault_id)
         recovery_mgr = RecoveryManager(vault_root)
 
@@ -588,20 +402,9 @@ class SecurityService:
         return VerifySeedResponse(vault_id=vault_id, valid=valid)
 
     def _vault_root(self, vault_id: str) -> Path:
-        """Return the vault root directory for a given vault_id."""
         return self._vault_base_dir / vault_id
 
     def _assert_vault_exists(self, vault_id: str) -> Path:
-        """
-        Assert the vault root directory exists.
-
-        Returns the vault root Path on success.
-
-        Raises
-        ------
-        VaultNotFoundError
-            If the vault directory does not exist.
-        """
         root = self._vault_root(vault_id)
         if not root.is_dir():
             raise VaultNotFoundError(
@@ -611,20 +414,6 @@ class SecurityService:
         return root
 
     def _assert_vault_unlocked(self, vault_id: str) -> Path:
-        """
-        Assert the vault exists and is in the ``unlocked`` state.
-
-        Reads ``manifest.json`` to check the current status.
-
-        Returns the vault root Path on success.
-
-        Raises
-        ------
-        VaultNotFoundError
-            If the vault directory or manifest does not exist.
-        VaultLockedError
-            If the vault status is not ``\"unlocked\"``.
-        """
         root = self._assert_vault_exists(vault_id)
 
         manifest_path = root / "manifest.json"

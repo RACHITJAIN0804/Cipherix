@@ -1,8 +1,3 @@
-"""
-services/document_processing/pipeline.py
------------------------------------------
-Coordinates secure in-memory document processing pipeline for Cipherix RAG.
-"""
 
 from datetime import UTC, datetime
 from pathlib import Path
@@ -40,11 +35,6 @@ logger = get_logger(__name__)
 
 
 class DocumentProcessingPipeline:
-    """
-    Coordinates authorization, integrity verification, controlled in-memory
-    decryption, text extraction, cleaning, chunking, embedding generation,
-    vector index storage, and metadata persistence.
-    """
 
     def __init__(
         self,
@@ -73,27 +63,11 @@ class DocumentProcessingPipeline:
         chunk_size: int | None = None,
         chunk_overlap: int | None = None,
     ) -> DocumentProcessingResponse:
-        """
-        Process an encrypted document in memory.
-
-        Parameters
-        ----------
-        vault_id:
-            Target vault UUID.
-        document_id:
-            Target document UUID.
-        user_id:
-            Authenticated user UUID (must own the vault).
-        password:
-            Vault password used to unwrap the Vault Key.
-        db:
-            Database session.
-        """
         vault_root = self._vault_base_dir / vault_id
         if not vault_root.is_dir():
             raise VaultNotFoundError(f"Vault '{vault_id}' not found.")
 
-        # 1. Authorization & Vault Ownership Check
+
         vault_rec = db.query(VaultRecord).filter(VaultRecord.id == vault_id).first()
         if vault_rec is None or vault_rec.user_id != user_id:
             raise VaultAccessDeniedError(
@@ -101,7 +75,7 @@ class DocumentProcessingPipeline:
                 detail=f"User '{user_id}' does not own vault '{vault_id}'.",
             )
 
-        # 2. Check Document Record
+
         doc_rec = (
             db.query(DocumentRecord)
             .filter(DocumentRecord.id == document_id, DocumentRecord.vault_id == vault_id)
@@ -113,19 +87,17 @@ class DocumentProcessingPipeline:
                 detail=f"No document record found for id '{document_id}'.",
             )
 
-        # 3. Verify Document Integrity
+
         doc_service = DocumentService(vault_base_dir=self._vault_base_dir)
         doc_service.verify_document(vault_id, document_id, db=db)
 
 
-
-        # In-memory working buffers
         raw_decrypted_bytes: Optional[bytes] = None
         extracted_text: Optional[str] = None
         cleaned_text: Optional[str] = None
 
         try:
-            # 4. Controlled In-Memory Decryption
+
             pwd_mgr = PasswordManager(vault_root)
             key_mgr = KeyManager(vault_root)
             enc_mgr = EncryptionManager()
@@ -155,18 +127,16 @@ class DocumentProcessingPipeline:
             )
 
 
-
-            # 5. Text Extraction
             extracted_text, page_blocks = self._extractor.extract_text(
                 content_bytes=raw_decrypted_bytes,
                 filename=doc_rec.original_filename,
                 mime_type=doc_rec.mime_type,
             )
 
-            # 6. Text Cleaning
+
             cleaned_text = self._cleaner.clean(extracted_text)
 
-            # 7. Deterministic Chunking
+
             chunks = self._chunker.chunk_text(
                 text=cleaned_text,
                 document_id=document_id,
@@ -175,7 +145,7 @@ class DocumentProcessingPipeline:
                 page_blocks=page_blocks,
             )
 
-            # 8. Embedding Generation & Vector Storage Indexing
+
             if chunks:
                 chunk_texts = [c.text for c in chunks]
                 embeddings = self._embedding_service.generate_embeddings(chunk_texts)
@@ -187,7 +157,7 @@ class DocumentProcessingPipeline:
                     embedding_model=self._embedding_service.model_name,
                 )
 
-            # 9. Update SQLite Processing Metadata
+
             now = datetime.now(UTC)
             doc_rec.processing_status = "processed"
             doc_rec.extraction_version = "1.0"
@@ -241,7 +211,7 @@ class DocumentProcessingPipeline:
             raise
 
         finally:
-            # 9. In-Memory Safe Cleanup
+
             raw_decrypted_bytes = None
             extracted_text = None
             cleaned_text = None

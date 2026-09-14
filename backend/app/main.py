@@ -1,21 +1,3 @@
-"""
-main.py
--------
-FastAPI application factory for Cipherix.
-
-This module is the single entry point that:
-* Calls ``configure_logging()`` before anything else.
-* Creates the :class:`FastAPI` application instance.
-* Registers CORS middleware (configurable from .env).
-* Registers startup / shutdown lifecycle handlers.
-* Mounts the global exception handler.
-* Declares the root (``GET /``) and health (``GET /health``) endpoints.
-
-Run the server
---------------
-    uvicorn app.main:app --reload
-"""
-
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -29,20 +11,12 @@ from app.core.logger import configure_logging, get_logger
 from app.api.router import api_router
 from app.database import init_db
 
-# Bootstrap logging before anything else so that all subsequent imports
-# (including FastAPI internals) already have handlers attached.
 configure_logging()
 logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """
-    Manage application lifecycle.
-
-    Everything *before* ``yield`` runs at startup;
-    everything *after* ``yield`` runs at shutdown.
-    """
     logger.info(
         "Starting %s v%s [env=%s, debug=%s]",
         settings.app_name,
@@ -51,10 +25,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings.debug,
     )
 
-    # Ensure SQLite tables exist.  In production, Alembic migrations are
-    # the canonical migration path; init_db() is a safety net that creates
-    # tables on a fresh install or in development without requiring a manual
-    # ``alembic upgrade head`` step.
     init_db()
 
     yield
@@ -62,25 +32,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
-    """
-    Construct and configure the FastAPI application.
-
-    Keeping the factory in its own function makes the app trivially
-    testable — tests can call ``create_app()`` without importing a
-    module-level singleton.
-
-    Returns
-    -------
-    FastAPI
-        A fully configured application instance.
-    """
     application = FastAPI(
         title=settings.app_name,
         description=APP_DESCRIPTION,
         version=APP_VERSION,
         debug=settings.debug,
         lifespan=lifespan,
-        # Disable default /docs and /redoc in production for security
         docs_url="/docs" if settings.debug else None,
         redoc_url="/redoc" if settings.debug else None,
     )
@@ -97,13 +54,6 @@ def create_app() -> FastAPI:
     async def global_exception_handler(
         request: Request, exc: Exception
     ) -> JSONResponse:
-        """
-        Catch-all handler for any unhandled exception.
-
-        Returns a generic 500 response to the client while logging the
-        full traceback server-side.  This prevents internal stack traces
-        from leaking to API consumers.
-        """
         logger.exception(
             "Unhandled exception on %s %s",
             request.method,
@@ -118,14 +68,6 @@ def create_app() -> FastAPI:
 
     @application.get("/", tags=["General"])
     async def root() -> dict:
-        """
-        Project identity endpoint.
-
-        Returns
-        -------
-        dict
-            Basic metadata confirming the service is alive.
-        """
         return {
             "project": settings.app_name,
             "status": "running",
@@ -134,19 +76,9 @@ def create_app() -> FastAPI:
 
     @application.get("/health", tags=["General"])
     async def health_check() -> dict:
-        """
-        Health-check endpoint for load-balancers and uptime monitors.
-
-        Returns
-        -------
-        dict
-            ``{"status": "healthy"}`` when the application is ready to
-            serve traffic.
-        """
         return {"status": "healthy"}
 
     return application
 
 
 app: FastAPI = create_app()
-

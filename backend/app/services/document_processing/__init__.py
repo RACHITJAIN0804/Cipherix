@@ -1,8 +1,3 @@
-"""
-services/document_processing/__init__.py
------------------------------------------
-Cipherix document processing pipeline components for RAG.
-"""
 
 from app.services.document_processing.chunker import TextChunker
 from app.services.document_processing.cleaner import TextCleaner

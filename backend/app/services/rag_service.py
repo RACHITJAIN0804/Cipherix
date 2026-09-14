@@ -1,24 +1,3 @@
-"""
-services/rag_service.py
-------------------------
-RAG pipeline orchestrator for Cipherix.
-
-Coordinates the full Retrieval-Augmented Generation flow:
-
-    JWT auth → vault authorization → query embedding → ChromaDB search
-    → similarity threshold → context building → local LLM → grounded answer
-
-Vault isolation is enforced at every step:
-* Vault ownership is verified against the SQLite DB (user_id == current user).
-* The ChromaDB query is hard-filtered by vault_id (VectorStore.search_vault).
-* Only context retrieved from the authorized vault reaches the LLM.
-
-Privacy
--------
-* Document chunk text is never logged.
-* Generated answers are never logged.
-* Only safe metadata (user_id, vault_id, chunk counts) is logged.
-"""
 
 from sqlalchemy.orm import Session
 
@@ -42,12 +21,6 @@ logger = get_logger(__name__)
 
 
 class RAGService:
-    """
-    Orchestrates the RAG pipeline for vault-isolated question answering.
-
-    Depends on EmbeddingService, VectorStore, ContextBuilder, and LLMService.
-    The LLMService singleton is reused across requests to avoid reloading.
-    """
 
     def __init__(
         self,
@@ -67,53 +40,10 @@ class RAGService:
         user_id: str,
         db: Session,
     ) -> RAGResponse:
-        """
-        Execute the full RAG pipeline for an authenticated, authorized user.
-
-        Flow
-        ----
-        1. Validate query is non-empty.
-        2. Authorize user vault ownership in SQLite.
-        3. Generate query embedding (local Sentence Transformers).
-        4. Search ChromaDB filtered by vault_id (vault isolation enforced).
-        5. Apply similarity threshold; raise RAGNoContextError if no results.
-        6. Build bounded context from qualifying chunks.
-        7. Send context + question to local LLM (Ollama).
-        8. Return RAGResponse with answer and source citations.
-
-        Parameters
-        ----------
-        request:
-            Validated RAGRequest containing vault_id, query, and options.
-        user_id:
-            Authenticated user's ID from JWT — never client-supplied.
-        db:
-            Active SQLAlchemy session.
-
-        Returns
-        -------
-        RAGResponse
-            Grounded answer with source document citations.
-
-        Raises
-        ------
-        RAGEmptyQueryError:
-            Query string is empty or whitespace-only.
-        VaultNotFoundError:
-            Vault does not exist.
-        VaultAccessDeniedError:
-            Vault belongs to a different user.
-        RAGNoContextError:
-            No chunks met the similarity threshold.
-        DocumentProcessingError:
-            Embedding or vector search failure.
-        LLMUnavailableError / LLMTimeoutError / LLMGenerationError:
-            LLM backend failures.
-        """
         vault_id = request.vault_id
         query_text = request.query.strip() if request.query else ""
 
-        # Resolve per-request overrides with settings defaults
+
         top_k = request.top_k or settings.rag_max_chunks
         min_similarity = (
             request.min_similarity
@@ -122,11 +52,11 @@ class RAGService:
         )
         max_context_chars = settings.rag_max_context_chars
 
-        # Step 1 — Validate query
+
         if not query_text:
             raise RAGEmptyQueryError("Query must not be empty.")
 
-        # Step 2 — Authorize vault ownership
+
         vault_rec = db.query(VaultRecord).filter(VaultRecord.id == vault_id).first()
         if vault_rec is None:
             raise VaultNotFoundError(f"Vault '{vault_id}' not found.")
@@ -142,7 +72,7 @@ class RAGService:
                 detail=f"User '{user_id}' does not own vault '{vault_id}'.",
             )
 
-        # Step 3 — Generate query embedding (local, private)
+
         try:
             query_embedding = self._embedding_service.generate_embedding(query_text)
         except DocumentProcessingError:
@@ -153,11 +83,11 @@ class RAGService:
             )
             raise
 
-        # Step 4 — Vault-filtered vector search
+
         try:
             raw_matches = self._vector_store.search_vault(
                 query_embedding=query_embedding,
-                vault_id=vault_id,  # HARD vault isolation filter
+                vault_id=vault_id,
                 top_k=top_k,
             )
         except DocumentProcessingError:
@@ -168,7 +98,7 @@ class RAGService:
             )
             raise
 
-        # Step 5 — Enrich with filenames from DB (vault-scoped query only)
+
         doc_filename_map: dict[str, str] = {}
         if raw_matches:
             doc_ids = {m["document_id"] for m in raw_matches if m.get("document_id")}
@@ -176,13 +106,13 @@ class RAGService:
                 db.query(DocumentRecord.id, DocumentRecord.original_filename)
                 .filter(
                     DocumentRecord.id.in_(doc_ids),
-                    DocumentRecord.vault_id == vault_id,  # vault isolation
+                    DocumentRecord.vault_id == vault_id,
                 )
                 .all()
             )
             doc_filename_map = {r.id: r.original_filename for r in doc_records}
 
-        # Step 6 — Build bounded context (applies similarity threshold)
+
         ctx_builder = ContextBuilder(
             max_chunks=top_k,
             max_context_chars=max_context_chars,
@@ -208,7 +138,7 @@ class RAGService:
                 ),
             )
 
-        # Step 7 — Generate answer via local LLM
+
         answer = self._llm_service.generate(
             context=context_result.context_text,
             question=query_text,
@@ -221,7 +151,7 @@ class RAGService:
             context_result.chunks_used,
         )
 
-        # Step 8 — Assemble response with source citations
+
         sources = [
             RAGSource(
                 document_id=src.document_id,

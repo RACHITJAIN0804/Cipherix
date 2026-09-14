@@ -1,50 +1,3 @@
-"""
-services/vault_service.py
--------------------------
-Business-logic layer for vault operations.
-
-:class:`VaultService` sits between the API route (HTTP concerns) and
-:class:`~app.vault.vault_manager.VaultManager` (filesystem concerns).
-Its responsibilities are:
-
-1. **Validate** the incoming request beyond what Pydantic can express
-   (e.g. business rules that depend on runtime state).
-2. **Orchestrate** domain objects — generate the vault ID, build the
-   manifest, call the manager, compose the response.
-3. **Persist** application metadata in SQLite via the injected session.
-4. **Translate** domain exceptions into a form the route layer can act on.
-
-Filesystem / SQLite separation
---------------------------------
-The filesystem (VaultManager) is the authoritative source of truth for
-vault structure and cryptographic files.  SQLite stores application
-metadata that enables future search, reporting, and cross-vault queries
-without scanning the filesystem.
-
-Transaction safety
-------------------
-Vault creation:
-    1. Filesystem scaffolding (VaultManager.create).
-    2. DB INSERT (Vault + SecurityMetadata).
-    3. DB COMMIT.
-    → On DB commit failure: shutil.rmtree(vault_root) to leave no orphan.
-
-Vault deletion:
-    1. Filesystem deletion (VaultManager.delete_vault).
-    2. DB DELETE of the Vault row (CASCADE removes Documents + SecurityMetadata).
-    3. DB COMMIT.
-    → On DB failure: log the orphaned DB record; the filesystem is already clean.
-
-This layer intentionally knows nothing about FastAPI, HTTP status codes,
-or JSON serialisation.  Those concerns belong to the route.
-
-Dependency injection
---------------------
-The service receives a :class:`~app.vault.vault_manager.VaultManager`
-via its constructor and an optional :class:`~sqlalchemy.orm.Session` per
-method call.  Passing ``db=None`` disables DB persistence (useful in tests
-that focus on filesystem behaviour only).
-"""
 
 import shutil
 import uuid
@@ -81,15 +34,6 @@ _STATUS_UNLOCKED: str = "unlocked"
 
 
 class VaultService:
-    """
-    Orchestrates vault creation, listing, deletion, and state transitions.
-
-    Parameters
-    ----------
-    manager:
-        A :class:`~app.vault.vault_manager.VaultManager` instance that
-        will perform the actual filesystem operations.
-    """
 
     def __init__(self, manager: VaultManager) -> None:
         self._manager: VaultManager = manager
@@ -100,45 +44,6 @@ class VaultService:
         user_id: str | None = None,
         db: Session | None = None,
     ) -> VaultResponse:
-        """
-        Create a new vault, persist metadata to SQLite, and return its
-        serialised representation.
-
-        Flow
-        ----
-        1. Run additional business-rule validation on the request.
-        2. Generate a collision-free UUID4 vault identifier.
-        3. Build a :class:`~app.vault.manifest.VaultManifest`.
-        4. Delegate filesystem scaffolding to
-           :class:`~app.vault.vault_manager.VaultManager`.
-        5. If ``db`` is provided: INSERT Vault + SecurityMetadata rows.
-           Associate the Vault row with ``user_id`` if supplied.
-           On DB failure, remove the newly created filesystem tree.
-        6. Compose and return a :class:`~app.schemas.vault.VaultResponse`.
-
-        Parameters
-        ----------
-        request:
-            A Pydantic-validated :class:`~app.schemas.vault.CreateVaultRequest`.
-        user_id:
-            Optional UUID4 string of the authenticated owner.
-        db:
-            SQLAlchemy session.  When provided, a Vault record and a
-            SecurityMetadata record are inserted and committed.  When
-            ``None``, DB persistence is skipped (e.g. in filesystem-only tests).
-
-        Returns
-        -------
-        VaultResponse
-            Metadata of the newly created vault.
-
-        Raises
-        ------
-        VaultValidationError
-            If the request violates a business rule not captured by Pydantic.
-        VaultCreationError
-            If the filesystem scaffolding or DB insert fails.
-        """
         self._validate(request)
 
         vault_id: str = str(uuid.uuid4())
@@ -165,9 +70,8 @@ class VaultService:
                     user_id=user_id,
                 )
             except SQLAlchemyError as exc:
-                # DB commit failed after filesystem creation succeeded.
-                # Roll back the DB transaction first, then clean up the filesystem
-                # tree to avoid leaving an orphaned vault on disk.
+
+
                 db.rollback()
                 logger.error(
                     "DB insert failed after vault created on disk — "
@@ -206,37 +110,6 @@ class VaultService:
         )
 
     def delete_vault(self, vault_id: str, db: Session | None = None) -> None:
-        """
-        Permanently delete an existing vault and all of its contents.
-
-        Flow
-        ----
-        1. Validate that ``vault_id`` is a well-formed UUID4 string.
-        2. Delegate filesystem removal to
-           :meth:`~app.vault.vault_manager.VaultManager.delete_vault`.
-        3. If ``db`` is provided: DELETE the Vault row (CASCADE removes
-           all Document and SecurityMetadata rows).
-        4. Log success or re-raise a typed domain exception on failure.
-
-        Parameters
-        ----------
-        vault_id:
-            The UUID4 string that identifies the vault to delete.
-        db:
-            SQLAlchemy session.  When provided, the Vault DB record is
-            deleted and committed after filesystem deletion.
-
-        Raises
-        ------
-        VaultValidationError
-            If ``vault_id`` is not a valid UUID string.
-        VaultNotFoundError
-            If no vault with that ID exists on disk.
-        VaultManifestError
-            If the vault directory has no ``manifest.json`` (corrupt vault).
-        VaultDeletionError
-            If the OS prevents removing the directory tree.
-        """
         self._validate_vault_id(vault_id)
 
         logger.info("Initiating vault deletion | vault_id=%s", vault_id)
@@ -289,23 +162,6 @@ class VaultService:
         user_id: str | None = None,
         db: Session | None = None,
     ) -> list[VaultSummary]:
-        """
-        Return a summary of every valid vault belonging to user_id, sorted newest-first.
-
-        Parameters
-        ----------
-        user_id:
-            Optional user ID filter. When supplied alongside db, only vaults
-            belonging to this user are returned.
-        db:
-            Optional SQLAlchemy session.
-
-        Returns
-        -------
-        list[VaultSummary]
-            Zero or more vault summaries, newest first.  Returns an empty
-            list when no vaults exist — never raises in that case.
-        """
         raw_manifests = self._manager.list_vaults()
 
         allowed_vault_ids: set[str] | None = None
@@ -345,37 +201,6 @@ class VaultService:
     def lock_vault(
         self, vault_id: str, db: Session | None = None
     ) -> VaultStateResponse:
-        """
-        Transition a vault to the locked state.
-
-        Delegates to :meth:`_transition_vault_state`.  Raises
-        :class:`VaultStateError` if the vault is already locked.
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 string that identifies the vault to lock.
-        db:
-            SQLAlchemy session.  When provided, the Vault DB record's
-            ``status`` and ``updated_at`` columns are updated after the
-            filesystem manifest is written.
-
-        Returns
-        -------
-        VaultStateResponse
-            Confirmation that the vault is now ``"locked"``.
-
-        Raises
-        ------
-        VaultValidationError
-            If ``vault_id`` is not a valid UUID.
-        VaultNotFoundError
-            If no vault with that ID exists on disk.
-        VaultManifestError
-            If ``manifest.json`` is absent, unreadable, or cannot be written.
-        VaultStateError
-            If the vault is already locked.
-        """
         return self._transition_vault_state(
             vault_id,
             target_status=_STATUS_LOCKED,
@@ -386,37 +211,6 @@ class VaultService:
     def unlock_vault(
         self, vault_id: str, db: Session | None = None
     ) -> VaultStateResponse:
-        """
-        Transition a vault to the unlocked state.
-
-        Delegates to :meth:`_transition_vault_state`.  Raises
-        :class:`VaultStateError` if the vault is already unlocked.
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 string that identifies the vault to unlock.
-        db:
-            SQLAlchemy session.  When provided, the Vault DB record's
-            ``status`` and ``updated_at`` columns are updated after the
-            filesystem manifest is written.
-
-        Returns
-        -------
-        VaultStateResponse
-            Confirmation that the vault is now ``"unlocked"``.
-
-        Raises
-        ------
-        VaultValidationError
-            If ``vault_id`` is not a valid UUID.
-        VaultNotFoundError
-            If no vault with that ID exists on disk.
-        VaultManifestError
-            If ``manifest.json`` is absent, unreadable, or cannot be written.
-        VaultStateError
-            If the vault is already unlocked.
-        """
         return self._transition_vault_state(
             vault_id,
             target_status=_STATUS_UNLOCKED,
@@ -432,34 +226,6 @@ class VaultService:
         vault_root: Path,
         user_id: str | None = None,
     ) -> None:
-        """
-        Read the key + password metadata files that VaultManager just wrote
-        and insert the corresponding Vault + SecurityMetadata DB rows in a
-        single atomic transaction.
-
-        This method must be called AFTER VaultManager.create() has
-        successfully written all JSON files to disk.  It reads those files
-        to populate the SecurityMetadata columns, ensuring the DB record
-        mirrors the on-disk state.
-
-        Parameters
-        ----------
-        db:
-            An open SQLAlchemy session (not yet committed).
-        vault_id:
-            UUID4 string identifying the new vault.
-        name:
-            Human-readable vault name from the create request.
-        vault_root:
-            Absolute path to the vault root directory on disk.
-        user_id:
-            Optional owner user ID string.
-
-        Raises
-        ------
-        SQLAlchemyError
-            Propagated from the ORM add/commit on any DB error.
-        """
         import json
 
         from app.security.kdf_params import KdfParams
@@ -485,9 +251,7 @@ class VaultService:
         )
         db.add(vault_record)
 
-        # encrypted_vault_key stores CIPHERTEXT — never plaintext.
-        # salt and nonce are not secret; they are required for future
-        # Master Key re-derivation and AES-GCM decryption respectively.
+
         security_record = SecurityMetadataRecord(
             vault_id=vault_id,
             key_version=key_data.get("key_version", "1"),
@@ -520,50 +284,6 @@ class VaultService:
         current_label: str,
         db: Session | None = None,
     ) -> VaultStateResponse:
-        """
-        Core implementation shared by :meth:`lock_vault` and :meth:`unlock_vault`.
-
-        Flow
-        ----
-        1. Validate ``vault_id`` is a well-formed UUID.
-        2. Read the current manifest from disk.
-        3. Guard against a no-op: raise :class:`VaultStateError` if the
-           vault is already in ``target_status``.
-        4. Delegate the status write to
-           :meth:`~app.vault.vault_manager.VaultManager.update_vault_status`.
-        5. If ``db`` is provided: update the Vault DB row's ``status`` and
-           ``updated_at``.  A DB failure is logged but does not roll back the
-           filesystem change — the manifest on disk is authoritative.
-        6. Log the operation and return a :class:`VaultStateResponse`.
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 string that identifies the vault.
-        target_status:
-            The status string to transition to (``"locked"`` or ``"unlocked"``).
-        current_label:
-            Human-readable label for the target state, used in error messages
-            and log output (e.g. ``"locked"``, ``"unlocked"``).
-        db:
-            Optional SQLAlchemy session.  When provided, syncs the Vault row.
-
-        Returns
-        -------
-        VaultStateResponse
-            Confirmation of the new vault state.
-
-        Raises
-        ------
-        VaultValidationError
-            If ``vault_id`` is not a valid UUID.
-        VaultNotFoundError
-            If no vault with that ID exists on disk.
-        VaultManifestError
-            If ``manifest.json`` is absent, unreadable, or cannot be written.
-        VaultStateError
-            If the vault is already in ``target_status``.
-        """
         self._validate_vault_id(vault_id)
         logger.info(
             "Initiating vault %s | vault_id=%s", current_label, vault_id
@@ -590,9 +310,7 @@ class VaultService:
             "Vault %s successfully | vault_id=%s", current_label, vault_id
         )
 
-        # Sync the Vault DB row status.  A DB failure here is non-fatal:
-        # the filesystem manifest is the authoritative state; a stale DB
-        # record will be reconciled on the next operation.
+
         if db is not None:
             try:
                 vault_record = db.get(VaultRecord, vault_id)
@@ -623,14 +341,6 @@ class VaultService:
         return VaultStateResponse(vault_id=vault_id, status=target_status)
 
     def _validate(self, request: CreateVaultRequest) -> None:
-        """
-        Enforce business rules that Pydantic alone cannot express.
-
-        Raises
-        ------
-        VaultValidationError
-            On any business-rule violation.
-        """
         if not request.name or not request.name.strip():
             raise VaultValidationError(
                 "Vault name must not be empty.",
@@ -638,14 +348,6 @@ class VaultService:
             )
 
     def _validate_vault_id(self, vault_id: str) -> None:
-        """
-        Ensure ``vault_id`` is a valid UUID string before touching the filesystem.
-
-        Raises
-        ------
-        VaultValidationError
-            If ``vault_id`` cannot be parsed as a UUID.
-        """
         try:
             uuid.UUID(vault_id)
         except ValueError as exc:

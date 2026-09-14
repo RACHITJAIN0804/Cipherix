@@ -108,7 +108,7 @@ export function IntegrityView({ user, onLogout }) {
 
   return (
     <PageLayout title="Blockchain Integrity & Verification" user={user} onLogout={onLogout}>
-      {/* Page Header */}
+      {}
       <PageHeader
         icon={ShieldCheck}
         iconColor="text-amber-400"
@@ -132,12 +132,12 @@ export function IntegrityView({ user, onLogout }) {
 
       {error && <ErrorState message={error} />}
 
-      {/* Verification Panel */}
+      {}
       <div
         className="glass-panel"
         style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', borderColor: 'rgba(245,158,11,0.15)' }}
       >
-        {/* Verification Result Banner */}
+        {}
         {verifyResult && (
           <div
             style={{
@@ -162,7 +162,7 @@ export function IntegrityView({ user, onLogout }) {
           </div>
         )}
 
-        {/* Tier Cards */}
+        {}
         <div>
           <h3 className="section-title" style={{ marginBottom: '14px' }}>
             <ShieldCheck style={{ width: 15, height: 15, color: 'var(--accent-amber)' }} />
@@ -205,7 +205,7 @@ export function IntegrityView({ user, onLogout }) {
           </div>
         </div>
 
-        {/* Action Buttons */}
+        {}
         <div
           style={{
             display: 'flex',

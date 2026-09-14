@@ -55,7 +55,7 @@ function ConfigCard({ label, value, valueColor, description, icon: Icon, iconCol
 export function SettingsView({ user, onLogout }) {
   return (
     <PageLayout title="Settings & Preferences" user={user} onLogout={onLogout}>
-      {/* Page Header */}
+      {}
       <PageHeader
         icon={Settings}
         iconColor="text-slate-400"
@@ -63,7 +63,7 @@ export function SettingsView({ user, onLogout }) {
         description="Runtime configuration, security policy parameters, and system-level settings."
       />
 
-      {/* Runtime Config */}
+      {}
       <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <h3 className="section-title">
           <Server style={{ width: 16, height: 16, color: 'var(--accent-cyan)' }} />
@@ -106,7 +106,7 @@ export function SettingsView({ user, onLogout }) {
         </div>
       </div>
 
-      {/* Rate Limiting */}
+      {}
       <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <h3 className="section-title">
           <ShieldAlert style={{ width: 16, height: 16, color: 'var(--accent-danger)' }} />

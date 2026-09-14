@@ -1,8 +1,3 @@
-"""
-services/computer_access/permission_service.py
-------------------------------------------------
-Permission service managing computer-access permission toggles and user approval requests.
-"""
 
 import json
 import uuid
@@ -23,15 +18,8 @@ logger = get_logger(__name__)
 
 
 class PermissionService:
-    """
-    Manages server-side computer access toggles and explicit user action approvals.
-    """
 
     def is_computer_access_enabled(self, db: Session, user_id: str) -> bool:
-        """
-        Check if computer access is enabled for the specified user.
-        Defaults to False (DISABLED).
-        """
         record = db.get(UserComputerAccess, user_id)
         if record is None:
             return False
@@ -40,9 +28,6 @@ class PermissionService:
     def set_computer_access_enabled(
         self, db: Session, user_id: str, enabled: bool
     ) -> bool:
-        """
-        Enable or disable computer access for the specified user.
-        """
         record = db.get(UserComputerAccess, user_id)
         if record is None:
             record = UserComputerAccess(user_id=user_id, enabled=enabled)
@@ -65,11 +50,8 @@ class PermissionService:
         parameters: dict,
         expires_in_minutes: int = 15,
     ) -> ComputerAccessApproval:
-        """
-        Create a new pending approval request for a write action.
-        """
         approval_id = str(uuid.uuid4())
-        # Sanitise parameters for approval storage (exclude full text content if large)
+
         safe_params = {k: v for k, v in parameters.items()}
         if "content" in safe_params and isinstance(safe_params["content"], str) and len(safe_params["content"]) > 100:
             safe_params["content"] = f"[{len(safe_params['content'])} characters content]"
@@ -93,14 +75,6 @@ class PermissionService:
     def approve_request(
         self, db: Session, approval_id: str, user_id: str
     ) -> ComputerAccessApproval:
-        """
-        Approve a pending approval request.
-
-        Raises
-        ------
-        AuthError
-            If approval does not exist or belongs to another user.
-        """
         approval = db.get(ComputerAccessApproval, approval_id)
         if approval is None:
             raise AuthError(f"Approval request '{approval_id}' not found.")
@@ -126,9 +100,6 @@ class PermissionService:
     def is_approval_valid(
         self, db: Session, approval_id: str, user_id: str, action: str
     ) -> bool:
-        """
-        Verify if an approval request is valid, approved, owned by user_id, and matches the action.
-        """
         approval = db.get(ComputerAccessApproval, approval_id)
         if approval is None:
             return False

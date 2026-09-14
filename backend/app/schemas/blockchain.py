@@ -1,8 +1,3 @@
-"""
-schemas/blockchain.py
----------------------
-Pydantic schemas for blockchain document integrity anchoring and verification.
-"""
 
 from datetime import datetime
 from typing import Optional
@@ -11,14 +6,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class AnchorRequest(BaseModel):
-    """Request payload to anchor a document's integrity hash on the blockchain."""
 
     vault_id: str = Field(..., description="UUID of the vault containing the document.")
     document_id: str = Field(..., description="UUID of the document to anchor.")
 
 
 class AnchorResponse(BaseModel):
-    """Response returned upon successful blockchain anchoring."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -34,14 +27,12 @@ class AnchorResponse(BaseModel):
 
 
 class VerifyAnchorRequest(BaseModel):
-    """Request payload to verify a document against its stored hash and blockchain anchor."""
 
     vault_id: str = Field(..., description="UUID of the vault containing the document.")
     document_id: str = Field(..., description="UUID of the document to verify.")
 
 
 class VerifyAnchorResponse(BaseModel):
-    """Structured response for document integrity and blockchain verification."""
 
     document_id: str = Field(..., description="UUID of verified document.")
     privacy_reference: str = Field(..., description="Privacy-preserving document reference.")

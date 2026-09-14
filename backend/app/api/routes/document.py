@@ -1,30 +1,3 @@
-"""
-api/routes/document.py
-----------------------
-FastAPI route handlers for encrypted document operations.
-
-Each handler follows the same pattern:
-
-1. Extract and forward request data to :class:`~app.services.document_service.DocumentService`.
-2. Map domain exceptions to HTTP status codes.
-3. Return the appropriate response or stream.
-
-No business logic, no filesystem code, and no cryptography belongs here.
-
-Dependency wiring
------------------
-``_get_document_service()`` constructs :class:`~app.services.document_service.DocumentService`
-on every request using ``settings.VAULT_DIR``.  Tests can override this
-dependency with ``app.dependency_overrides``.
-
-Password handling
------------------
-The vault password is supplied as an HTTP header (``X-Vault-Password``) on
-every request that requires decryption.  It is never logged, never stored
-in a route parameter, and is discarded by the service layer immediately after
-the Vault Key is unwrapped.
-"""
-
 from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile, status
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
@@ -69,10 +42,8 @@ router = APIRouter(
 )
 
 
-
 def _get_document_service() -> DocumentService:
     return DocumentService(vault_base_dir=settings.VAULT_DIR)
-
 
 
 def _map_document_exception(exc: Exception) -> None:
@@ -96,7 +67,6 @@ def _map_document_exception(exc: Exception) -> None:
     if isinstance(exc, DocumentProcessingError):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=exc.detail) from exc
 
-
     if isinstance(exc, CorruptedDocumentError):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=exc.detail
@@ -113,7 +83,6 @@ def _map_document_exception(exc: Exception) -> None:
         ) from exc
 
     raise exc
-
 
 
 @router.post(
@@ -136,6 +105,12 @@ def _map_document_exception(exc: Exception) -> None:
         500: {"description": "Encryption or storage failure."},
     },
 )
+@router.post(
+    "/{vault_id}/documents/",
+    response_model=DocumentResponse,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
 async def upload_document(
     vault_id: str,
     vault: Vault = Depends(get_user_vault),
@@ -148,9 +123,6 @@ async def upload_document(
     service: DocumentService = Depends(_get_document_service),
     db: Session = Depends(get_db),
 ) -> DocumentResponse:
-    """
-    ``POST /vaults/{vault_id}/documents`` — encrypt and store a document.
-    """
     try:
         file_bytes = await file.read()
         response = service.upload_document(
@@ -195,9 +167,6 @@ async def verify_document_integrity(
     service: DocumentService = Depends(_get_document_service),
     db: Session = Depends(get_db),
 ) -> VerifyIntegrityResponse:
-    """
-    ``GET /vaults/{vault_id}/documents/{document_id}/verify`` — integrity check.
-    """
     try:
         result = service.verify_document(
             vault_id=vault.id,
@@ -229,13 +198,18 @@ async def verify_document_integrity(
         500: {"description": "Metadata storage error."},
     },
 )
+@router.get(
+    "/{vault_id}/documents/",
+    response_model=DocumentListResponse,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
 async def list_documents(
     vault_id: str,
     vault: Vault = Depends(get_user_vault),
     service: DocumentService = Depends(_get_document_service),
     db: Session = Depends(get_db),
 ) -> DocumentListResponse:
-    """``GET /vaults/{vault_id}/documents`` — list document metadata."""
     try:
         result = service.list_documents(vault.id, db=db)
         logger.info(
@@ -277,9 +251,6 @@ async def download_document(
     service: DocumentService = Depends(_get_document_service),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    """
-    ``GET /vaults/{vault_id}/documents/{document_id}`` — decrypt and download.
-    """
     try:
         plaintext, metadata = service.download_document(
             vault_id=vault.id,
@@ -330,7 +301,6 @@ async def delete_document(
     service: DocumentService = Depends(_get_document_service),
     db: Session = Depends(get_db),
 ) -> Response:
-    """``DELETE /vaults/{vault_id}/documents/{document_id}`` — delete a document."""
     try:
         service.delete_document(vault_id=vault.id, document_id=document_id, db=db)
         logger.info(
@@ -375,7 +345,6 @@ async def process_document(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DocumentProcessingResponse:
-    """``POST /vaults/{vault_id}/documents/{document_id}/process`` — process a document for RAG."""
     try:
         pipeline = DocumentProcessingPipeline(vault_base_dir=settings.VAULT_DIR)
         return pipeline.process_document(
@@ -387,5 +356,3 @@ async def process_document(
         )
     except Exception as exc:  # noqa: BLE001
         _map_document_exception(exc)
-
-

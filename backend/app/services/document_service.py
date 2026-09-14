@@ -1,59 +1,3 @@
-"""
-services/document_service.py
------------------------------
-Business-logic layer for document upload, listing, deletion, download,
-and integrity verification.
-
-:class:`DocumentService` sits between the API route (HTTP concerns) and
-the storage/cryptography layers.  Its responsibilities are:
-
-1. **Validate** the vault state (exists, unlocked) and the upload (filename
-   safe, file not empty) before doing any filesystem work.
-2. **Orchestrate** the encryption pipeline: unwrap the Vault Key from
-   ``key.json``, generate a nonce, encrypt the plaintext bytes, write the
-   ciphertext blob, write the metadata sidecar.
-3. **Persist** document metadata in SQLite.
-4. **Orchestrate** decryption: read the ciphertext blob, read the metadata
-   sidecar, unwrap the Vault Key, decrypt in memory — never writing plaintext
-   to disk.
-5. **Verify integrity**: read the encrypted blob, recompute its SHA-256 hash,
-   compare against the stored hash.  No password or key material required.
-6. **Compose** Pydantic response objects from storage dataclasses.
-7. **Translate** domain exceptions into a form the route layer can act on.
-
-This layer intentionally knows nothing about FastAPI, HTTP status codes,
-or JSON serialisation.  Those concerns belong to the route.
-
-Filesystem / SQLite separation
---------------------------------
-Encrypted blobs remain on the filesystem (``encrypted/*.bin``).
-JSON metadata sidecars remain on the filesystem (``metadata/*.json``).
-SQLite stores the application metadata index (document record with
-filename, MIME type, size, hash, encryption version, and encrypted path).
-
-Transaction safety
-------------------
-Upload:
-    1. Write encrypted blob to disk.
-    2. Write JSON sidecar to disk.
-    3. INSERT Document row in DB.
-    4. COMMIT.
-    → On DB commit failure: delete both the blob and sidecar, then re-raise.
-
-Deletion:
-    1. DELETE Document DB row.
-    2. COMMIT.
-    3. Delete blob + sidecar from disk.
-    → On DB failure: do not touch the filesystem; raise.
-    → On filesystem failure after DB commit: log orphaned files; already removed from DB.
-
-Filename sanitisation policy
-------------------------------
-* The filename must be non-empty after stripping whitespace.
-* Path-traversal sequences are rejected outright.
-* The sanitised name is stored in metadata; it is never used as a
-  filesystem path (the UUID document_id is used instead).
-"""
 
 import hmac
 import re
@@ -99,16 +43,7 @@ _MAX_FILENAME_LEN: int = 255
 _FORBIDDEN_CHARS: re.Pattern = re.compile(r'[\x00<>:"/\\|?*]')
 
 
-
 class DocumentService:
-    """
-    Orchestrates document upload, listing, deletion, and download inside a vault.
-
-    Parameters
-    ----------
-    vault_base_dir:
-        Root directory under which all vault subdirectories live.
-    """
 
     def __init__(self, vault_base_dir: Path) -> None:
         self._vault_base_dir: Path = vault_base_dir
@@ -123,60 +58,6 @@ class DocumentService:
         file_bytes: bytes,
         db: Session | None = None,
     ) -> DocumentResponse:
-        """
-        Encrypt and store a document inside a vault.
-
-        Flow
-        ----
-        1. Assert the vault exists and is unlocked.
-        2. Validate and sanitise the filename.
-        3. Assert the file is non-empty.
-        4. Generate a UUID4 document ID.
-        5. Unwrap the Vault Key from ``key.json`` using Argon2id + AES-GCM.
-        6. Generate a 12-byte random nonce (OS CSPRNG).
-        7. Encrypt the plaintext bytes with AES-256-GCM.
-        8. Write the ciphertext blob to ``encrypted/<doc_id>.bin``.
-        9. Write the metadata sidecar to ``metadata/<doc_id>.json``.
-        10. If ``db`` is provided: INSERT a Document record in SQLite.
-            On DB failure, clean up both filesystem files.
-        11. Return the document metadata as a Pydantic response object.
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 identifying the target vault.
-        password:
-            The vault's unlock password (used to re-derive the Master Key
-            and decrypt the Vault Key; never stored or logged).
-        filename:
-            Original filename from the upload (validated and sanitised here).
-        content_type:
-            MIME type from the ``Content-Type`` part header, or ``None``
-            if absent (falls back to ``"application/octet-stream"``).
-        file_bytes:
-            Raw bytes of the uploaded file.
-        db:
-            SQLAlchemy session.  When provided, a Document record is
-            inserted and committed after the filesystem write.
-
-        Returns
-        -------
-        DocumentResponse
-            Metadata of the newly encrypted and stored document.
-
-        Raises
-        ------
-        VaultNotFoundError
-            If the vault directory does not exist.
-        VaultLockedError
-            If the vault's status is not ``"unlocked"``.
-        InvalidUploadError
-            If the filename fails validation or the file is empty.
-        DocumentEncryptionError
-            If the Vault Key cannot be decrypted or AES-GCM encryption fails.
-        DocumentStorageError
-            If the ciphertext or metadata cannot be written to disk.
-        """
         vault_root = self._assert_vault_unlocked(vault_id)
         safe_filename = self._validate_filename(filename)
         self._assert_file_not_empty(file_bytes, safe_filename)
@@ -239,8 +120,8 @@ class DocumentService:
         meta_path = doc_mgr.write_metadata(metadata=metadata, vault_id=vault_id)
 
         if db is not None:
-            # Relative encrypted path stored in DB so the record stays valid
-            # if the vault base directory is relocated.
+
+
             encrypted_rel_path = f"encrypted/{document_id}.bin"
             try:
                 self._insert_document_record(
@@ -255,9 +136,8 @@ class DocumentService:
                     encryption_version=metadata.encryption_version,
                 )
             except SQLAlchemyError as exc:
-                # DB commit failed after both filesystem files were written.
-                # Roll back the DB transaction, then clean up the filesystem
-                # files to keep the system consistent.
+
+
                 db.rollback()
                 logger.error(
                     "DB insert failed after document written to disk — "
@@ -297,37 +177,6 @@ class DocumentService:
     def list_documents(
         self, vault_id: str, db: Session | None = None
     ) -> DocumentListResponse:
-        """
-        Return metadata for all documents stored in a vault.
-
-        The vault must exist but need not be unlocked — listing metadata
-        does not require decrypting any files.
-
-        When ``db`` is provided, document metadata is queried from SQLite
-        rather than scanned from the filesystem ``metadata/`` directory.  The
-        filesystem path is still validated as a fallback source of truth.
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 identifying the target vault.
-        db:
-            SQLAlchemy session.  When provided, document metadata is fetched
-            from the SQLite ``documents`` table.
-
-        Returns
-        -------
-        DocumentListResponse
-            An envelope containing the vault_id, document count, and a
-            list of document metadata entries sorted newest-first.
-
-        Raises
-        ------
-        VaultNotFoundError
-            If the vault directory does not exist.
-        DocumentStorageError
-            If the metadata directory is unreadable.
-        """
         vault_root = self._assert_vault_exists(vault_id)
 
         if db is not None:
@@ -383,31 +232,6 @@ class DocumentService:
         document_id: str,
         db: Session | None = None,
     ) -> None:
-        """
-        Delete a document's encrypted blob, metadata sidecar, and DB record.
-
-        The vault must exist but need not be unlocked — deletion does not
-        require decrypting the file.
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 identifying the vault containing the document.
-        document_id:
-            UUID4 identifying the document to delete.
-        db:
-            SQLAlchemy session.  When provided, the Document DB record is
-            deleted before filesystem files are removed.
-
-        Raises
-        ------
-        VaultNotFoundError
-            If the vault directory does not exist.
-        DocumentNotFoundError
-            If neither the blob nor the metadata file exist for this document.
-        DocumentStorageError
-            If the OS cannot remove the file(s).
-        """
         vault_root = self._assert_vault_exists(vault_id)
 
         if db is not None:
@@ -471,48 +295,6 @@ class DocumentService:
         password: str,
         db: Session | None = None,
     ) -> tuple[bytes, DocumentMetadata]:
-        """
-        Decrypt and return a document's plaintext bytes and metadata.
-
-        The decrypted content exists **only in memory** during this call.
-        It is never written to any file or temp directory on disk.
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 identifying the vault that contains the document.
-        document_id:
-            UUID4 identifying the document to download.
-        password:
-            The vault's unlock password used to re-derive the Master Key
-            and decrypt the Vault Key.  Never stored or logged.
-        db:
-            SQLAlchemy session.  When provided, document metadata (nonce,
-            filename, MIME type) is read from SQLite instead of from the
-            JSON sidecar on disk.
-
-        Returns
-        -------
-        tuple[bytes, DocumentMetadata]
-            ``(plaintext_bytes, metadata)`` where ``plaintext_bytes`` is the
-            original file content and ``metadata`` carries the original
-            filename and MIME type for building the HTTP response headers.
-
-        Raises
-        ------
-        VaultNotFoundError
-            If the vault directory does not exist.
-        VaultLockedError
-            If the vault's status is not ``"unlocked"``.
-        DocumentNotFoundError
-            If the encrypted blob or metadata sidecar does not exist.
-        DocumentEncryptionError
-            If the Vault Key cannot be decrypted (wrong password, corrupt
-            ``key.json``, or corrupt ``password_meta.json``), or if AES-GCM
-            authentication fails (tampered blob or mismatched nonce).
-        DocumentStorageError
-            If a file cannot be read due to an OS-level error.
-        """
         vault_root = self._assert_vault_unlocked(vault_id)
 
         doc_mgr = DocumentManager(vault_root)
@@ -582,65 +364,12 @@ class DocumentService:
         document_id: str,
         db: Session | None = None,
     ) -> VerifyIntegrityResponse:
-        """
-        Verify the integrity of a stored encrypted document.
-
-        Reads the encrypted blob from disk, recomputes its SHA-256 hash,
-        and compares it against the hash recorded at upload time.  No password
-        or Vault Key is required — this check operates entirely on ciphertext.
-
-        When ``db`` is provided, the stored hash is fetched from the SQLite
-        ``documents`` table.  Otherwise the JSON metadata sidecar is used.
-
-        Flow
-        ----
-        1. Assert the vault exists (need not be unlocked).
-        2. Obtain the stored hash.  When ``db`` is provided, look up the
-           ``integrity_hash`` column in SQLite.  Otherwise read the metadata
-           sidecar; raise :class:`MissingIntegrityMetadataError` if
-           ``sha256_ciphertext`` is absent.
-        3. Read the encrypted blob; raise :class:`CorruptedDocumentError` if
-           the file is missing or unreadable.
-        4. Recompute ``sha256(ciphertext)`` via :class:`EncryptionManager`.
-        5. Compare with stored hash using :func:`hmac.compare_digest` to
-           prevent timing-oracle attacks.
-        6. Raise :class:`IntegrityVerificationError` on mismatch.
-        7. Return :class:`~app.schemas.document.VerifyIntegrityResponse`.
-
-        Parameters
-        ----------
-        vault_id:
-            UUID4 identifying the vault containing the document.
-        document_id:
-            UUID4 identifying the document to verify.
-        db:
-            SQLAlchemy session.  When provided, the stored hash is fetched
-            from the SQLite ``documents`` table.
-
-        Returns
-        -------
-        VerifyIntegrityResponse
-            ``{"verified": True, "document_id": ..., "checked_at": ...}``
-
-        Raises
-        ------
-        VaultNotFoundError
-            If the vault directory does not exist.
-        DocumentNotFoundError
-            If the metadata sidecar does not exist.
-        MissingIntegrityMetadataError
-            If the document has no stored hash.
-        CorruptedDocumentError
-            If the encrypted blob file is missing or cannot be read.
-        IntegrityVerificationError
-            If the recomputed hash does not match the stored hash.
-        """
         vault_root = self._assert_vault_exists(vault_id)
 
         doc_mgr = DocumentManager(vault_root)
 
         if db is not None:
-            from app.database.models import Document as DocumentRecord  # local import
+            from app.database.models import Document as DocumentRecord
 
             db_record = db.get(DocumentRecord, document_id)
             if db_record is None or db_record.vault_id != vault_id:
@@ -742,39 +471,6 @@ class DocumentService:
         integrity_hash: str | None,
         encryption_version: str,
     ) -> None:
-        """
-        Insert a Document record in SQLite.
-
-        Called after both the encrypted blob and the JSON sidecar have been
-        successfully written to the filesystem.
-
-        Parameters
-        ----------
-        db:
-            Open SQLAlchemy session.
-        document_id:
-            UUID4 string identifying the document.
-        vault_id:
-            UUID4 string identifying the parent vault.
-        original_filename:
-            Sanitised original filename.
-        mime_type:
-            MIME type string.
-        size:
-            Plaintext byte size of the uploaded file.
-        encrypted_path:
-            Relative path from the vault root to the ``.bin`` blob
-            (e.g. ``"encrypted/<document_id>.bin"``).
-        integrity_hash:
-            Lowercase hex SHA-256 digest of the ciphertext, or ``None``.
-        encryption_version:
-            Algorithm/version label (e.g. ``"AES-256-GCM-v1"``).
-
-        Raises
-        ------
-        SQLAlchemyError
-            Propagated from the ORM add/commit on any DB error.
-        """
         now = datetime.now(UTC)
         record = DocumentRecord(
             id=document_id,
@@ -798,20 +494,9 @@ class DocumentService:
         )
 
     def _vault_root(self, vault_id: str) -> Path:
-        """Return the vault root directory path for a given vault_id."""
         return self._vault_base_dir / vault_id
 
     def _assert_vault_exists(self, vault_id: str) -> Path:
-        """
-        Assert that the vault root directory exists on disk.
-
-        Returns the vault root Path on success.
-
-        Raises
-        ------
-        VaultNotFoundError
-            If the directory does not exist.
-        """
         root = self._vault_root(vault_id)
         if not root.is_dir():
             raise VaultNotFoundError(
@@ -821,20 +506,6 @@ class DocumentService:
         return root
 
     def _assert_vault_unlocked(self, vault_id: str) -> Path:
-        """
-        Assert that the vault exists **and** is in the ``unlocked`` state.
-
-        Reads ``manifest.json`` to check the current status.
-
-        Returns the vault root Path on success.
-
-        Raises
-        ------
-        VaultNotFoundError
-            If the vault directory or manifest does not exist.
-        VaultLockedError
-            If the vault's status is not ``"unlocked"``.
-        """
         root = self._assert_vault_exists(vault_id)
 
         manifest_path = root / "manifest.json"
@@ -867,37 +538,6 @@ class DocumentService:
         vault_id: str,
         password: str,
     ) -> bytes:
-        """
-        Re-derive the Master Key and use it to decrypt the Vault Key.
-
-        Steps
-        -----
-        1. Read ``password_meta.json`` to get the stored salt.
-        2. Derive the Master Key from (password, salt) via Argon2id.
-        3. Read ``key.json`` to get the encrypted Vault Key and nonce.
-        4. Decrypt the Vault Key with AES-256-GCM.
-
-        The Master Key is discarded in the ``finally`` block.
-
-        Parameters
-        ----------
-        vault_root:
-            Absolute path to the vault root directory.
-        vault_id:
-            Used only in log and error messages.
-        password:
-            The vault's password (never stored or logged).
-
-        Returns
-        -------
-        bytes
-            Raw 32-byte Vault Key plaintext.
-
-        Raises
-        ------
-        DocumentEncryptionError
-            If the salt, key metadata, or decryption fails.
-        """
         master_key: bytes | None = None
 
         try:
@@ -946,35 +586,6 @@ class DocumentService:
 
     @staticmethod
     def _validate_filename(filename: str) -> str:
-        """
-        Validate and return a sanitised version of the uploaded filename.
-
-        Rules
-        -----
-        * Must be a non-empty string after stripping whitespace.
-        * Length must not exceed :data:`_MAX_FILENAME_LEN` characters.
-        * Must not contain forbidden characters (null bytes, ``<>:"/\\|?*``).
-        * Must not be or contain path-traversal sequences (``..``,
-          absolute paths starting with ``/`` or ``\\``).
-        * The *name component only* (``PurePosixPath(name).name``) is used
-          so that ``foo/bar.pdf`` is stored as ``bar.pdf`` rather than
-          rejected outright.
-
-        Parameters
-        ----------
-        filename:
-            Raw filename as received from the client.
-
-        Returns
-        -------
-        str
-            The sanitised filename (name component only, whitespace stripped).
-
-        Raises
-        ------
-        InvalidUploadError
-            If the filename fails any of the above rules.
-        """
         if not isinstance(filename, str) or not filename.strip():
             raise InvalidUploadError(
                 "Filename is missing or empty.",
@@ -984,7 +595,7 @@ class DocumentService:
                 ),
             )
 
-        # Extract only the name component to strip any client-supplied path.
+
         name = PurePosixPath(filename.strip()).name
 
         if not name:
@@ -1025,21 +636,6 @@ class DocumentService:
 
     @staticmethod
     def _assert_file_not_empty(file_bytes: bytes, filename: str) -> None:
-        """
-        Raise :class:`InvalidUploadError` if the file has zero bytes.
-
-        Parameters
-        ----------
-        file_bytes:
-            The raw bytes of the uploaded file.
-        filename:
-            Sanitised filename used only in the error message.
-
-        Raises
-        ------
-        InvalidUploadError
-            If ``file_bytes`` is empty.
-        """
         if not file_bytes:
             raise InvalidUploadError(
                 f"Uploaded file '{filename}' is empty (zero bytes).",
@@ -1051,15 +647,6 @@ class DocumentService:
 
     @staticmethod
     def _metadata_to_response(metadata: DocumentMetadata) -> DocumentResponse:
-        """
-        Convert a storage-layer :class:`~app.storage.document_manager.DocumentMetadata`
-        into a Pydantic :class:`~app.schemas.document.DocumentResponse`.
-
-        The ``nonce`` field is intentionally **not** included in the response —
-        it is an internal encryption detail that must never be sent to clients.
-        The ``uploaded_at`` string is parsed into a :class:`~datetime.datetime`
-        so the Pydantic model can serialise it consistently.
-        """
         return DocumentResponse(
             document_id=metadata.document_id,
             original_filename=metadata.original_filename,

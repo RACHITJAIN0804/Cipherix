@@ -78,7 +78,7 @@ export function VaultsView({ user, onLogout }) {
     } catch (err) { alert('Delete Error: ' + err.message); }
   };
 
-  /* ---- shared modal input style ---- */
+  
   const inputStyle = {
     width: '100%',
     background: 'var(--bg-input)',
@@ -95,7 +95,7 @@ export function VaultsView({ user, onLogout }) {
 
   return (
     <PageLayout title="Encrypted Vaults" user={user} onLogout={onLogout}>
-      {/* Page Header */}
+      {}
       <PageHeader
         icon={Vault}
         iconColor="text-cyan-400"
@@ -130,7 +130,7 @@ export function VaultsView({ user, onLogout }) {
               className="glass-panel"
               style={{ padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}
             >
-              {/* Card header */}
+              {}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div
                   style={{
@@ -185,7 +185,7 @@ export function VaultsView({ user, onLogout }) {
                 </div>
               </div>
 
-              {/* Vault info */}
+              {}
               <div style={{ flex: 1 }}>
                 <h3
                   style={{
@@ -212,7 +212,7 @@ export function VaultsView({ user, onLogout }) {
                 </div>
               </div>
 
-              {/* Metadata */}
+              {}
               <div
                 style={{
                   display: 'flex',
@@ -234,7 +234,7 @@ export function VaultsView({ user, onLogout }) {
                 </div>
               </div>
 
-              {/* Action buttons */}
+              {}
               <div style={{ display: 'flex', gap: '8px' }}>
                 {v.status === 'unlocked' ? (
                   <>
@@ -270,7 +270,7 @@ export function VaultsView({ user, onLogout }) {
         </div>
       )}
 
-      {/* Create Vault Modal */}
+      {}
       {createModalOpen && (
         <div className="modal-backdrop">
           <div className="modal-panel" style={{ maxWidth: '440px' }}>
@@ -365,7 +365,7 @@ export function VaultsView({ user, onLogout }) {
         </div>
       )}
 
-      {/* Unlock Vault Modal */}
+      {}
       {unlockModalOpen && (
         <div className="modal-backdrop">
           <div className="modal-panel" style={{ maxWidth: '380px' }}>
@@ -412,7 +412,7 @@ export function VaultsView({ user, onLogout }) {
         </div>
       )}
 
-      {/* Delete Confirmation */}
+      {}
       <ConfirmDialog
         isOpen={!!deleteVaultId}
         title="Delete Encrypted Vault"

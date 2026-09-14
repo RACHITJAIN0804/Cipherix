@@ -1,6 +1,3 @@
-"""
-services/blockchain package
-"""
 
 from app.services.blockchain.adapters.base import BlockchainAdapter
 from app.services.blockchain.adapters.local import LocalBlockchainAdapter

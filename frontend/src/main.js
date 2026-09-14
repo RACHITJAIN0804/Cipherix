@@ -1,16 +1,8 @@
-/*
- Cipherix Main Web Application Controller
- ----------------------------------------
- Manages UI state, view navigation, interactive modals, REST API synchronization,
- and dynamic card/table rendering.
-*/
-
 import { CipherixAPI } from "./api.js";
 
 document.addEventListener("DOMContentLoaded", () => {
   console.log("Cipherix Web Application Initializing...");
 
-  // Application State
   const state = {
     activeView: "dashboard",
     vaults: [],
@@ -42,16 +34,13 @@ document.addEventListener("DOMContentLoaded", () => {
     ],
   };
 
-  // UI Elements Initialization
   const navItems = document.querySelectorAll(".nav-item");
   const viewPanels = document.querySelectorAll(".view-panel");
   const pageTitle = document.getElementById("page-title");
 
-  // View Navigation Handler
   function navigateTo(targetId) {
     state.activeView = targetId;
 
-    // Update Nav Link Active States
     navItems.forEach((item) => {
       if (item.getAttribute("data-target") === targetId) {
         item.classList.add("active");
@@ -60,7 +49,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    // Update View Panel Display
     viewPanels.forEach((panel) => {
       if (panel.id === `view-${targetId}`) {
         panel.classList.add("active");
@@ -69,7 +57,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    // Update Header Title
     const titleMap = {
       dashboard: "Dashboard Overview",
       vaults: "Encrypted Vaults",
@@ -87,7 +74,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Bind Nav Clicks
   navItems.forEach((item) => {
     item.addEventListener("click", (e) => {
       e.preventDefault();
@@ -96,7 +82,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Modal Handlers
   const modalCreateVault = document.getElementById("modal-create-vault");
   const openVaultModalBtns = [
     document.getElementById("quick-create-vault-btn"),
@@ -118,7 +103,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // API Refresh Logic
   async function refreshData() {
     try {
       const vaultsData = await CipherixAPI.request("/vaults");
@@ -143,7 +127,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Render Dashboard Elements
   function renderDashboard() {
     const statVaults = document.getElementById("stat-vaults");
     const statDocs = document.getElementById("stat-docs");
@@ -185,7 +168,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Render Vaults Grid
   function renderVaults() {
     const gridContainer = document.getElementById("vaults-grid-container");
     if (!gridContainer) return;
@@ -223,7 +205,6 @@ document.addEventListener("DOMContentLoaded", () => {
       .join("");
   }
 
-  // Populate Select Dropdowns
   function populateVaultDropdowns() {
     const selects = [
       document.getElementById("doc-vault-select"),
@@ -247,7 +228,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Render Document Table
   function renderDocuments() {
     const tableBody = document.getElementById("documents-table-body");
     if (!tableBody) return;
@@ -287,7 +267,6 @@ document.addEventListener("DOMContentLoaded", () => {
       .join("");
   }
 
-  // Render Activity Logs
   function renderActivityLogs() {
     const logBody = document.getElementById("activity-log-body");
     if (!logBody) return;
@@ -307,7 +286,6 @@ document.addEventListener("DOMContentLoaded", () => {
       .join("");
   }
 
-  // Create Vault Modal Form Submission
   const saveVaultBtn = document.getElementById("modal-btn-save-vault");
   if (saveVaultBtn) {
     saveVaultBtn.addEventListener("click", async () => {
@@ -342,7 +320,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Semantic Search Execution
   const btnSearch = document.getElementById("btn-execute-search");
   if (btnSearch) {
     btnSearch.addEventListener("click", async () => {
@@ -386,7 +363,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // RAG Chat Submission
   const btnRag = document.getElementById("btn-send-rag");
   const ragInput = document.getElementById("rag-input-prompt");
   const chatStream = document.getElementById("chat-messages-stream");
@@ -396,7 +372,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const promptText = ragInput.value.trim();
       if (!promptText) return;
 
-      // Append User Message
       chatStream.innerHTML += `
         <div class="chat-message user">
           <div class="chat-avatar"><i class="fa-solid fa-user"></i></div>
@@ -408,7 +383,6 @@ document.addEventListener("DOMContentLoaded", () => {
       ragInput.value = "";
       chatStream.scrollTop = chatStream.scrollHeight;
 
-      // Loading bubble
       const loadingId = "load_" + Date.now();
       chatStream.innerHTML += `
         <div class="chat-message assistant" id="${loadingId}">
@@ -452,7 +426,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Computer Access Master Toggle
   const toggleAccessBtn = document.getElementById("toggle-computer-access-btn");
   if (toggleAccessBtn) {
     toggleAccessBtn.addEventListener("click", () => {
@@ -467,7 +440,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Execute Computer Action
   const btnRunAction = document.getElementById("btn-run-computer-action");
   if (btnRunAction) {
     btnRunAction.addEventListener("click", async () => {
@@ -503,6 +475,5 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Initialize Data
   refreshData();
 });

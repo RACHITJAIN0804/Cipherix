@@ -1,19 +1,3 @@
-"""
-api/routes/rag.py
------------------
-FastAPI router for the Cipherix RAG (Retrieval-Augmented Generation) endpoint.
-
-POST /api/v1/rag/query — Vault-isolated question answering via local LLM.
-
-Security
---------
-* JWT authentication is required (get_current_user dependency).
-* Vault ownership is re-verified inside RAGService (defense in depth).
-* Cross-vault access is prevented at the ChromaDB filter level.
-* LLM backend errors are mapped to safe HTTP responses — no internal
-  details are leaked to the client.
-"""
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -77,13 +61,6 @@ async def rag_query(
     db: Session = Depends(get_db),
     rag_service: RAGService = Depends(_get_rag_service),
 ) -> RAGResponse:
-    """
-    ``POST /api/v1/rag/query`` — vault-isolated RAG question answering.
-
-    Requires a valid Bearer JWT.  The authenticated user must own the
-    specified vault.  All retrieval and generation is local — no external
-    APIs are called.
-    """
     try:
         return rag_service.query(
             request=request,
@@ -98,8 +75,6 @@ async def rag_query(
         ) from exc
 
     except RAGNoContextError:
-        # Not an error — vault simply has no relevant content for this query.
-        # Return a 200 with a canned answer rather than a 404/422.
         logger.info(
             "RAG: no relevant context found | user_id=%s | vault_id=%s",
             current_user.id,

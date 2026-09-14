@@ -33,7 +33,7 @@ export function AIAssistantView({ user, onLogout }) {
     loadVaults();
   }, []);
 
-  // Auto-scroll to bottom on new messages
+  
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
@@ -100,7 +100,7 @@ export function AIAssistantView({ user, onLogout }) {
   return (
     <PageLayout title="AI Security Assistant (Local RAG)" user={user} onLogout={onLogout} flexContent>
 
-      {/* Page Header — controls placed as children (right slot) */}
+      {}
       <PageHeader
         icon={Brain}
         iconColor="text-emerald-400"
@@ -125,7 +125,7 @@ export function AIAssistantView({ user, onLogout }) {
 
       {error && <ErrorState message={error} />}
 
-      {/* Chat Container */}
+      {}
       <div
         className="glass-panel"
         style={{
@@ -137,7 +137,7 @@ export function AIAssistantView({ user, onLogout }) {
           borderColor: 'rgba(16,185,129,0.15)',
         }}
       >
-        {/* Info Bar */}
+        {}
         <div
           style={{
             padding: '10px 20px',
@@ -169,7 +169,7 @@ export function AIAssistantView({ user, onLogout }) {
           </span>
         </div>
 
-        {/* Message stream */}
+        {}
         <div
           style={{
             flex: 1,
@@ -190,7 +190,7 @@ export function AIAssistantView({ user, onLogout }) {
                 ...(m.role === 'user' ? { marginLeft: 'auto', flexDirection: 'row-reverse' } : {}),
               }}
             >
-              {/* Avatar */}
+              {}
               <div
                 style={{
                   width: 34,
@@ -218,7 +218,7 @@ export function AIAssistantView({ user, onLogout }) {
                 )}
               </div>
 
-              {/* Bubble */}
+              {}
               <div
                 style={{
                   padding: '14px 16px',
@@ -294,7 +294,7 @@ export function AIAssistantView({ user, onLogout }) {
             </div>
           ))}
 
-          {/* Typing indicator */}
+          {}
           {loading && (
             <div style={{ display: 'flex', gap: '12px', maxWidth: '85%' }}>
               <div
@@ -335,7 +335,7 @@ export function AIAssistantView({ user, onLogout }) {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input bar */}
+        {}
         <form
           onSubmit={handleSend}
           style={{

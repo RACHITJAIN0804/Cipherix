@@ -24,7 +24,7 @@ export function SystemSection() {
 
   return (
     <div className="space-y-6 w-full pt-10">
-      {/* Centered SYSTEM Section Header */}
+      {}
       <div className="flex items-center justify-center gap-4">
         <div className="h-[1px] w-24 bg-gradient-to-r from-transparent to-slate-700"></div>
         <h2 className="text-xs font-extrabold uppercase tracking-widest text-slate-400 font-outfit">
@@ -33,7 +33,7 @@ export function SystemSection() {
         <div className="h-[1px] w-24 bg-gradient-to-l from-transparent to-slate-700"></div>
       </div>
 
-      {/* 2 Column System Grid */}
+      {}
       <div className="cipherix-system-grid">
         {systemModules.map((mod) => (
           <ModuleCard key={mod.title} {...mod} />

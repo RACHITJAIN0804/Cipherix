@@ -1,30 +1,9 @@
-"""Create initial tables: vaults, documents, security_metadata.
-
-Revision ID: 0001_initial
-Revises:
-Create Date: 2026-08-13 00:00:00.000000 UTC
-
-Creates the three core tables that form the SQLite metadata persistence
-layer for Cipherix:
-
-* ``vaults``            — application metadata for each vault
-* ``documents``         — metadata for encrypted documents (no content)
-* ``security_metadata`` — cryptographic metadata (ciphertext, nonces, salts)
-
-What is NOT stored (security guarantee)
----------------------------------------
-* Passwords
-* Master Keys
-* Plaintext Vault Keys
-* Plaintext recovery seeds
-* Document contents
-"""
 from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
 
-# revision identifiers, used by Alembic.
+
 revision: str = "0001_initial"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
@@ -91,7 +70,7 @@ def upgrade() -> None:
 
     op.create_table(
         "security_metadata",
-        # Primary key is also the FK — one-to-one with vaults.
+
         sa.Column(
             "vault_id",
             sa.String(36),
@@ -105,11 +84,11 @@ def upgrade() -> None:
             nullable=False,
             server_default="AES-256-GCM",
         ),
-        # Wrapped Vault Key ciphertext (Base64 AES-256-GCM output).
-        # NEVER stores plaintext key material.
+
+
         sa.Column("encrypted_vault_key", sa.Text, nullable=False),
         sa.Column("nonce", sa.String(64), nullable=False),
-        # Argon2id parameters (public — required to re-derive the Master Key).
+
         sa.Column("salt", sa.String(128), nullable=False),
         sa.Column("argon2_time_cost", sa.Integer, nullable=False, server_default="3"),
         sa.Column(
@@ -119,9 +98,8 @@ def upgrade() -> None:
             "argon2_parallelism", sa.Integer, nullable=False, server_default="4"
         ),
         sa.Column("argon2_hash_len", sa.Integer, nullable=False, server_default="32"),
-        # Recovery seed metadata (populated after seed generation).
-        # seed_fingerprint = first 16 hex chars of SHA-256(seed) — cannot
-        # reconstruct the seed from this value.
+
+
         sa.Column("recovery_version", sa.String(16), nullable=True),
         sa.Column("seed_fingerprint", sa.String(16), nullable=True),
         sa.Column(

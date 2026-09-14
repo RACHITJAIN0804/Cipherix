@@ -1,16 +1,3 @@
-"""
-api/routes/computer_access.py
-------------------------------
-FastAPI routes for safe controlled local-computer access system.
-
-Endpoints:
-* POST /api/v1/computer-access/toggle      — Enable/disable computer access toggle.
-* GET  /api/v1/computer-access/status      — Query computer access state for user.
-* POST /api/v1/computer-access/action      — Propose or execute a registered safe action.
-* POST /api/v1/computer-access/approve     — User approval for a pending write action.
-* GET  /api/v1/computer-access/audit-logs  — List non-sensitive computer access audit logs.
-"""
-
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -53,9 +40,6 @@ def get_computer_access_status(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> AccessStatusResponse:
-    """
-    Get current computer access toggle status for authenticated user.
-    """
     enabled = _permission_service.is_computer_access_enabled(db, current_user.id)
     path_guard = _executor.get_user_path_guard(current_user.id)
     return AccessStatusResponse(
@@ -70,9 +54,6 @@ def toggle_computer_access(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> AccessStatusResponse:
-    """
-    Enable or disable computer access for the authenticated user.
-    """
     new_state = _permission_service.set_computer_access_enabled(
         db, current_user.id, payload.enabled
     )
@@ -89,10 +70,6 @@ def execute_computer_action(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ActionResponse:
-    """
-    Execute or propose a safe registered computer action.
-    """
-    # If vault_id is supplied, verify vault ownership
     if payload.vault_id:
         vault = db.get(Vault, payload.vault_id)
         if vault is None or (vault.user_id is not None and vault.user_id != current_user.id):
@@ -132,9 +109,6 @@ def approve_computer_action(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    Explicitly approve a pending write action.
-    """
     try:
         approval = _permission_service.approve_request(
             db, payload.approval_id, current_user.id
@@ -152,13 +126,11 @@ def approve_computer_action(
 
 
 @router.get("/audit-logs", response_model=List[AuditLogResponse])
+@router.get("/audit-logs/", response_model=List[AuditLogResponse], include_in_schema=False)
 def get_audit_logs(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> List[AuditLogResponse]:
-    """
-    Retrieve computer access audit log entries for the authenticated user.
-    """
     stmt = (
         select(ComputerAccessAuditLog)
         .where(ComputerAccessAuditLog.user_id == current_user.id)

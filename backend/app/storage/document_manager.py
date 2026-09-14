@@ -1,65 +1,3 @@
-"""
-storage/document_manager.py
-----------------------------
-Filesystem manager for encrypted document blobs and their metadata.
-
-:class:`DocumentManager` is the single authority for all I/O related to
-documents inside a vault.  Its only job is to read, write, list, and delete
-files on disk.  It knows nothing about HTTP, Pydantic, business rules, or
-cryptography.
-
-Directory layout
-----------------
-::
-
-    vaults/
-        <vault_id>/
-            encrypted/          ← raw AES-256-GCM ciphertext blobs
-            │   <doc_id>.bin
-            metadata/           ← JSON metadata sidecar for each document
-                <doc_id>.json
-
-Design decisions
-----------------
-* **Separated storage** — encrypted blobs and metadata files are stored in
-  different subdirectories.  This separation allows:
-
-  - Metadata to be read (listed, searched, validated) without touching
-    large binary blobs.
-  - Independent access-control policies if the OS-level permissions model
-    needs to differ between encrypted data and metadata.
-  - Future streaming of blobs directly to an object store while keeping
-    metadata local.
-
-* **``.bin`` extension** — unambiguous indicator that the file is binary,
-  opaque, and not human-readable.  Avoids OS associations that try to
-  open the file with a viewer.
-
-* **pathlib throughout** — all path composition uses
-  :class:`~pathlib.Path` objects.  No string concatenation.
-
-* **Typed exceptions** — all errors surface as
-  :class:`~app.core.exceptions.DocumentStorageError` or
-  :class:`~app.core.exceptions.DocumentNotFoundError`.
-
-* **Atomic-ish writes** — blobs are written with ``write_bytes``, metadata
-  with ``write_text``.  These are not truly atomic (no temp+rename), but
-  are acceptable for this milestone.  A future hardening step can add
-  write-to-temp-then-rename to guarantee crash safety.
-
-Extensibility notes
--------------------
-* **Chunked storage** — replace ``write_bytes`` with a streaming loop that
-  writes fixed-size chunks.  The ``.bin`` format and the metadata schema
-  remain unchanged.
-* **Document versioning** — add a ``versions/`` subdirectory alongside
-  ``encrypted/``; archive old blobs there on re-upload.
-* **Integrity** — ``sha256_ciphertext`` is stored in the metadata JSON and
-  verified on demand via the ``GET /verify`` endpoint.
-* **Cloud backends** — swap the ``Path.write_bytes`` / ``Path.read_bytes``
-  calls for SDK calls to S3, GCS, or Azure Blob.  The service layer does
-  not change.
-"""
 
 import json
 from dataclasses import asdict, dataclass, field
@@ -77,56 +15,12 @@ _METADATA_DIR: str = "metadata"
 _BLOB_SUFFIX: str = ".bin"
 _META_SUFFIX: str = ".json"
 
-# Version tag written into every metadata file.
-# Increment when the metadata schema changes in a backward-incompatible way.
-ENCRYPTION_VERSION: str = "AES-256-GCM-v1"
 
+ENCRYPTION_VERSION: str = "AES-256-GCM-v1"
 
 
 @dataclass
 class DocumentMetadata:
-    """
-    In-memory representation of a document's ``<doc_id>.json`` sidecar.
-
-    Using a ``@dataclass`` (rather than a plain dict) provides:
-
-    * Type safety and IDE auto-complete.
-    * A clear schema that can be diffed when fields change.
-    * Trivial serialisation via :func:`dataclasses.asdict`.
-
-    Attributes
-    ----------
-    document_id:
-        UUID4 string that identifies the document.  Also the stem of both
-        the ``.bin`` blob and this ``.json`` metadata file.
-    original_filename:
-        The filename supplied by the client at upload time (after
-        validation/sanitisation).
-    mime_type:
-        Content-type header value provided by the client (or a safe
-        default if the client did not supply one).
-    size:
-        Plaintext file size in bytes.  The encrypted blob will be slightly
-        larger (by the 16-byte GCM authentication tag + 12-byte nonce
-        stored in the blob header).
-    uploaded_at:
-        UTC ISO-8601 timestamp at which the document was accepted and
-        encrypted.
-    encryption_version:
-        Identifies the encryption scheme used.  Allows future migrations
-        to detect old-format blobs and re-encrypt them.
-    nonce:
-        Base64-encoded 12-byte AES-GCM nonce prepended to every blob.
-        Stored here (not in the blob itself) so the decryption path can
-        read the nonce without parsing the binary format.
-    sha256_ciphertext:
-        Lowercase hex SHA-256 digest of the **ciphertext** blob, computed
-        immediately after AES-256-GCM encryption at upload time.  ``None``
-        for documents uploaded before integrity verification was introduced.
-        This field is the basis for the ``GET /verify`` endpoint and is
-        the value that would be published to a blockchain anchor or
-        digital-signature scheme.  Plaintext is never hashed.
-    """
 
     document_id: str
     original_filename: str
@@ -147,26 +41,6 @@ class DocumentMetadata:
         nonce: str,
         sha256_ciphertext: str,
     ) -> "DocumentMetadata":
-        """
-        Build a fresh :class:`DocumentMetadata` for a document being stored *now*.
-
-        Parameters
-        ----------
-        document_id:
-            The UUID4 string that identifies this document.
-        original_filename:
-            Sanitised filename from the upload.
-        mime_type:
-            MIME type from the upload (or ``"application/octet-stream"``
-            when the client did not specify one).
-        size:
-            Plaintext byte length of the uploaded file.
-        nonce:
-            Base64-encoded 12-byte AES-GCM nonce used for this document.
-        sha256_ciphertext:
-            Lowercase hex SHA-256 digest of the ciphertext blob, computed
-            immediately after AES-256-GCM encryption.
-        """
         return cls(
             document_id=document_id,
             original_filename=original_filename,
@@ -178,73 +52,17 @@ class DocumentMetadata:
         )
 
     def write(self, path: Path) -> None:
-        """
-        Serialise and write this metadata object to ``path`` as JSON.
-
-        Parameters
-        ----------
-        path:
-            Absolute path to the target ``.json`` file.
-
-        Raises
-        ------
-        OSError
-            Propagated from :meth:`pathlib.Path.write_text` on I/O failure.
-        """
         path.write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")
 
     @classmethod
     def read(cls, path: Path) -> "DocumentMetadata":
-        """
-        Deserialise a ``.json`` file into a :class:`DocumentMetadata`.
-
-        Unknown keys are silently dropped, allowing forward-compatible
-        reads when older code reads a newer metadata schema.
-
-        Parameters
-        ----------
-        path:
-            Absolute path to the ``.json`` file.
-
-        Returns
-        -------
-        DocumentMetadata
-
-        Raises
-        ------
-        OSError
-            If the file cannot be read.
-        ValueError
-            If the file contains invalid JSON or is missing required fields.
-        """
         raw: dict = json.loads(path.read_text(encoding="utf-8"))
         known_fields = {f.name for f in cls.__dataclass_fields__.values()}  # type: ignore[attr-defined]
         filtered = {k: v for k, v in raw.items() if k in known_fields}
         return cls(**filtered)
 
 
-
 class DocumentManager:
-    """
-    Filesystem manager for a single vault's document store.
-
-    Instantiated with the vault root directory and exposes methods to
-    write, read, list, and delete document blobs and their metadata files.
-
-    Parameters
-    ----------
-    vault_root:
-        Absolute path to the vault's root directory
-        (e.g. ``/data/vaults/<vault_id>/``).
-
-    Notes
-    -----
-    :class:`DocumentManager` never creates the vault root itself —
-    that is the responsibility of :class:`~app.vault.vault_manager.VaultManager`.
-    It does, however, create the ``encrypted/`` and ``metadata/``
-    subdirectories lazily if they are somehow absent (defensive guard only;
-    they should already exist after vault creation).
-    """
 
     def __init__(self, vault_root: Path) -> None:
         self._vault_root: Path = vault_root
@@ -257,28 +75,6 @@ class DocumentManager:
         ciphertext: bytes,
         vault_id: str,
     ) -> Path:
-        """
-        Write an encrypted blob to ``encrypted/<document_id>.bin``.
-
-        Parameters
-        ----------
-        document_id:
-            UUID4 string identifying the document.
-        ciphertext:
-            Raw AES-256-GCM ciphertext bytes (includes the 16-byte GCM tag).
-        vault_id:
-            Used only in log and error messages.
-
-        Returns
-        -------
-        Path
-            Absolute path of the written blob file.
-
-        Raises
-        ------
-        DocumentStorageError
-            If the blob cannot be written (permission denied, disk full, etc.).
-        """
         self._ensure_encrypted_dir(vault_id)
         blob_path = self._blob_path(document_id)
 
@@ -314,26 +110,6 @@ class DocumentManager:
         metadata: DocumentMetadata,
         vault_id: str,
     ) -> Path:
-        """
-        Serialise and write ``<document_id>.json`` to ``metadata/``.
-
-        Parameters
-        ----------
-        metadata:
-            Fully populated :class:`DocumentMetadata` instance.
-        vault_id:
-            Used only in log and error messages.
-
-        Returns
-        -------
-        Path
-            Absolute path of the written metadata file.
-
-        Raises
-        ------
-        DocumentStorageError
-            If the metadata file cannot be written.
-        """
         self._ensure_metadata_dir(vault_id)
         meta_path = self._meta_path(metadata.document_id)
 
@@ -364,28 +140,6 @@ class DocumentManager:
         return meta_path
 
     def read_blob(self, document_id: str, vault_id: str) -> bytes:
-        """
-        Read and return the raw ciphertext from ``encrypted/<document_id>.bin``.
-
-        Parameters
-        ----------
-        document_id:
-            UUID4 string identifying the document.
-        vault_id:
-            Used only in log and error messages.
-
-        Returns
-        -------
-        bytes
-            Raw AES-256-GCM ciphertext bytes.
-
-        Raises
-        ------
-        DocumentNotFoundError
-            If the blob file does not exist.
-        DocumentStorageError
-            If the file exists but cannot be read.
-        """
         blob_path = self._blob_path(document_id)
 
         if not blob_path.is_file():
@@ -407,27 +161,6 @@ class DocumentManager:
             ) from exc
 
     def read_metadata(self, document_id: str, vault_id: str) -> DocumentMetadata:
-        """
-        Deserialise and return ``metadata/<document_id>.json``.
-
-        Parameters
-        ----------
-        document_id:
-            UUID4 string identifying the document.
-        vault_id:
-            Used only in log and error messages.
-
-        Returns
-        -------
-        DocumentMetadata
-
-        Raises
-        ------
-        DocumentNotFoundError
-            If the metadata file does not exist.
-        DocumentStorageError
-            If the file exists but cannot be read or parsed.
-        """
         meta_path = self._meta_path(document_id)
 
         if not meta_path.is_file():
@@ -452,26 +185,6 @@ class DocumentManager:
             ) from exc
 
     def list_metadata(self, vault_id: str) -> list[DocumentMetadata]:
-        """
-        Return metadata for all documents currently stored in the vault.
-
-        Iterates over every ``.json`` file in ``metadata/`` and
-        deserialises it.  Files that fail to parse are logged and skipped
-        (best-effort listing — one corrupt sidecar must not hide all others).
-
-        Results are sorted by ``uploaded_at`` in descending order (newest
-        document first) to match the expected API ordering.
-
-        Parameters
-        ----------
-        vault_id:
-            Used only in log and error messages.
-
-        Returns
-        -------
-        list[DocumentMetadata]
-            Possibly empty list of document metadata entries.
-        """
         if not self._metadata_dir.is_dir():
             logger.debug(
                 "metadata/ directory does not exist | vault_id=%s", vault_id
@@ -501,29 +214,6 @@ class DocumentManager:
         return results
 
     def delete_document(self, document_id: str, vault_id: str) -> None:
-        """
-        Delete both the encrypted blob and the metadata sidecar for a document.
-
-        This is a **best-effort two-phase delete**: the blob is removed
-        first; if the blob delete succeeds but the metadata delete fails,
-        the metadata file is left as an orphan and the error is raised.
-        This is an acceptable trade-off for this milestone — a future
-        hardening step can add a transaction-log approach.
-
-        Parameters
-        ----------
-        document_id:
-            UUID4 string identifying the document.
-        vault_id:
-            Used only in log and error messages.
-
-        Raises
-        ------
-        DocumentNotFoundError
-            If neither the blob nor the metadata file exist.
-        DocumentStorageError
-            If deletion of either file fails due to an OS error.
-        """
         blob_path = self._blob_path(document_id)
         meta_path = self._meta_path(document_id)
 
@@ -568,25 +258,15 @@ class DocumentManager:
                 ) from exc
 
     def _blob_path(self, document_id: str) -> Path:
-        """Return the absolute path for a document's encrypted blob."""
         return self._encrypted_dir / f"{document_id}{_BLOB_SUFFIX}"
 
     def _meta_path(self, document_id: str) -> Path:
-        """Return the absolute path for a document's metadata sidecar."""
         return self._metadata_dir / f"{document_id}{_META_SUFFIX}"
 
     def _iter_metadata_files(self) -> Iterator[Path]:
-        """Yield every ``.json`` file in the metadata directory."""
         return self._metadata_dir.glob(f"*{_META_SUFFIX}")
 
     def _ensure_encrypted_dir(self, vault_id: str) -> None:
-        """
-        Create ``encrypted/`` if it does not exist.
-
-        This is a defensive guard — the directory should already exist after
-        vault scaffolding.  Creating it here prevents an otherwise confusing
-        ``FileNotFoundError`` if the directory was manually removed.
-        """
         if not self._encrypted_dir.is_dir():
             logger.warning(
                 "encrypted/ directory missing, recreating | vault_id=%s", vault_id
@@ -594,11 +274,6 @@ class DocumentManager:
             self._encrypted_dir.mkdir(parents=True, exist_ok=True)
 
     def _ensure_metadata_dir(self, vault_id: str) -> None:
-        """
-        Create ``metadata/`` if it does not exist.
-
-        Same defensive rationale as :meth:`_ensure_encrypted_dir`.
-        """
         if not self._metadata_dir.is_dir():
             logger.warning(
                 "metadata/ directory missing, recreating | vault_id=%s", vault_id

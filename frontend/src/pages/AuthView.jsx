@@ -4,9 +4,9 @@ import { Shield, Lock, User, ArrowRight, CheckCircle2, AlertTriangle, Eye, EyeOf
 import { CipherixAPI } from '../api';
 import { PageTransition } from '../components/PageTransition';
 
-export function AuthView({ onLoginSuccess }) {
+export function AuthView({ initialMode = 'login', onLoginSuccess }) {
   const navigate = useNavigate();
-  const [isRegister, setIsRegister] = useState(false);
+  const [isRegister, setIsRegister] = useState(initialMode === 'register');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -14,6 +14,12 @@ export function AuthView({ onLoginSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  React.useEffect(() => {
+    setIsRegister(initialMode === 'register');
+    setError('');
+    setSuccessMsg('');
+  }, [initialMode]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -87,7 +93,7 @@ export function AuthView({ onLoginSuccess }) {
           overflow: 'hidden',
         }}
       >
-        {/* Background orbs */}
+        {}
         <div
           style={{
             position: 'absolute',
@@ -112,7 +118,7 @@ export function AuthView({ onLoginSuccess }) {
           }}
         />
 
-        {/* Login Card */}
+        {}
         <div
           style={{
             maxWidth: '420px',
@@ -127,7 +133,7 @@ export function AuthView({ onLoginSuccess }) {
             zIndex: 10,
           }}
         >
-          {/* Header */}
+          {}
           <div style={{ textAlign: 'center', marginBottom: '32px' }}>
             <div
               style={{
@@ -164,7 +170,7 @@ export function AuthView({ onLoginSuccess }) {
             </p>
           </div>
 
-          {/* Alerts */}
+          {}
           {error && (
             <div
               style={{
@@ -205,9 +211,9 @@ export function AuthView({ onLoginSuccess }) {
             </div>
           )}
 
-          {/* Form */}
+          {}
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Username */}
+            {}
             <div>
               <label
                 style={{
@@ -246,7 +252,7 @@ export function AuthView({ onLoginSuccess }) {
               </div>
             </div>
 
-            {/* Password */}
+            {}
             <div>
               <label
                 style={{
@@ -307,7 +313,7 @@ export function AuthView({ onLoginSuccess }) {
               </div>
             </div>
 
-            {/* Confirm Password (register only) */}
+            {}
             {isRegister && (
               <div>
                 <label
@@ -348,7 +354,7 @@ export function AuthView({ onLoginSuccess }) {
               </div>
             )}
 
-            {/* Submit */}
+            {}
             <button
               type="submit"
               disabled={loading}
@@ -381,7 +387,7 @@ export function AuthView({ onLoginSuccess }) {
             </button>
           </form>
 
-          {/* Toggle */}
+          {}
           <div
             style={{
               marginTop: '24px',
@@ -396,7 +402,7 @@ export function AuthView({ onLoginSuccess }) {
               <>
                 Already have an account?{' '}
                 <button
-                  onClick={() => { setIsRegister(false); setError(''); }}
+                  onClick={() => { navigate('/login'); setIsRegister(false); setError(''); }}
                   style={{ background: 'none', border: 'none', color: '#22D3EE', fontWeight: 700, cursor: 'pointer', fontSize: 'inherit', transition: 'opacity 160ms' }}
                   onMouseEnter={e => (e.currentTarget.style.opacity = '0.75')}
                   onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
@@ -408,7 +414,7 @@ export function AuthView({ onLoginSuccess }) {
               <>
                 Need a new account?{' '}
                 <button
-                  onClick={() => { setIsRegister(true); setError(''); }}
+                  onClick={() => { navigate('/register'); setIsRegister(true); setError(''); }}
                   style={{ background: 'none', border: 'none', color: '#22D3EE', fontWeight: 700, cursor: 'pointer', fontSize: 'inherit', transition: 'opacity 160ms' }}
                   onMouseEnter={e => (e.currentTarget.style.opacity = '0.75')}
                   onMouseLeave={e => (e.currentTarget.style.opacity = '1')}

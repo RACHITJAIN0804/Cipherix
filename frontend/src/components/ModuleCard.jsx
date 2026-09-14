@@ -84,10 +84,10 @@ export function ModuleCard({ title, description, icon: Icon, badge, accent = 'cy
       aria-label={`${title} module: ${description}`}
       className={`glass-panel p-6 flex flex-col justify-between cursor-pointer group select-none relative overflow-hidden h-full min-h-[210px] bg-[#101827] border border-white/10 rounded-2xl ${accentStyle.borderHover} ${accentStyle.glow}`}
     >
-      {/* Background Subtle Ambient Gradient */}
+      {}
       <div className={`absolute top-0 right-0 w-36 h-36 bg-gradient-to-bl ${accentStyle.gradient} rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none`} />
 
-      {/* Top Header Row: Icon + Badge */}
+      {}
       <div className="flex justify-between items-start z-10">
         <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center transition-transform duration-250 group-hover:scale-105 ${accentStyle.iconBg}`}>
           <Icon className="w-6 h-6 stroke-[2]" />
@@ -99,7 +99,7 @@ export function ModuleCard({ title, description, icon: Icon, badge, accent = 'cy
         )}
       </div>
 
-      {/* Body Content: Title & Description */}
+      {}
       <div className="space-y-1.5 my-3 z-10 flex-1 flex flex-col justify-center">
         <h3 className="text-base font-semibold font-outfit text-[#E5E7EB] tracking-wide group-hover:text-cyan-300 transition-colors">
           {title}
@@ -109,7 +109,7 @@ export function ModuleCard({ title, description, icon: Icon, badge, accent = 'cy
         </p>
       </div>
 
-      {/* Footer Navigation Arrow Indicator */}
+      {}
       <div className="flex items-center justify-end z-10 pt-2 border-t border-slate-800/60">
         <div className="flex items-center gap-1 text-xs font-semibold text-slate-400 group-hover:text-cyan-400 transition-colors">
           <ArrowRight className="w-4 h-4 transition-transform duration-250 group-hover:translate-x-1.5" />

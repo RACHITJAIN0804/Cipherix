@@ -3,7 +3,7 @@ import { User, ChevronDown, ShieldCheck, LogOut, CheckCircle2 } from 'lucide-rea
 
 export function UserProfile({ user, onLogout }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const username = user?.username || localStorage.getItem("cipherix_username") || "rachit_admin";
+  const username = user?.username || localStorage.getItem("cipherix_username") || "User";
 
   return (
     <div className="relative z-30">
@@ -26,7 +26,7 @@ export function UserProfile({ user, onLogout }) {
         <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`} />
       </div>
 
-      {/* Dropdown Menu */}
+      {}
       {dropdownOpen && (
         <div className="absolute right-0 mt-2 w-56 rounded-xl bg-[#0c111c] border border-slate-800 shadow-2xl p-2 z-50 text-xs space-y-1 backdrop-blur-xl">
           <div className="px-3 py-2 border-b border-slate-800/80 text-slate-400">

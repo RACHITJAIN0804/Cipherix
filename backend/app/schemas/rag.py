@@ -1,8 +1,3 @@
-"""
-schemas/rag.py
---------------
-Pydantic schemas for the Cipherix RAG (Retrieval-Augmented Generation) API.
-"""
 
 from typing import Optional
 
@@ -10,7 +5,6 @@ from pydantic import BaseModel, Field
 
 
 class RAGRequest(BaseModel):
-    """Payload for a vault-isolated RAG query."""
 
     vault_id: str = Field(
         ...,
@@ -41,7 +35,6 @@ class RAGRequest(BaseModel):
 
 
 class RAGSource(BaseModel):
-    """Source citation for a single document chunk used in a RAG answer."""
 
     document_id: str = Field(..., description="UUID of the source document.")
     filename: Optional[str] = Field(default=None, description="Original filename of the source document.")
@@ -52,7 +45,6 @@ class RAGSource(BaseModel):
 
 
 class RAGResponse(BaseModel):
-    """Response containing a grounded LLM answer and source citations."""
 
     vault_id: str = Field(..., description="UUID of the queried vault.")
     query: str = Field(..., description="Echoed user query string.")

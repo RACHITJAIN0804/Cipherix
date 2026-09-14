@@ -1,8 +1,3 @@
-"""
-services/search_service.py
----------------------------
-Core service orchestrating vault-isolated semantic vector search.
-"""
 
 from sqlalchemy.orm import Session
 
@@ -21,9 +16,6 @@ logger = get_logger(__name__)
 
 
 class SearchService:
-    """
-    Service for executing vault-authorized semantic search requests.
-    """
 
     def __init__(
         self,
@@ -39,23 +31,11 @@ class SearchService:
         user_id: str,
         db: Session,
     ) -> SearchResponse:
-        """
-        Execute semantic search strictly isolated to the user's authorized vault.
-
-        Flow
-        ----
-        1. Authorize user vault ownership in SQLite DB.
-        2. Validate query text string.
-        3. Generate query text embedding via EmbeddingService.
-        4. Execute vector similarity search strictly filtered by vault_id.
-        5. Enrich matching chunks with original document filenames from SQLite.
-        6. Return SearchResponse.
-        """
         vault_id = request.vault_id
         query_text = request.query.strip() if request.query else ""
         top_k = request.top_k or settings.search_default_top_k
 
-        # 1. Authorize User Vault Ownership
+
         vault_rec = db.query(VaultRecord).filter(VaultRecord.id == vault_id).first()
         if vault_rec is None:
             raise VaultNotFoundError(f"Vault '{vault_id}' not found.")
@@ -79,10 +59,10 @@ class SearchService:
                 results=[],
             )
 
-        # 2. Generate Query Embedding
+
         query_embedding = self._embedding_service.generate_embedding(query_text)
 
-        # 3. Perform Vault-Filtered Vector Search
+
         raw_matches = self._vector_store.search_vault(
             query_embedding=query_embedding,
             vault_id=vault_id,
@@ -97,7 +77,7 @@ class SearchService:
                 results=[],
             )
 
-        # 4. Enrich with Document Filenames from DB
+
         doc_ids = {m["document_id"] for m in raw_matches if m.get("document_id")}
         doc_records = (
             db.query(DocumentRecord.id, DocumentRecord.original_filename)

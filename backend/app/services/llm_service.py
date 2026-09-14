@@ -1,25 +1,3 @@
-"""
-services/llm_service.py
------------------------
-Local LLM generation service for Cipherix RAG pipeline.
-
-Connects to a locally running Ollama instance via its REST API.
-All document content stays on the user's machine — nothing is sent to
-external APIs.
-
-Privacy guarantees
-------------------
-* Prompts containing retrieved document content are NOT logged.
-* Generated answers are NOT logged (they may contain private content).
-* Only metadata (model name, token counts, latency) is safe to log.
-
-Prompt-injection defense
-------------------------
-System instructions are always prepended before any retrieved content.
-Retrieved text is clearly delimited as UNTRUSTED DATA so the model
-is less likely to follow embedded instructions.  This is a best-effort
-mitigation; prompt injection cannot be fully eliminated with current LLMs.
-"""
 
 import httpx
 
@@ -33,14 +11,10 @@ from app.core.logger import get_logger
 
 logger = get_logger(__name__)
 
-# ---------------------------------------------------------------------------
-# Module-level singleton — prevents reloading the client on every request.
-# ---------------------------------------------------------------------------
+
 _llm_service_instance: "LLMService | None" = None
 
-# ---------------------------------------------------------------------------
-# Prompt template constants
-# ---------------------------------------------------------------------------
+
 _SYSTEM_INSTRUCTIONS = """\
 You are a helpful assistant that answers questions based strictly on the \
 provided document excerpts.
@@ -63,7 +37,6 @@ _NO_CONTEXT_ANSWER = (
 
 
 def get_llm_service() -> "LLMService":
-    """Return the module-level LLMService singleton, creating it if needed."""
     global _llm_service_instance
     if _llm_service_instance is None:
         _llm_service_instance = LLMService()
@@ -71,22 +44,6 @@ def get_llm_service() -> "LLMService":
 
 
 class LLMService:
-    """
-    Service for generating grounded answers via a locally running Ollama LLM.
-
-    Parameters
-    ----------
-    model_name:
-        Ollama model identifier (default: ``settings.llm_model_name``).
-    base_url:
-        Ollama REST API base URL (default: ``settings.llm_base_url``).
-    temperature:
-        Sampling temperature (default: ``settings.llm_temperature``).
-    max_tokens:
-        Maximum output tokens (default: ``settings.llm_max_tokens``).
-    timeout_seconds:
-        HTTP timeout per request (default: ``settings.llm_timeout_seconds``).
-    """
 
     def __init__(
         self,
@@ -104,43 +61,15 @@ class LLMService:
         self._max_tokens: int = max_tokens or settings.llm_max_tokens
         self._timeout: int = timeout_seconds or settings.llm_timeout_seconds
 
-    # ------------------------------------------------------------------
-    # Public interface
-    # ------------------------------------------------------------------
 
     def generate(self, context: str, question: str) -> str:
-        """
-        Generate a grounded answer from retrieved context and a user question.
-
-        Parameters
-        ----------
-        context:
-            Pre-formatted context string built by ContextBuilder.
-            Contains delimited document excerpts — treated as UNTRUSTED.
-        question:
-            The user's natural language question.
-
-        Returns
-        -------
-        str
-            The LLM-generated answer string.
-
-        Raises
-        ------
-        LLMUnavailableError
-            If the Ollama server cannot be reached.
-        LLMTimeoutError
-            If the generation request times out.
-        LLMGenerationError
-            If Ollama returns an error response or empty content.
-        """
         if settings.llm_provider == "disabled":
             logger.info("LLM provider is disabled; returning stub answer.")
             return _NO_CONTEXT_ANSWER
 
         prompt = self._build_prompt(context=context, question=question)
 
-        # Log only safe metadata — never the prompt or answer content.
+
         logger.info(
             "Sending generation request | model=%s | prompt_chars=%d",
             self.model_name,
@@ -149,25 +78,8 @@ class LLMService:
 
         return self._call_ollama(prompt)
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
 
     def _build_prompt(self, context: str, question: str) -> str:
-        """
-        Assemble the full prompt with system instructions, user question,
-        and retrieved context.
-
-        Structure:
-            <SYSTEM> ... </SYSTEM>
-            <QUESTION> ... </QUESTION>
-            <CONTEXT> ... </CONTEXT>
-            Answer:
-
-        The question is placed BEFORE the context to reduce recency-bias
-        attacks where instructions embedded at the end of the context
-        override earlier system rules.
-        """
         return (
             f"<SYSTEM>\n{_SYSTEM_INSTRUCTIONS}\n</SYSTEM>\n\n"
             f"<QUESTION>\n{question}\n</QUESTION>\n\n"
@@ -176,12 +88,6 @@ class LLMService:
         )
 
     def _call_ollama(self, prompt: str) -> str:
-        """
-        Call the Ollama ``/api/generate`` endpoint synchronously.
-
-        Uses ``httpx`` with a configured timeout.  Raises typed exceptions
-        for connectivity failures, timeouts, and generation errors.
-        """
         url = f"{self._base_url}/api/generate"
         payload = {
             "model": self.model_name,
@@ -257,7 +163,7 @@ class LLMService:
                 detail="Ollama returned an empty response.",
             )
 
-        # Log only safe metadata — never the answer text.
+
         logger.info(
             "Generation completed | model=%s | response_chars=%d",
             self.model_name,
