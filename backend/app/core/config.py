@@ -147,11 +147,49 @@ class Settings(BaseSettings):
     )
     blockchain_provider: str = Field(
         default="local",
-        description="Blockchain adapter provider name ('local').",
+        description="Blockchain adapter provider name. 'local' = in-memory; 'ganache' = Web3/Ganache RPC.",
     )
     blockchain_network: str = Field(
         default="local-development",
-        description="Blockchain network identifier label.",
+        description="Blockchain network identifier label stored in anchor records.",
+    )
+
+    blockchain_rpc_url: str = Field(
+        default="http://127.0.0.1:8545",
+        description="HTTP-JSON-RPC endpoint for the local Ganache development blockchain.",
+    )
+    blockchain_chain_id: int = Field(
+        default=1337,
+        description="EVM chain ID of the local Ganache network. Ganache default is 1337.",
+    )
+    blockchain_deployer_address: str = Field(
+        default="",
+        description=(
+            "Ethereum address of the account used to deploy and call contracts. "
+            "Set this to one of the addresses printed by 'ganache --deterministic'."
+        ),
+    )
+    blockchain_private_key: str = Field(
+        default="",
+        description=(
+            "Private key (hex, with or without 0x prefix) for the deployer account. "
+            "NEVER commit a real private key. Use a Ganache test key only."
+        ),
+    )
+    blockchain_contract_address: str = Field(
+        default="",
+        description=(
+            "Deployed DocumentIntegrity smart contract address. "
+            "Populated after 'python -m app.services.blockchain.deploy' is run."
+        ),
+    )
+    blockchain_gas_limit: int = Field(
+        default=300_000,
+        description="Gas limit for blockchain transactions (Ganache default block gas limit is 6_721_975).",
+    )
+    blockchain_connection_timeout_seconds: int = Field(
+        default=10,
+        description="Seconds to wait when establishing a connection to the blockchain RPC endpoint.",
     )
 
     rate_limit_auth_per_minute: int = Field(

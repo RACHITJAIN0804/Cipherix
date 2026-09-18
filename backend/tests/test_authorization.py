@@ -68,6 +68,8 @@ def db_session(in_memory_engine):
 @pytest.fixture(scope="function")
 def client(db_session: Session):
     """FastAPI TestClient with overridden get_db."""
+    from app.core.rate_limiter import _limiter
+    _limiter.clear()
     app = create_app()
 
     def _override_get_db():

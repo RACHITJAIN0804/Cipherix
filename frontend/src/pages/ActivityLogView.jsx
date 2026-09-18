@@ -29,17 +29,42 @@ export function ActivityLogView({ user, onLogout }) {
     try {
       const data = await CipherixAPI.request('/computer-access/audit-logs');
       const rawList = Array.isArray(data) ? data : [];
-      const normalized = rawList.map((log) => ({
-        id: log.id,
-        timestamp: log.created_at,
-        category: 'ComputerAccess',
-        action: log.action || 'System Event',
-        status: (log.result_status || 'SUCCESS').toUpperCase(),
-        details:
-          log.details_json ||
-          log.relative_path ||
-          (log.vault_id ? `Vault: ${log.vault_id}` : 'Access event recorded'),
-      }));
+      const normalized = rawList.map((log) => {
+        let cat = log.category || 'ComputerAccess';
+        if (log.action && log.action.toLowerCase().includes('blockchain')) {
+          cat = 'BLOCKCHAIN';
+        } else if (log.action && log.action.toLowerCase().includes('auth')) {
+          cat = 'AUTH';
+        } else if (log.action && log.action.toLowerCase().includes('vault')) {
+          cat = 'VAULT';
+        }
+
+        let parsedDetails = log.details_json;
+        if (log.details_json) {
+          try {
+            const obj = JSON.parse(log.details_json);
+            if (typeof obj === 'object' && obj !== null) {
+              parsedDetails = Object.entries(obj)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join(' | ');
+            }
+          } catch (e) {
+            parsedDetails = log.details_json;
+          }
+        }
+
+        return {
+          id: log.id,
+          timestamp: log.created_at,
+          category: cat,
+          action: log.action || 'System Event',
+          status: (log.result_status || 'SUCCESS').toUpperCase(),
+          details:
+            parsedDetails ||
+            log.relative_path ||
+            (log.vault_id ? `Vault: ${log.vault_id}` : 'Access event recorded'),
+        };
+      });
       setLogs(normalized);
     } catch (err) {
       setError('Failed to fetch audit logs: ' + err.message);
@@ -72,7 +97,6 @@ export function ActivityLogView({ user, onLogout }) {
 
   return (
     <PageLayout title="Activity Log & Audit Stream" user={user} onLogout={onLogout}>
-      {}
       <PageHeader
         icon={History}
         iconColor="text-cyan-400"
@@ -121,7 +145,6 @@ export function ActivityLogView({ user, onLogout }) {
         />
       ) : (
         <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
-          {}
           <div
             style={{
               display: 'flex',

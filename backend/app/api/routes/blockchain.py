@@ -71,14 +71,50 @@ def verify_document_anchor(
             vault_id=payload.vault_id,
             document_id=payload.document_id,
         )
-    except (VaultNotFoundError, DocumentNotFoundError) as err:
+    except (VaultNotFoundError, DocumentNotFoundError, AnchorNotFoundError) as err:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(err),
         )
-    except BlockchainError as err:
+    except BlockchainUnavailableError as err:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(err),
+        )
+    except BlockchainError as err:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(err),
+        )
+
+
+@router.get("/verify/{document_id}", response_model=VerifyAnchorResponse)
+def verify_document_anchor_get(
+    document_id: str,
+    vault_id: str = Query(..., description="Vault UUID containing the document."),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> VerifyAnchorResponse:
+    try:
+        return _blockchain_service.verify_document_anchor(
+            db=db,
+            user_id=current_user.id,
+            vault_id=vault_id,
+            document_id=document_id,
+        )
+    except (VaultNotFoundError, DocumentNotFoundError, AnchorNotFoundError) as err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(err),
+        )
+    except BlockchainUnavailableError as err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(err),
+        )
+    except BlockchainError as err:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(err),
         )
 

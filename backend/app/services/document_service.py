@@ -8,6 +8,9 @@ from pathlib import Path, PurePosixPath
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from typing import Optional
+
+from app.core.config import settings
 from app.core.exceptions import (
     CipherixError,
     CorruptedDocumentError,
@@ -30,6 +33,7 @@ from app.schemas.document import (
 from app.security.encryption import EncryptionManager
 from app.security.key_manager import KeyManager
 from app.security.password_manager import PasswordManager
+from app.services.blockchain.blockchain_service import BlockchainService
 from app.services.vector_store import VectorStore
 from app.storage.document_manager import DocumentManager, DocumentMetadata
 from app.vault.manifest import VaultManifest
@@ -45,9 +49,14 @@ _FORBIDDEN_CHARS: re.Pattern = re.compile(r'[\x00<>:"/\\|?*]')
 
 class DocumentService:
 
-    def __init__(self, vault_base_dir: Path) -> None:
+    def __init__(
+        self,
+        vault_base_dir: Path,
+        blockchain_service: Optional[BlockchainService] = None,
+    ) -> None:
         self._vault_base_dir: Path = vault_base_dir
         self._enc_mgr: EncryptionManager = EncryptionManager()
+        self._blockchain_service: Optional[BlockchainService] = blockchain_service
 
     def upload_document(
         self,
@@ -57,6 +66,7 @@ class DocumentService:
         content_type: str | None,
         file_bytes: bytes,
         db: Session | None = None,
+        user_id: str | None = None,
     ) -> DocumentResponse:
         vault_root = self._assert_vault_unlocked(vault_id)
         safe_filename = self._validate_filename(filename)
@@ -120,10 +130,9 @@ class DocumentService:
         meta_path = doc_mgr.write_metadata(metadata=metadata, vault_id=vault_id)
 
         if db is not None:
-
-
             encrypted_rel_path = f"encrypted/{document_id}.bin"
             try:
+                should_commit_now = not settings.blockchain_enabled
                 self._insert_document_record(
                     db=db,
                     document_id=document_id,
@@ -134,13 +143,32 @@ class DocumentService:
                     encrypted_path=encrypted_rel_path,
                     integrity_hash=sha256_ciphertext,
                     encryption_version=metadata.encryption_version,
+                    commit=should_commit_now,
                 )
-            except SQLAlchemyError as exc:
 
+                if settings.blockchain_enabled:
+                    eff_user_id = user_id
+                    if not eff_user_id:
+                        from app.database.models import Vault as VaultRecord
+                        vault_rec = db.get(VaultRecord, vault_id)
+                        if vault_rec and vault_rec.user_id:
+                            eff_user_id = vault_rec.user_id
 
+                    if eff_user_id:
+                        bc_service = self._blockchain_service or BlockchainService()
+                        bc_service.anchor_document(
+                            db=db,
+                            user_id=eff_user_id,
+                            vault_id=vault_id,
+                            document_id=document_id,
+                        )
+                    else:
+                        db.commit()
+
+            except Exception as exc:
                 db.rollback()
                 logger.error(
-                    "DB insert failed after document written to disk — "
+                    "DB/Blockchain insert failed after document written to disk — "
                     "rolling back filesystem | vault_id=%s | document_id=%s | error=%s",
                     vault_id,
                     document_id,
@@ -156,12 +184,14 @@ class DocumentService:
                             cleanup_path,
                             fs_exc,
                         )
+                if isinstance(exc, CipherixError):
+                    raise
                 raise DocumentStorageError(
                     f"Failed to persist document '{document_id}' to the database: {exc}",
                     detail=(
                         "The document was encrypted and written to disk but could not "
-                        "be recorded in the database.  The filesystem files have been "
-                        "removed.  Please retry the upload."
+                        "be recorded in the database/blockchain. The filesystem files have been "
+                        "removed. Please retry the upload."
                     ),
                 ) from exc
 
@@ -470,6 +500,7 @@ class DocumentService:
         encrypted_path: str,
         integrity_hash: str | None,
         encryption_version: str,
+        commit: bool = True,
     ) -> None:
         now = datetime.now(UTC)
         record = DocumentRecord(
@@ -485,7 +516,10 @@ class DocumentService:
             updated_at=now,
         )
         db.add(record)
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
 
         logger.info(
             "Document DB record inserted | vault_id=%s | document_id=%s",

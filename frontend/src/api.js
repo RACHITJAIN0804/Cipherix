@@ -234,18 +234,22 @@ export class CipherixAPI {
     }
 
     if (endpoint.includes("/blockchain/verify")) {
+      const nowStr = new Date().toISOString();
       return {
         document_id: "85085a79-9be6-4fee-86a2-1db42e7d1a38",
         privacy_reference: "6ac287fd346b2a74e1d82ddd8dc57c2aa8fc0408a95d381f",
         stored_integrity_hash: "7f7c621d36a26039401f8d91a27e4b93108ab34c112233445566778899aabbcc",
         current_integrity_hash: "7f7c621d36a26039401f8d91a27e4b93108ab34c112233445566778899aabbcc",
+        current_hash: "7f7c621d36a26039401f8d91a27e4b93108ab34c112233445566778899aabbcc",
         blockchain_hash: "7f7c621d36a26039401f8d91a27e4b93108ab34c112233445566778899aabbcc",
         integrity_match: true,
         blockchain_match: true,
         verified: true,
         network: "local-development",
         tx_hash: "0xba82c9db8fba8d34e9120934891238912389128391823918239128391283912",
-        anchored_at: new Date().toISOString(),
+        anchored_at: nowStr,
+        verified_at: nowStr,
+        message: "Document integrity successfully verified against blockchain record.",
       };
     }
 

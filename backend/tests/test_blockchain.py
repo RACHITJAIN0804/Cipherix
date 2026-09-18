@@ -80,7 +80,12 @@ def db_session(in_memory_engine):
 
 
 @pytest.fixture(scope="function")
-def client(db_session: Session):
+def client(db_session: Session, monkeypatch):
+    from app.core.rate_limiter import _limiter
+    _limiter.clear()
+    monkeypatch.setattr(settings, "blockchain_enabled", True)
+    import app.api.routes.blockchain as bc_route
+    bc_route._blockchain_service = BlockchainService(adapter=LocalBlockchainAdapter())
     app = create_app()
 
     def _override_get_db():
@@ -326,11 +331,11 @@ def test_8_duplicate_anchor_behavior(client: TestClient):
 def test_9_anchor_not_found_behavior(client: TestClient):
     token, _ = _register_and_login(client, "user_nf")
     vault_id = _create_vault(client, token)
-    doc_id = _upload_document(client, token, vault_id)
+    non_existent_doc_id = str(uuid.uuid4())
     headers = {"Authorization": f"Bearer {token}"}
 
-    # GET anchor for unanchored document -> 404 Not Found
-    resp = client.get(f"/api/v1/blockchain/anchor/{doc_id}?vault_id={vault_id}", headers=headers)
+    # GET anchor for non-existent/unanchored document -> 404 Not Found
+    resp = client.get(f"/api/v1/blockchain/anchor/{non_existent_doc_id}?vault_id={vault_id}", headers=headers)
     assert resp.status_code == status.HTTP_404_NOT_FOUND
 
 

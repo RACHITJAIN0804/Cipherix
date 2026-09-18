@@ -53,6 +53,8 @@ def db_session(in_memory_engine):
 
 @pytest.fixture(scope="function")
 def client(in_memory_engine, db_session):
+    from app.core.rate_limiter import _limiter
+    _limiter.clear()
     app = create_app()
 
     def _override_get_db():

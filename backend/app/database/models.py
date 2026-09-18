@@ -117,6 +117,13 @@ class Document(Base):
     )
 
     vault: Mapped["Vault"] = relationship("Vault", back_populates="documents")
+    blockchain_anchor: Mapped[Optional["BlockchainAnchorRecord"]] = relationship(
+        "BlockchainAnchorRecord",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        uselist=False,
+        lazy="select",
+    )
 
     def __repr__(self) -> str:
         return (
@@ -319,6 +326,37 @@ class ComputerAccessAuditLog(Base):
 
 
 class BlockchainAnchorRecord(Base):
+    """Blockchain integrity anchor record for a document.
+
+    Tracks every on-chain hash registration and its verification history.
+    All new columns added in migration 0004 are nullable so that records
+    created before blockchain integration are fully backward-compatible.
+
+    Fields
+    ------
+    id                      : Internal UUID primary key.
+    document_id             : FK → documents.id (CASCADE delete).
+    vault_id                : FK → vaults.id (SET NULL on vault deletion).
+                              Soft reference kept for ownership queries without
+                              joining through documents.
+    privacy_reference       : HMAC-SHA256 of (user_id + document_id); opaque.
+                              Used as the on-chain documentId bytes32 key.
+    integrity_hash          : SHA-256 hex digest of the encrypted ciphertext
+                              blob at anchor time.  Never stores plaintext.
+    network                 : Blockchain network label (e.g. "local-development").
+    tx_hash                 : Ethereum transaction hash from the recordHash call.
+    block_number            : EVM block number of the anchor transaction.
+    status                  : Anchor lifecycle state: "anchored" | "pending" | "failed".
+    last_verified_at        : UTC timestamp of the most recent verify call.
+                              NULL = never verified.
+    last_verification_result: Result of the most recent verify_anchor call.
+                              True = hash matched on-chain, False = mismatch,
+                              None = never verified.
+    error_message           : Human-readable error from the last failed
+                              blockchain operation.  NULL when no error.
+    created_at / updated_at : Standard audit timestamps.
+    """
+
     __tablename__ = "blockchain_anchor_records"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -326,6 +364,12 @@ class BlockchainAnchorRecord(Base):
         String(36),
         ForeignKey("documents.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
+    )
+    vault_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("vaults.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
     privacy_reference: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
@@ -340,6 +384,39 @@ class BlockchainAnchorRecord(Base):
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="anchored"
     )
+
+    # --- Verification tracking (migration 0004) --------------------------
+
+    last_verified_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+        doc=(
+            "UTC timestamp of the most recent verify_anchor call. "
+            "NULL until at least one verification has been performed."
+        ),
+    )
+    last_verification_result: Mapped[Optional[bool]] = mapped_column(
+        Boolean,
+        nullable=True,
+        default=None,
+        doc=(
+            "Outcome of the most recent verify_anchor call. "
+            "True = hash matched on-chain; False = mismatch; None = never verified."
+        ),
+    )
+    error_message: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        default=None,
+        doc=(
+            "Human-readable description of the last failed blockchain operation. "
+            "NULL when the last operation succeeded."
+        ),
+    )
+
+    # --- Audit timestamps ------------------------------------------------
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -352,8 +429,22 @@ class BlockchainAnchorRecord(Base):
         onupdate=func.now(),
     )
 
+    # --- Relationships ----------------------------------------------------
+
+    document: Mapped[Optional["Document"]] = relationship(
+        "Document",
+        back_populates="blockchain_anchor",
+        lazy="select",
+    )
+    vault: Mapped[Optional["Vault"]] = relationship(
+        "Vault",
+        foreign_keys=[vault_id],
+        lazy="select",
+    )
+
     def __repr__(self) -> str:
         return (
             f"<BlockchainAnchorRecord id={self.id!r} doc_id={self.document_id!r} "
-            f"network={self.network!r} status={self.status!r}>"
+            f"network={self.network!r} status={self.status!r} "
+            f"verified={self.last_verification_result!r}>"
         )

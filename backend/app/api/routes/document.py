@@ -42,8 +42,14 @@ router = APIRouter(
 )
 
 
+import app.api.routes.blockchain as bc_route
+
+
 def _get_document_service() -> DocumentService:
-    return DocumentService(vault_base_dir=settings.VAULT_DIR)
+    return DocumentService(
+        vault_base_dir=settings.VAULT_DIR,
+        blockchain_service=bc_route._blockchain_service,
+    )
 
 
 def _map_document_exception(exc: Exception) -> None:
@@ -114,6 +120,7 @@ def _map_document_exception(exc: Exception) -> None:
 async def upload_document(
     vault_id: str,
     vault: Vault = Depends(get_user_vault),
+    current_user: User = Depends(get_current_user),
     file: UploadFile = File(..., description="File to encrypt and store."),
     x_vault_password: str = Header(
         ...,
@@ -132,6 +139,7 @@ async def upload_document(
             content_type=file.content_type,
             file_bytes=file_bytes,
             db=db,
+            user_id=current_user.id,
         )
         logger.info(
             "POST /vaults/%s/documents succeeded | document_id=%s",

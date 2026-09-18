@@ -4,7 +4,7 @@ import { PageLayout } from '../components/PageLayout';
 import { PageHeader } from '../components/PageHeader';
 import { LoadingState, EmptyState, ErrorState, ConfirmDialog, VaultSelector } from '../components/CommonUI';
 import { CipherixAPI } from '../api';
-import { FileText, Download, Check, Upload, Trash2, Play, RefreshCw, X, CloudUpload } from 'lucide-react';
+import { FileText, Download, Check, Upload, Trash2, Play, RefreshCw, X, CloudUpload, ShieldCheck, AlertTriangle, CheckCircle2, Copy, Clock, Database, Link, HardDrive } from 'lucide-react';
 
 export function DocumentsView({ user, onLogout }) {
   const navigate = useNavigate();
@@ -22,6 +22,13 @@ export function DocumentsView({ user, onLogout }) {
   const [processingDocId, setProcessingDocId] = useState(null);
   const [statusMsg, setStatusMsg] = useState('');
   const [dragOver, setDragOver] = useState(false);
+
+  // Verification Modal State
+  const [verifyingDoc, setVerifyingDoc] = useState(null);
+  const [verifyingLoading, setVerifyingLoading] = useState(false);
+  const [verifyResult, setVerifyResult] = useState(null);
+  const [verifyError, setVerifyError] = useState(null);
+  const [copiedHash, setCopiedHash] = useState(false);
 
   useEffect(() => {
     if (location.state?.vaultId) {
@@ -145,6 +152,24 @@ export function DocumentsView({ user, onLogout }) {
     }
   };
 
+  const handleVerifyDocument = async (doc) => {
+    setVerifyingDoc(doc);
+    setVerifyingLoading(true);
+    setVerifyResult(null);
+    setVerifyError(null);
+    try {
+      const res = await CipherixAPI.request('/blockchain/verify', {
+        method: 'POST',
+        body: JSON.stringify({ vault_id: selectedVaultId, document_id: doc.document_id }),
+      });
+      setVerifyResult(res);
+    } catch (err) {
+      setVerifyError(err.message || 'Verification failed.');
+    } finally {
+      setVerifyingLoading(false);
+    }
+  };
+
   const inputStyle = {
     width: '100%',
     background: 'var(--bg-input)',
@@ -161,7 +186,6 @@ export function DocumentsView({ user, onLogout }) {
 
   return (
     <PageLayout title="Encrypted Document Storage" user={user} onLogout={onLogout}>
-      {}
       <PageHeader
         icon={FileText}
         iconColor="text-purple-400"
@@ -260,6 +284,15 @@ export function DocumentsView({ user, onLogout }) {
                     </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
+                        <button
+                          onClick={() => handleVerifyDocument(d)}
+                          className="btn btn-secondary"
+                          style={{ fontSize: '0.75rem', padding: '5px 10px', color: 'var(--accent-amber)' }}
+                          title="Verify Blockchain Integrity"
+                        >
+                          <ShieldCheck style={{ width: 11, height: 11 }} />
+                          Verify
+                        </button>
                         <button
                           onClick={() => handleProcessDocument(d.document_id)}
                           disabled={processingDocId === d.document_id}
@@ -418,6 +451,135 @@ export function DocumentsView({ user, onLogout }) {
         onConfirm={handleDeleteDocument}
         onCancel={() => setDeleteDocId(null)}
       />
+
+      {/* Blockchain Verification Modal */}
+      {verifyingDoc && (
+        <div className="modal-backdrop">
+          <div className="modal-panel" style={{ maxWidth: '560px', width: '90%' }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ShieldCheck style={{ width: 18, height: 18, color: 'var(--accent-amber)' }} />
+                <h3 className="modal-title">Blockchain Integrity Verification</h3>
+              </div>
+              <button
+                onClick={() => setVerifyingDoc(null)}
+                style={{
+                  width: 30, height: 30, borderRadius: 8,
+                  background: 'transparent', border: 'none',
+                  color: 'var(--text-muted)', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <X style={{ width: 16, height: 16 }} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '10px 0' }}>
+              <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+                Target Document: <strong style={{ color: 'var(--text-primary)' }}>{verifyingDoc.original_filename || verifyingDoc.filename || 'Untitled'}</strong>
+              </div>
+
+              {verifyingLoading ? (
+                <div style={{ padding: '32px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                  <RefreshCw style={{ width: 28, height: 28, color: 'var(--accent-amber)', animation: 'spin 1s linear infinite' }} />
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                    Recalculating SHA-256 hash & verifying on-chain...
+                  </div>
+                </div>
+              ) : verifyError ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '10px', padding: '14px',
+                      borderRadius: '10px', border: '1px solid rgba(239,68,68,0.35)',
+                      background: 'rgba(239,68,68,0.08)', color: '#fca5a5', fontSize: '0.85rem', fontWeight: 600
+                    }}
+                  >
+                    <AlertTriangle style={{ width: 18, height: 18, flexShrink: 0 }} />
+                    <span>{verifyError}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                    <button onClick={() => handleVerifyDocument(verifyingDoc)} className="btn btn-secondary" style={{ fontSize: '0.8rem' }}>
+                      Retry
+                    </button>
+                  </div>
+                </div>
+              ) : verifyResult ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '10px', padding: '14px 16px',
+                      borderRadius: '10px',
+                      border: `1px solid ${verifyResult.verified ? 'rgba(16,185,129,0.35)' : 'rgba(239,68,68,0.35)'}`,
+                      background: verifyResult.verified ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)',
+                      color: verifyResult.verified ? '#6ee7b7' : '#fca5a5',
+                      fontWeight: 700, fontSize: '0.875rem'
+                    }}
+                  >
+                    {verifyResult.verified
+                      ? <CheckCircle2 style={{ width: 20, height: 20, flexShrink: 0 }} />
+                      : <AlertTriangle style={{ width: 20, height: 20, flexShrink: 0 }} />
+                    }
+                    <div>
+                      <div>{verifyResult.verified ? 'VERIFIED & UNTAMPERED' : 'INTEGRITY MISMATCH DETECTED'}</div>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 400, opacity: 0.9, marginTop: '2px' }}>
+                        {verifyResult.message || (verifyResult.verified ? 'Hash matches blockchain record.' : 'Local hash does not match on-chain anchor.')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                    <div style={{ padding: '12px 14px', borderRadius: '10px', background: 'rgba(7,10,18,0.55)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                        <HardDrive style={{ width: 12, height: 12, color: 'var(--accent-cyan)' }} />
+                        Recalculated File SHA-256
+                      </div>
+                      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.6875rem', color: 'var(--accent-cyan)', marginTop: '4px', wordBreak: 'break-all' }}>
+                        {verifyResult.current_hash || verifyResult.current_integrity_hash || '-'}
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '12px 14px', borderRadius: '10px', background: 'rgba(7,10,18,0.55)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                        <Link style={{ width: 12, height: 12, color: 'var(--accent-amber)' }} />
+                        On-Chain Anchor Hash
+                      </div>
+                      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.6875rem', color: 'var(--accent-amber)', marginTop: '4px', wordBreak: 'break-all' }}>
+                        {verifyResult.blockchain_hash || verifyResult.stored_integrity_hash || '-'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Network: </span>
+                      <span className="badge-tag badge-purple" style={{ fontSize: '0.6875rem' }}>{verifyResult.network || 'local-development'}</span>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Transaction: </span>
+                      <span style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-primary)' }}>
+                        {verifyResult.tx_hash ? `${verifyResult.tx_hash.slice(0, 10)}...` : '-'}
+                      </span>
+                    </div>
+                    {verifyResult.verified_at && (
+                      <div>
+                        <span style={{ color: 'var(--text-muted)' }}>Verified At: </span>
+                        <span style={{ color: 'var(--text-primary)' }}>{new Date(verifyResult.verified_at).toLocaleTimeString()}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="modal-footer" style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '12px', marginTop: '8px' }}>
+              <button onClick={() => setVerifyingDoc(null)} className="btn btn-secondary" style={{ fontSize: '0.8rem' }}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageLayout>
   );
 }
