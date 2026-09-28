@@ -162,7 +162,7 @@ async def refresh(
     status_code=status.HTTP_200_OK,
     summary="Recover vault access using BIP-39 recovery seed",
     description=(
-        "Recover access to a vault using a 24-word BIP-39 recovery seed and "
+        "Recover access to a vault using a 16-word BIP-39 recovery seed and "
         "establish a new password.  Does not require an existing password or JWT."
     ),
     responses={

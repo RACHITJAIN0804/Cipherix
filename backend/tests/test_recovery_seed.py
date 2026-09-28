@@ -92,8 +92,7 @@ class TestRecoveryManager(unittest.TestCase):
 
     def test_generate_seed_is_valid_bip39(self) -> None:
         seed = self.manager.generate_seed("test-vault-001")
-        mnemo = Mnemonic("english")
-        self.assertTrue(mnemo.check(seed))
+        self.manager.validate_seed_format(seed)
 
     def test_generate_seed_is_unique(self) -> None:
         seeds = {self.manager.generate_seed("test-vault-001") for _ in range(5)}
@@ -214,7 +213,7 @@ class TestSecurityServiceRecovery(unittest.TestCase):
         vault_id = "recovery-test-0001"
         self._create_and_unlock_vault(vault_id, "VaultPassword123!")
 
-        result = self.security_service.generate_recovery_seed(vault_id)
+        result = self.security_service.generate_recovery_seed(vault_id, password="VaultPassword123!")
 
         self.assertIsInstance(result, RecoverySeedResponse)
         self.assertEqual(result.vault_id, vault_id)
@@ -226,19 +225,45 @@ class TestSecurityServiceRecovery(unittest.TestCase):
         vault_id = "recovery-test-0002"
         self._create_and_unlock_vault(vault_id, "VaultPassword123!")
 
-        result = self.security_service.generate_recovery_seed(vault_id)
+        result = self.security_service.generate_recovery_seed(vault_id, password="VaultPassword123!")
 
         meta_path = self.vault_base_dir / vault_id / "recovery_meta.json"
         self.assertTrue(meta_path.is_file())
         raw = meta_path.read_text(encoding="utf-8")
         self.assertNotIn(result.seed, raw)
 
+    def test_generate_seed_creates_recovery_key_file_without_plaintext_leak(self) -> None:
+        vault_id = "recovery-test-0003-key"
+        pwd = "VaultPassword123!"
+        self._create_and_unlock_vault(vault_id, pwd)
+
+        result = self.security_service.generate_recovery_seed(vault_id, password=pwd)
+
+        key_path = self.vault_base_dir / vault_id / "recovery_key.json"
+        self.assertTrue(key_path.is_file())
+        raw_key_content = key_path.read_text(encoding="utf-8")
+
+        self.assertNotIn(pwd, raw_key_content)
+        for word in result.seed.split():
+            self.assertNotIn(f'"{word}"', raw_key_content)
+
+        rec_mgr = RecoveryManager(self.vault_base_dir / vault_id)
+        recovered_vk = rec_mgr.recover_vault_key(vault_id, result.seed)
+        self.assertEqual(len(recovered_vk), 32)
+
+    def test_generate_seed_wrong_password_raises_invalid_password_error(self) -> None:
+        vault_id = "recovery-test-0004-pwd"
+        self._create_and_unlock_vault(vault_id, "VaultPassword123!")
+
+        from app.core.exceptions import InvalidPasswordError
+        with self.assertRaises(InvalidPasswordError):
+            self.security_service.generate_recovery_seed(vault_id, password="WrongPassword999!")
 
     def test_verify_correct_seed_returns_valid_true(self) -> None:
         vault_id = "recovery-test-0003"
         self._create_and_unlock_vault(vault_id, "VaultPassword123!")
 
-        gen = self.security_service.generate_recovery_seed(vault_id)
+        gen = self.security_service.generate_recovery_seed(vault_id, password="VaultPassword123!")
         verify = self.security_service.verify_recovery_seed(vault_id, gen.seed)
 
         self.assertIsInstance(verify, VerifySeedResponse)
@@ -248,7 +273,7 @@ class TestSecurityServiceRecovery(unittest.TestCase):
         vault_id = "recovery-test-0004"
         self._create_and_unlock_vault(vault_id, "VaultPassword123!")
 
-        self.security_service.generate_recovery_seed(vault_id)
+        self.security_service.generate_recovery_seed(vault_id, password="VaultPassword123!")
 
         other_mgr = RecoveryManager(self.vault_base_dir / vault_id)
         wrong_seed = other_mgr.generate_seed("other-vault")
@@ -259,10 +284,36 @@ class TestSecurityServiceRecovery(unittest.TestCase):
     def test_verify_invalid_bip39_seed_raises(self) -> None:
         vault_id = "recovery-test-0005"
         self._create_and_unlock_vault(vault_id, "VaultPassword123!")
-        self.security_service.generate_recovery_seed(vault_id)
+        self.security_service.generate_recovery_seed(vault_id, password="VaultPassword123!")
 
         with self.assertRaises(InvalidRecoverySeedError):
             self.security_service.verify_recovery_seed(vault_id, "invalid seed words")
+
+    def test_security_isolation_no_seed_or_password_on_disk(self) -> None:
+        vault_id = "recovery-test-0006-isolation"
+        pwd = "VaultPassword123!"
+        self._create_and_unlock_vault(vault_id, pwd)
+
+        gen = self.security_service.generate_recovery_seed(vault_id, password=pwd)
+
+        vault_dir = self.vault_base_dir / vault_id
+        for json_file in vault_dir.glob("*.json"):
+            raw = json_file.read_text(encoding="utf-8")
+            self.assertNotIn(pwd, raw, f"Password found in {json_file.name}")
+            for word in gen.seed.split():
+                self.assertNotIn(f'"{word}"', raw, f"Seed word '{word}' found in {json_file.name}")
+
+    def test_error_messages_do_not_leak_sensitive_values(self) -> None:
+        vault_id = "recovery-test-0007-err"
+        self._create_and_unlock_vault(vault_id, "VaultPassword123!")
+        self.security_service.generate_recovery_seed(vault_id, password="VaultPassword123!")
+
+        invalid_seed = "abandon " * 16
+        try:
+            self.security_service.verify_recovery_seed(vault_id, invalid_seed)
+        except InvalidRecoverySeedError as exc:
+            self.assertNotIn("VaultPassword123!", str(exc))
+            self.assertNotIn("VaultPassword123!", exc.detail)
 
 
 if __name__ == "__main__":

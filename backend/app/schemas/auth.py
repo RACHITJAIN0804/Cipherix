@@ -57,7 +57,7 @@ class RefreshRequest(BaseModel):
 class RecoverVaultRequest(BaseModel):
 
     username: str = Field(..., description="Login identifier.")
-    seed: str = Field(..., min_length=20, description="24-word BIP-39 recovery seed.")
+    seed: str = Field(..., min_length=20, description="16-word BIP-39 recovery seed.")
     new_password: str = Field(..., min_length=8, description="New vault password (minimum 8 characters).")
 
     @field_validator("username")

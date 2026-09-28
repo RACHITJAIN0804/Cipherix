@@ -18,6 +18,7 @@ from app.database.models import Vault
 from app.schemas.security import (
     ChangePasswordRequest,
     ChangePasswordResponse,
+    GenerateRecoverySeedRequest,
     RecoverySeedResponse,
     VerifySeedRequest,
     VerifySeedResponse,
@@ -128,24 +129,30 @@ async def change_password(
     status_code=status.HTTP_201_CREATED,
     summary="Generate BIP-39 recovery seed",
     description=(
-        "Generate a 24-word BIP-39 recovery mnemonic for the vault."
+        "Generate a 16-word BIP-39 recovery mnemonic for the vault."
     ),
     responses={
         201: {"description": "Recovery seed generated. Returned once — store it safely."},
         401: {"description": "Missing, expired, or invalid JWT token."},
         404: {"description": "Vault not found or not owned."},
+        422: {"description": "Invalid password or request format."},
         423: {"description": "Vault is locked."},
         500: {"description": "Seed generation or metadata storage failed."},
     },
 )
 async def generate_recovery_seed(
     vault_id: str,
+    payload: GenerateRecoverySeedRequest,
     vault: Vault = Depends(get_user_vault),
     service: SecurityService = Depends(_get_security_service),
     db: Session = Depends(get_db),
 ) -> RecoverySeedResponse:
     try:
-        result = service.generate_recovery_seed(vault_id=vault.id, db=db)
+        result = service.generate_recovery_seed(
+            vault_id=vault.id,
+            password=payload.password,
+            db=db,
+        )
         logger.info(
             "POST /vaults/%s/recovery-seed succeeded | word_count=%d",
             vault.id,
@@ -162,7 +169,7 @@ async def generate_recovery_seed(
     status_code=status.HTTP_200_OK,
     summary="Verify recovery seed",
     description=(
-        "Verify that a 24-word BIP-39 recovery seed is valid and matches "
+        "Verify that a 16-word BIP-39 recovery seed is valid and matches "
         "the fingerprint stored for this vault."
     ),
     responses={

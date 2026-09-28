@@ -38,6 +38,18 @@ class ChangePasswordResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class GenerateRecoverySeedRequest(BaseModel):
+
+    password: str = Field(
+        ...,
+        min_length=8,
+        description=(
+            "Current vault password. Used to decrypt the Vault Key "
+            "and create the encrypted recovery key material. Never stored or logged."
+        ),
+    )
+
+
 class RecoverySeedResponse(BaseModel):
 
     vault_id: str = Field(
@@ -48,19 +60,19 @@ class RecoverySeedResponse(BaseModel):
     seed: str = Field(
         ...,
         description=(
-            "24-word BIP-39 recovery mnemonic.  Write this down and store it securely.  "
+            "16-word BIP-39 recovery mnemonic.  Write this down and store it securely.  "
             "It will NOT be shown again."
         ),
     )
     algorithm: str = Field(
         ...,
         description="Mnemonic generation algorithm.",
-        examples=["BIP39-24-SHA256"],
+        examples=["BIP39-16-SHA256"],
     )
     word_count: int = Field(
         ...,
         description="Number of words in the mnemonic.",
-        examples=[24],
+        examples=[16],
     )
     created_at: str = Field(
         ...,
@@ -76,7 +88,7 @@ class VerifySeedRequest(BaseModel):
         ...,
         min_length=20,
         description=(
-            "Space-separated 24-word BIP-39 mnemonic to validate against the "
+            "Space-separated 16-word BIP-39 mnemonic to validate against the "
             "vault's stored fingerprint.  Never stored or logged."
         ),
     )

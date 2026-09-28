@@ -257,12 +257,14 @@ class TestVaultOwnershipAndIsolation:
         seed_b = client.post(
             f"/api/v1/vaults/{vault_a_id}/recovery-seed",
             headers=_auth_header(token_b),
+            json={"password": pwd},
         )
         assert seed_b.status_code == status.HTTP_404_NOT_FOUND
 
         seed_a_resp = client.post(
             f"/api/v1/vaults/{vault_a_id}/recovery-seed",
             headers=_auth_header(token_a),
+            json={"password": pwd},
         )
         assert seed_a_resp.status_code == status.HTTP_201_CREATED
         seed_words = seed_a_resp.json()["seed"]

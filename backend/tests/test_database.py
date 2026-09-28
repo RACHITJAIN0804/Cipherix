@@ -716,7 +716,7 @@ class TestSecurityServiceSeedDbIntegration:
         vsvc.unlock_vault(created.vault_id, db=db_session)
 
         ssvc = SecurityService(vault_base_dir=tmp_path)
-        seed_resp = ssvc.generate_recovery_seed(vault_id=created.vault_id, db=db_session)
+        seed_resp = ssvc.generate_recovery_seed(vault_id=created.vault_id, password="SeedPass123!", db=db_session)
         return created.vault_id, seed_resp.seed, ssvc
 
     def test_verify_correct_seed_against_sqlite(

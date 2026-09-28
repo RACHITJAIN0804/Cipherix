@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import (
     CipherixError,
+    InvalidPasswordError,
     PasswordChangeError,
     RecoveryMetadataMissingError,
     VaultKeyDecryptionError,
@@ -214,8 +215,14 @@ class SecurityService:
                 nonce_bytes = enc_mgr.decode_from_storage(key_meta.nonce, "nonce")
                 vault_key_bytes = enc_mgr.decrypt_vault_key(ct_bytes, master_key, nonce_bytes)
                 recovery_mgr.create_recovery_key(vault_id, vault_key_bytes, seed)
+            except VaultKeyDecryptionError as exc:
+                raise InvalidPasswordError(
+                    f"Invalid vault password for vault '{vault_id}'.",
+                    detail="The provided password could not decrypt the vault key.",
+                ) from exc
             except Exception as exc:
-                logger.warning("Failed to create recovery_key.json during seed generation: %s", exc)
+                logger.error("Failed to create recovery_key.json during seed generation: %s", exc)
+                raise
 
         logger.info(
             "Recovery seed generation complete | vault_id=%s | algorithm=%s",

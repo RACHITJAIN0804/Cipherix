@@ -176,9 +176,9 @@ class TestVaultRecovery:
         sec_svc = SecurityService(vault_base_dir=settings.VAULT_DIR)
         sec_svc.generate_recovery_seed(v_id, password=old_pass)
 
-        # Candidate seed for another vault (valid BIP-39 seed)
-        from mnemonic import Mnemonic
-        wrong_seed = Mnemonic("english").generate(256)
+        # Candidate seed for another vault (valid 16-word BIP-39 seed)
+        from app.security.recovery import RecoveryManager
+        wrong_seed = RecoveryManager(settings.VAULT_DIR).generate_seed("other-vault")
 
         rec_res = client.post(
             "/api/v1/auth/recover",
@@ -191,8 +191,8 @@ class TestVaultRecovery:
         assert rec_res.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     def test_nonexistent_user_returns_404(self, client):
-        from mnemonic import Mnemonic
-        seed = Mnemonic("english").generate(256)
+        from app.security.recovery import RecoveryManager
+        seed = RecoveryManager(settings.VAULT_DIR).generate_seed("dummy-vault")
         rec_res = client.post(
             "/api/v1/auth/recover",
             json={

@@ -19,16 +19,16 @@ from app.core.logger import get_logger
 logger = get_logger(__name__)
 
 
-_ENTROPY_BITS: int = 256
+_ENTROPY_BITS: int = 160
 
 
-SEED_WORD_COUNT: int = 24
+SEED_WORD_COUNT: int = 16
 
 
-RECOVERY_VERSION: str = "1"
+RECOVERY_VERSION: str = "2"
 
 
-_RECOVERY_ALGORITHM: str = "BIP39-24-SHA256"
+_RECOVERY_ALGORITHM: str = "BIP39-16-SHA256"
 
 
 _CHECKSUM_VERSION: str = "sha256-prefix-16"
@@ -39,7 +39,9 @@ _FINGERPRINT_HEX_LEN: int = 16
 _RECOVERY_META_FILENAME: str = "recovery_meta.json"
 
 
-_SUPPORTED_VERSIONS: frozenset[str] = frozenset({"1"})
+# Version 2 = 16-word (160-bit entropy + 16-bit checksum) — current default.
+# Version 1 = legacy 24-word (256-bit entropy); retained for backward compatibility.
+_SUPPORTED_VERSIONS: frozenset[str] = frozenset({"1", "2"})
 
 
 @dataclass
@@ -103,12 +105,20 @@ class RecoveryManager:
 
     def generate_seed(self, vault_id: str) -> str:
         entropy: bytes = os.urandom(_ENTROPY_BITS // 8)
-        seed: str = self._mnemo.to_mnemonic(entropy)
+        checksum: bytes = hashlib.sha256(entropy).digest()[:2]
+        data: bytes = entropy + checksum
+
+        b: str = bin(int.from_bytes(data, byteorder="big"))[2:].zfill(176)
+        words: list[str] = [
+            self._mnemo.wordlist[int(b[i * 11 : (i + 1) * 11], 2)]
+            for i in range(SEED_WORD_COUNT)
+        ]
+        seed: str = " ".join(words)
 
         logger.info(
             "Recovery seed generated | vault_id=%s | words=%d | algorithm=%s",
             vault_id,
-            len(seed.split()),
+            len(words),
             _RECOVERY_ALGORITHM,
         )
 
@@ -122,9 +132,9 @@ class RecoveryManager:
 
     def validate_seed_format(self, candidate: str) -> None:
         normalised: str = " ".join(candidate.lower().split())
-        words = normalised.split()
+        words: list[str] = normalised.split()
 
-        if len(words) != SEED_WORD_COUNT:
+        if len(words) not in (SEED_WORD_COUNT, 24):
             raise InvalidRecoverySeedError(
                 f"Recovery seed has {len(words)} words; expected {SEED_WORD_COUNT}.",
                 detail=(
@@ -133,7 +143,37 @@ class RecoveryManager:
                 ),
             )
 
-        if not self._mnemo.check(normalised):
+        if len(words) == 24:
+            if not self._mnemo.check(normalised):
+                raise InvalidRecoverySeedError(
+                    "Recovery seed failed BIP-39 validation.",
+                    detail=(
+                        "The seed words are not a valid BIP-39 mnemonic.  One or more "
+                        "words may not be in the BIP-39 English wordlist, or the "
+                        "embedded checksum is incorrect."
+                    ),
+                )
+            return
+
+        try:
+            indices: list[int] = [self._mnemo.wordlist.index(w) for w in words]
+        except ValueError:
+            raise InvalidRecoverySeedError(
+                "Recovery seed failed BIP-39 validation.",
+                detail=(
+                    "The seed words are not a valid BIP-39 mnemonic.  One or more "
+                    "words may not be in the BIP-39 English wordlist, or the "
+                    "embedded checksum is incorrect."
+                ),
+            )
+
+        b: str = "".join(bin(idx)[2:].zfill(11) for idx in indices)
+        data: bytes = int(b, 2).to_bytes(22, byteorder="big")
+        entropy: bytes = data[:20]
+        checksum: bytes = data[20:]
+        expected_checksum: bytes = hashlib.sha256(entropy).digest()[:2]
+
+        if checksum != expected_checksum:
             raise InvalidRecoverySeedError(
                 "Recovery seed failed BIP-39 validation.",
                 detail=(
