@@ -79,7 +79,7 @@ def _result(label: str, ok: bool, detail: str = "") -> None:
 # Test steps
 # ---------------------------------------------------------------------------
 
-def test_health(adapter) -> bool:
+def step_health(adapter) -> bool:
     _section("Step 1 — Health check")
     try:
         h = adapter.health()
@@ -99,7 +99,7 @@ def test_health(adapter) -> bool:
         return False
 
 
-def test_anchor(adapter) -> bool:
+def step_anchor(adapter) -> bool:
     _section("Step 2 — anchor_hash (record on-chain)")
     try:
         receipt = adapter.anchor_hash(
@@ -121,7 +121,7 @@ def test_anchor(adapter) -> bool:
         return False
 
 
-def test_get_record(adapter) -> bool:
+def step_get_record(adapter) -> bool:
     _section("Step 3 — get_anchor_by_reference (retrieve record)")
     try:
         record = adapter.get_anchor_by_reference(PRIVACY_REF)
@@ -144,7 +144,7 @@ def test_get_record(adapter) -> bool:
         return False
 
 
-def test_verify_correct(adapter) -> bool:
+def step_verify_correct(adapter) -> bool:
     _section("Step 4 — verify_anchor with CORRECT hash")
     try:
         matched = adapter.verify_anchor(
@@ -159,7 +159,7 @@ def test_verify_correct(adapter) -> bool:
         return False
 
 
-def test_verify_wrong(adapter) -> bool:
+def step_verify_wrong(adapter) -> bool:
     _section("Step 5 — verify_anchor with DIFFERENT (tampered) hash")
     try:
         matched = adapter.verify_anchor(
@@ -175,7 +175,7 @@ def test_verify_wrong(adapter) -> bool:
         return False
 
 
-def test_duplicate_anchor(adapter) -> bool:
+def step_duplicate_anchor(adapter) -> bool:
     _section("Step 6 — Duplicate anchor prevention")
     from app.core.exceptions import AnchorAlreadyExistsError
     try:
@@ -225,12 +225,12 @@ def main() -> None:
         sys.exit(1)
 
     results = []
-    results.append(("Health check",              test_health(adapter)))
-    results.append(("anchor_hash (record)",       test_anchor(adapter)))
-    results.append(("get_anchor_by_reference",    test_get_record(adapter)))
-    results.append(("verify_anchor (correct)",    test_verify_correct(adapter)))
-    results.append(("verify_anchor (tampered)",   test_verify_wrong(adapter)))
-    results.append(("Duplicate prevention",       test_duplicate_anchor(adapter)))
+    results.append(("Health check",              step_health(adapter)))
+    results.append(("anchor_hash (record)",       step_anchor(adapter)))
+    results.append(("get_anchor_by_reference",    step_get_record(adapter)))
+    results.append(("verify_anchor (correct)",    step_verify_correct(adapter)))
+    results.append(("verify_anchor (tampered)",   step_verify_wrong(adapter)))
+    results.append(("Duplicate prevention",       step_duplicate_anchor(adapter)))
 
     # Summary
     print()
