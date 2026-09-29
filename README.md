@@ -1,62 +1,470 @@
-# Cipherix
+Cipherix
+Secure Documents. Private Intelligence. Verifiable Integrity.
 
-Cipherix is a local-first, privacy-focused application for securely storing, managing, and interacting with personal knowledge. It combines end-to-end encrypted document storage with local Retrieval-Augmented Generation (RAG) and blockchain-anchored integrity verification.
+Cipherix is a local-first, privacy-focused document vault that combines secure document encryption, private local Retrieval-Augmented Generation (RAG), account recovery, and blockchain-backed document integrity verification.
 
-## Core Features
+The project is designed around one principle: your documents and sensitive data should remain under your control while still being searchable, intelligent, and verifiable.
 
-- **Secure Vault Architecture**: Local-first document storage utilizing envelope encryption. All files and metadata are encrypted at rest.
-- **Cryptographic Security**:
-  - **AES-256-GCM** for document and vault encryption.
-  - **Argon2id** for robust password hashing and key derivation.
-  - **BIP-39 16-word Seed Phrases** for secure emergency account recovery and key re-wrapping.
-- **Local AI Knowledge Assistant (RAG)**: Integrates local embeddings and a vector store to enable semantic search and context-aware queries over encrypted documents without relying on external cloud APIs.
-- **Integrity Anchoring**: Implements SHA-256 blockchain-based integrity checks to guarantee document immutability and prevent tampering.
-- **Audit Logging**: Comprehensive internal tracking of vault interactions for security auditing.
+Core Features
+Encrypted Document Vault — Documents are encrypted before being stored using AES-256-GCM.
+Secure Authentication — JWT-based authentication with password hashing and key derivation using Argon2id.
+16-Word Recovery Seed — Custom 16-word recovery mechanism for securely recovering account access.
+Local RAG Assistant — Ask questions about your documents using locally generated embeddings and a local LLM.
+Semantic Search — Search documents by meaning rather than relying only on exact keywords.
+Blockchain Integrity Verification — SHA-256 hashes of encrypted documents can be anchored to a local blockchain for later integrity verification.
+Audit Logging — Security-relevant vault activity is recorded for auditing.
+Local-First Architecture — AI inference, document processing, storage, and blockchain functionality are designed to operate locally.
 
-## Technology Stack
 
-- **Backend**: Python, FastAPI, SQLAlchemy, SQLite
-- **Frontend**: React 19, Vite, React Router, Framer Motion, Lucide React
-- **Security & Cryptography**: AES-256-GCM, Argon2id, BIP-39
-- **AI & Data Processing**: Local embeddings, Vector Store (RAG Pipeline)
+How Cipherix Works
 
-## Architecture
+                 ┌─────────────────────┐
+                 │      User Login     │
+                 └──────────┬──────────┘
+                            │
+                            ▼
+                 ┌─────────────────────┐
+                 │   Secure Vault     │
+                 └──────────┬──────────┘
+                            │
+                     Upload Document
+                            │
+                            ▼
+                 ┌─────────────────────┐
+                 │   AES-256-GCM       │
+                 │     Encryption      │
+                 └──────────┬──────────┘
+                            │
+                ┌───────────┴───────────┐
+                │                       │
+                ▼                       ▼
+       ┌─────────────────┐     ┌─────────────────┐
+       │ Encrypted Vault │     │   SHA-256 Hash  │
+       │     Storage     │     └────────┬────────┘
+       └────────┬────────┘              │
+                │                       ▼
+                │              ┌─────────────────┐
+                │              │   Blockchain    │
+                │              │ Integrity Anchor│
+                │              └─────────────────┘
+                │
+                ▼
+       ┌─────────────────┐
+       │ Document        │
+       │ Processing      │
+       └────────┬────────┘
+                │
+                ▼
+       ┌─────────────────┐
+       │ Embeddings +    │
+       │ ChromaDB        │
+       └────────┬────────┘
+                │
+                ▼
+       ┌─────────────────┐
+       │ Local RAG       │
+       │ + Ollama        │
+       └────────┬────────┘
+                │
+                ▼
+             Answer
 
-1. **Backend**: A stateless FastAPI layer handles authentication (JWT), orchestrates the encryption/decryption of the vault, and interfaces with the RAG pipeline.
-2. **Vault Storage**: User vaults are strictly compartmentalized. Metadata is managed via isolated SQLite databases within each vault, completely encrypted at rest.
-3. **Frontend**: A React application providing secure authentication flows, a 16-word recovery wizard, document management, and a chat interface for the RAG assistant.
 
-## Getting Started
+Security Architecture
 
-### Prerequisites
+Cipherix separates document confidentiality, account recovery, AI retrieval, and blockchain integrity.
 
-- Python 3.10+
-- Node.js 18+
+Document Encryption
 
-### Backend Setup
+Documents are encrypted using AES-256-GCM before being stored in the local vault.
 
-```bash
+
+Document
+   ↓
+AES-256-GCM
+   ↓
+Encrypted Document
+   ↓
+Local Vault
+
+
+Password Security
+
+Passwords are protected using Argon2id for password hashing and key derivation.
+
+Recovery Seed
+
+Cipherix implements a custom 16-word recovery seed mechanism using the BIP-39 English wordlist together with a SHA-256-based checksum.
+
+The recovery seed is intended for account recovery and key re-wrapping.
+
+Sensitive recovery material is not intended to be stored in:
+
+Browser local storage
+URLs
+Cookies
+Logs
+Blockchain records
+Vector databases
+Source code
+Blockchain Integrity
+
+The blockchain layer does not store the actual document.
+
+Instead:
+
+Encrypted Document
+       ↓
+     SHA-256
+       ↓
+ Document Hash
+       ↓
+ Local Blockchain
+
+ During verification, Cipherix calculates the document hash again and compares it with the blockchain-anchored value.
+
+ Current Document
+       ↓
+    SHA-256
+       ↓
+Current Hash
+       ↓
+Compare
+       ↓
+Blockchain Hash
+
+
+A matching hash indicates that the checked file matches the previously recorded integrity value. A mismatch indicates that the file has changed or that the stored data no longer corresponds to the recorded hash.
+
+The blockchain layer does not store:
+
+Document contents
+Passwords
+Recovery seeds
+Encryption keys
+Embeddings
+
+
+Local AI / RAG
+
+Cipherix includes a local Retrieval-Augmented Generation pipeline.
+
+The general flow is:
+
+Document
+   ↓
+Text Extraction
+   ↓
+Chunking
+   ↓
+Sentence Transformer Embeddings
+   ↓
+ChromaDB
+   ↓
+Semantic Retrieval
+   ↓
+Relevant Context
+   ↓
+Ollama Local LLM
+   ↓
+Answer
+
+This allows users to ask questions about their stored documents without sending document content to an external AI service as part of the intended local workflow.Technology Stack
+Frontend
+React
+Vite
+React Router
+Framer Motion
+Lucide React
+Backend
+Python
+FastAPI
+SQLAlchemy
+SQLite
+JWT Authentication
+Security
+AES-256-GCM
+Argon2id
+SHA-256
+Custom 16-word recovery seed
+Secure key derivation and recovery mechanisms
+AI / RAG
+Sentence Transformers
+ChromaDB
+Ollama
+Local embedding generation
+Semantic document retrieval
+Blockchain
+Solidity
+Ganache
+Web3.py
+py-solc-x
+Local smart contract deployment
+SHA-256 document integrity anchoring
+
+
+System Architecture
+
+┌─────────────────────────────────────────────────────┐
+│                    React Frontend                   │
+│                                                     │
+│ Auth │ Vaults │ Documents │ RAG │ Recovery │ Audit │
+└───────────────────────┬─────────────────────────────┘
+                        │
+                        │ REST API
+                        ▼
+┌─────────────────────────────────────────────────────┐
+│                   FastAPI Backend                   │
+│                                                     │
+│ Authentication │ Vault │ Encryption │ RAG │ Security│
+│ Blockchain │ Recovery │ Audit Logging              │
+└───────────────┬──────────────┬──────────────┬───────┘
+                │              │              │
+                ▼              ▼              ▼
+        ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+        │ Encrypted   │ │  ChromaDB   │ │   SQLite    │
+        │ Vault Files │ │ Vector Data │ │  Metadata   │
+        └─────────────┘ └─────────────┘ └─────────────┘
+                              │
+                              ▼
+                       ┌─────────────┐
+                       │   Ollama    │
+                       │ Local LLM   │
+                       └─────────────┘
+
+                ┌────────────────────────┐
+                │   Local Blockchain     │
+                │ Solidity + Ganache     │
+                │      + Web3.py         │
+                └────────────────────────┘
+
+
+
+Account Recovery
+
+Cipherix provides a dedicated recovery flow based on a 16-word recovery seed.
+
+Recovery Flow
+
+Generate Recovery Seed
+          ↓
+Display 16 Words
+          ↓
+User Confirms Selected Words
+          ↓
+Secure Recovery Setup
+          ↓
+Account Recovery When Needed
+
+For account recovery:
+
+Username
+   +
+16-Word Recovery Seed
+   +
+New Password
+   ↓
+Recovery Validation
+   ↓
+Account Access Restored
+
+The recovery seed should be treated as highly sensitive information and stored securely by the user outside the application.
+
+
+Blockchain Integrity Verification
+
+Cipherix uses blockchain as an integrity-verification layer, not as a document-storage system.
+
+When a document is uploaded
+
+
+1. Document is encrypted.
+2. Encrypted document is stored locally.
+3. SHA-256 hash is calculated.
+4. Hash and relevant metadata are anchored to the blockchain.
+
+When a document is verified
+
+1. Current encrypted document is read.
+2. SHA-256 hash is calculated again.
+3. Blockchain record is retrieved.
+4. Both hashes are compared.
+5. Verification result is returned.
+
+This provides a tamper-evident mechanism for detecting changes to encrypted document files.
+
+Getting Started
+Prerequisites
+
+Install the following:
+
+Python 3.10+
+Node.js 18+
+npm
+Git
+Ollama
+Ganache or another compatible local Ethereum development environment
+
+
+Clone the Repository
+git clone https://github.com/RACHITJAIN0804/Cipherix.git
+cd Cipherix
+
+Backend Setup
+
+Navigate to the backend:
 cd backend
+
+
+Create a virtual environment:
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+Activate it on Windows:
+.\.venv\Scripts\Activate.ps1
+
+Install dependencies:
 pip install -r requirements.txt
-python -m uvicorn app.main:app --reload
-```
 
-### Frontend Setup
+Configure the environment variables using the provided example environment file.
 
-```bash
+Start the FastAPI development server:
+uvicorn app.main:app --reload
+
+The backend will be available locally through the configured FastAPI port.
+
+
+Frontend Setup
+
+Open another terminal and navigate to the frontend:
 cd frontend
+
+Install dependencies:
 npm install
+
+Start the development server:
 npm run dev
-```
 
-## Security Model
+Local AI Setup
 
-- **No Plaintext Persistence**: Master keys and passwords are never stored on disk.
-- **Zero-Knowledge Architecture**: The backend application code cannot access document contents without the user's active session and derived keys.
-- **Offline First**: All operations, including AI inference and document processing, are designed to operate entirely locally to prevent data exfiltration.
+Install Ollama and download a supported local model.
 
-## License
+For example:
+ollama pull llama3.2:1b
 
-MIT License
+Verify the installed models:
+ollama list
+
+Cipherix can then communicate with the local Ollama service for RAG generation.
+
+Blockchain Setup
+
+Cipherix uses a local blockchain development environment for integrity anchoring.
+
+The blockchain workflow consists of:
+
+Solidity Smart Contract
+        ↓
+Compile
+        ↓
+Deploy to Local Blockchain
+        ↓
+Contract Address + ABI
+        ↓
+FastAPI Blockchain Service
+        ↓
+Document Integrity Operations
+
+The local blockchain is intended for development and demonstration rather than production cryptocurrency infrastructure.
+
+Testing
+
+The project includes backend tests covering major application functionality.
+
+Latest full backend test result:
+255 passed
+1 skipped
+0 failed
+
+The frontend production build also completes successfully using:
+npm run build
+
+
+Project Structure
+
+Cipherix/
+│
+├── backend/
+│   ├── app/
+│   └── tests/
+│
+├── frontend/
+│
+├── docs/
+│
+├── .env.example
+├── .gitignore
+├── LICENSE
+├── README.md
+├── docker-compose.yml
+└── requirements.txt
+
+Runtime-generated data such as local environments, databases, vector stores, encrypted vault data, logs, dependency folders, and other machine-specific artifacts are excluded from version control where appropriate.
+
+Security Principles
+
+Cipherix follows several security principles:
+
+Encrypt sensitive documents before local storage.
+Use authenticated encryption with AES-256-GCM.
+Use Argon2id for password security and key derivation.
+Keep recovery material separate from blockchain data.
+Do not place recovery seeds in URLs or browser storage.
+Do not store document contents on the blockchain.
+Do not store passwords, encryption keys, or recovery seeds on the blockchain.
+Keep AI processing local through local embeddings, vector storage, and Ollama.
+Use cryptographic hashes for document integrity verification.
+Keep generated runtime artifacts out of source control.
+
+
+Privacy Model
+
+Cipherix is designed as a local-first application.
+
+The architecture aims to keep the following components under the user's local environment:
+
+Documents
+Encryption
+Vault Storage
+Embeddings
+Vector Search
+LLM Inference
+Blockchain Integrity Records
+
+The exact privacy characteristics of a deployment depend on how the application and its surrounding infrastructure are configured.
+
+Future Scope
+
+Possible future improvements include:
+
+Windows .exe distribution
+Improved desktop packaging
+Hardware-backed key protection
+Additional local LLM support
+Advanced document formats
+More granular audit controls
+Enhanced blockchain verification workflows
+Automated encrypted backups
+Multi-device synchronization with end-to-end encryption
+Additional recovery mechanisms
+Production-grade deployment configuration
+
+License
+
+This project is licensed under the MIT License.
+
+See the LICENSE file for details.
+
+
+Author
+
+Rachit Jain
