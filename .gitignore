@@ -10,10 +10,21 @@ env/
 
 # Environment Variables
 .env
+.env.*
+!.env.example
+
+# Keys & Secrets
+*.key
+*.pem
+key.json
+recovery_key.json
+recovery_*.json
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
 
 # Logs
 logs/
@@ -21,28 +32,41 @@ logs/
 
 # Database
 *.db
+*.sqlite
 *.sqlite3
 
 # OS Files
 .DS_Store
 Thumbs.db
 
-# Build
+# Build & Frontend
 dist/
 build/
+frontend/dist/
+node_modules/
+.npm/
 
 # Python Packaging
 *.egg-info/
 
-# Models
+# Models & Vector DB
 models/
-
-# Vector Database
 vector_db/
+.chroma/
+model_caches/
 
 # Vault Data
 vaults/
+local_vaults/
+
+# Blockchain Artifacts
+backend/app/services/blockchain/contracts/build/
+*.json # If used for blockchain ABIs, but this might block legit json files. We will be more specific:
+build/contracts/
 
 # Temporary Files
 *.tmp
 *.bak
+.pytest_cache/
+htmlcov/
+.coverage

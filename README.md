@@ -1,139 +1,62 @@
 # Cipherix
 
-> **Privacy-First AI Knowledge Vault with End-to-End Encryption**
+Cipherix is a local-first, privacy-focused application for securely storing, managing, and interacting with personal knowledge. It combines end-to-end encrypted document storage with local Retrieval-Augmented Generation (RAG) and blockchain-anchored integrity verification.
 
-Cipherix is an open-source, local-first platform designed to securely store, manage, and interact with personal knowledge using modern cryptography and AI.
+## Core Features
 
-The project combines encrypted document storage, Retrieval-Augmented Generation (RAG), local Large Language Models (LLMs), and blockchain-inspired cryptographic identity into a single privacy-focused application.
-
----
-
-## ✨ Vision
-
-Most AI assistants require users to upload sensitive information to cloud services.
-
-Cipherix follows a different philosophy:
-
-- 🔒 Your data remains on your device.
-- 🤖 AI runs locally whenever possible.
-- 📄 Documents are encrypted at rest.
-- 🔑 Users own their encryption keys.
-- 🧠 AI understands your knowledge without compromising privacy.
-
----
-
-## Planned Features
-
-### Secure Vault
-
-- AES-256 encrypted document storage
-- Password-based vault protection
-- Secure file management
-- Metadata indexing
-
-### AI Knowledge Assistant
-
-- Local Retrieval-Augmented Generation (RAG)
-- Local LLM support
-- Semantic document search
-- Context-aware document conversations
-
-### Cryptographic Identity
-
-- Seed phrase generation
-- Deterministic key derivation
-- Digital signatures
-- File integrity verification
-
-### Privacy
-
-- Local-first architecture
-- No mandatory cloud services
-- User-controlled encryption keys
-- Secure document storage
-
----
+- **Secure Vault Architecture**: Local-first document storage utilizing envelope encryption. All files and metadata are encrypted at rest.
+- **Cryptographic Security**:
+  - **AES-256-GCM** for document and vault encryption.
+  - **Argon2id** for robust password hashing and key derivation.
+  - **BIP-39 16-word Seed Phrases** for secure emergency account recovery and key re-wrapping.
+- **Local AI Knowledge Assistant (RAG)**: Integrates local embeddings and a vector store to enable semantic search and context-aware queries over encrypted documents without relying on external cloud APIs.
+- **Integrity Anchoring**: Implements SHA-256 blockchain-based integrity checks to guarantee document immutability and prevent tampering.
+- **Audit Logging**: Comprehensive internal tracking of vault interactions for security auditing.
 
 ## Technology Stack
 
-### Backend
+- **Backend**: Python, FastAPI, SQLAlchemy, SQLite
+- **Frontend**: React 19, Vite, React Router, Framer Motion, Lucide React
+- **Security & Cryptography**: AES-256-GCM, Argon2id, BIP-39
+- **AI & Data Processing**: Local embeddings, Vector Store (RAG Pipeline)
 
-- Python
-- FastAPI
-- SQLite
-- SQLAlchemy
+## Architecture
 
-### Security
+1. **Backend**: A stateless FastAPI layer handles authentication (JWT), orchestrates the encryption/decryption of the vault, and interfaces with the RAG pipeline.
+2. **Vault Storage**: User vaults are strictly compartmentalized. Metadata is managed via isolated SQLite databases within each vault, completely encrypted at rest.
+3. **Frontend**: A React application providing secure authentication flows, a 16-word recovery wizard, document management, and a chat interface for the RAG assistant.
 
-- AES-256 Encryption
-- Argon2id
-- SHA-256
-- Secure Random Number Generation
+## Getting Started
 
-### AI
+### Prerequisites
 
-- Ollama
-- ChromaDB / FAISS
-- Sentence Transformers
+- Python 3.10+
+- Node.js 18+
 
-### Frontend
+### Backend Setup
 
-- React
-- Tauri
-
----
-
-## Project Status
-
-🚧 **Early Development**
-
-Cipherix is currently under active development.
-
-The initial focus is building a secure encrypted vault before introducing AI-powered features.
-
----
-
-## Roadmap
-
-- [ ] Project Setup
-- [ ] Secure Vault
-- [ ] AES-256 Encryption
-- [ ] Seed Phrase Generation
-- [ ] Metadata Database
-- [ ] File Management
-- [ ] REST API
-- [ ] Desktop Application
-- [ ] Local RAG
-- [ ] Local AI Assistant
-- [ ] Cryptographic Identity
-- [ ] Document Signing
-
----
-
-## Repository Structure
-
-```
-Cipherix/
-
-backend/
-frontend/
-vaults/
-models/
-vector_db/
-docs/
-scripts/
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+python -m uvicorn app.main:app --reload
 ```
 
----
+### Frontend Setup
 
-## Contributing
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-Contributions, discussions, and feature suggestions are welcome.
+## Security Model
 
-Please open an issue before submitting large feature requests.
-
----
+- **No Plaintext Persistence**: Master keys and passwords are never stored on disk.
+- **Zero-Knowledge Architecture**: The backend application code cannot access document contents without the user's active session and derived keys.
+- **Offline First**: All operations, including AI inference and document processing, are designed to operate entirely locally to prevent data exfiltration.
 
 ## License
 
-This project is licensed under the MIT License.
+MIT License
