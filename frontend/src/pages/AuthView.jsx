@@ -411,17 +411,30 @@ export function AuthView({ initialMode = 'login', onLoginSuccess }) {
                 </button>
               </>
             ) : (
-              <>
-                Need a new account?{' '}
-                <button
-                  onClick={() => { navigate('/register'); setIsRegister(true); setError(''); }}
-                  style={{ background: 'none', border: 'none', color: '#22D3EE', fontWeight: 700, cursor: 'pointer', fontSize: 'inherit', transition: 'opacity 160ms' }}
-                  onMouseEnter={e => (e.currentTarget.style.opacity = '0.75')}
-                  onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
-                >
-                  Register
-                </button>
-              </>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
+                <div>
+                  Need a new account?{' '}
+                  <button
+                    onClick={() => { navigate('/register'); setIsRegister(true); setError(''); }}
+                    style={{ background: 'none', border: 'none', color: '#22D3EE', fontWeight: 700, cursor: 'pointer', fontSize: 'inherit', transition: 'opacity 160ms' }}
+                    onMouseEnter={e => (e.currentTarget.style.opacity = '0.75')}
+                    onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+                  >
+                    Register
+                  </button>
+                </div>
+                <div>
+                  Forgot password?{' '}
+                  <button
+                    onClick={() => navigate('/recover')}
+                    style={{ background: 'none', border: 'none', color: '#c084fc', fontWeight: 700, cursor: 'pointer', fontSize: 'inherit', transition: 'opacity 160ms' }}
+                    onMouseEnter={e => (e.currentTarget.style.opacity = '0.75')}
+                    onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+                  >
+                    Recover with 16-word seed phrase →
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>

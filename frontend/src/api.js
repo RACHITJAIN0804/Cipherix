@@ -108,7 +108,7 @@ export class CipherixAPI {
   }
 
   static getFallback(endpoint, options) {
-    if (endpoint.includes('/auth/login') || endpoint.includes('/auth/register')) {
+    if (endpoint.includes('/auth/login') || endpoint.includes('/auth/register') || endpoint.includes('/auth/recover')) {
       throw new Error(
         'Cannot reach the backend server.\n' +
         'Make sure Uvicorn is running:\n' +

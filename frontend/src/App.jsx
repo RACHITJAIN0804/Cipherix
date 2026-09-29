@@ -12,6 +12,7 @@ import { ActivityLogView } from './pages/ActivityLogView';
 import { SettingsView } from './pages/SettingsView';
 import { SecurityView } from './pages/SecurityView';
 import { RecoveryView } from './pages/RecoveryView';
+import { RecoverAccountView } from './pages/RecoverAccountView';
 import { AuthView } from './pages/AuthView';
 import { CipherixAPI } from './api';
 
@@ -61,6 +62,14 @@ function AppRoutes({ user, setUser }) {
           user
             ? <Navigate to="/" replace />
             : <AuthView initialMode="register" onLoginSuccess={handleLoginSuccess} />
+        }
+      />
+      <Route
+        path="/recover"
+        element={
+          user
+            ? <Navigate to="/" replace />
+            : <RecoverAccountView onLoginSuccess={handleLoginSuccess} />
         }
       />
 
