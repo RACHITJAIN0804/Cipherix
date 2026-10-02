@@ -297,6 +297,6 @@ As an academic/portfolio project, Cipherix currently has the following constrain
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-## Authors
+## Author
 
 - **Rachit Jain**
