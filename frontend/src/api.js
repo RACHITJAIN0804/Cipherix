@@ -132,7 +132,6 @@ export class CipherixAPI {
           vault_id: "vlt_" + Math.random().toString(36).substring(7),
           name: body.name || "New Secure Vault",
           status: "locked",
-          seed: "alpha bravo cipher delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa",
           created_at: new Date().toISOString(),
         };
       }
@@ -285,20 +284,13 @@ export class CipherixAPI {
       ];
     }
 
-    if (endpoint.includes("/recovery-seed")) {
-      return {
-        vault_id: "063aadc1-1696-43e8-b151-1f1759b713fd",
-        seed: "alpha bravo cipher delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa",
-        word_count: 16,
-        created_at: new Date().toISOString(),
-      };
-    }
-
-    if (endpoint.includes("/recovery-seed/verify")) {
-      return {
-        vault_id: "063aadc1-1696-43e8-b151-1f1759b713fd",
-        valid: true,
-      };
+    if (endpoint.includes("/recovery-seed") && !endpoint.includes("/verify")) {
+      throw new Error(
+        'Recovery seed generation requires the backend server.\n' +
+        'Make sure Uvicorn is running:\n' +
+        '  cd backend && uvicorn app.main:app --reload\n' +
+        'Expected at: http://localhost:8000'
+      );
     }
 
     return { status: "ok" };

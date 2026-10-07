@@ -27,6 +27,33 @@ class RegisterRequest(BaseModel):
         return stripped
 
 
+class RegisterWithVaultResponse(BaseModel):
+    """Response returned exactly once at registration.
+
+    ``seed`` is the plaintext 16-word recovery seed.  It exists in this
+    response payload transiently — the frontend must display it once,
+    prompt the user to confirm the backup, then discard it from memory.
+    The backend never stores the plaintext seed.
+    """
+
+    id: str = Field(..., description="User ID (alias for user_id).")
+    user_id: str
+    username: str
+    is_active: bool = True
+    created_at: datetime
+    vault_id: str
+    seed: str = Field(
+        ...,
+        description=(
+            "16-word BIP-39 recovery seed.  Shown once.  "
+            "Write it down and store it securely."
+        ),
+    )
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
 class LoginRequest(BaseModel):
 
     username: str = Field(..., description="Login identifier.")
@@ -67,4 +94,3 @@ class RecoverVaultRequest(BaseModel):
         if not stripped:
             raise ValueError("Username must not be blank.")
         return stripped
-

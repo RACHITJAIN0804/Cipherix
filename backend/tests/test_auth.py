@@ -83,7 +83,7 @@ def db_session(in_memory_engine):
 
 
 @pytest.fixture(scope="function")
-def client(db_session: Session):
+def client(db_session: Session, tmp_path):
     """
     FastAPI TestClient that overrides get_db with the in-memory session.
 
@@ -98,6 +98,8 @@ def client(db_session: Session):
     app.dependency_overrides[get_db] = _override_get_db
     from app.core.rate_limiter import _limiter
     _limiter.clear()
+    from app.core.config import settings as _settings
+    _settings.VAULT_DIR = tmp_path / "vaults"
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c
     app.dependency_overrides.clear()
@@ -138,14 +140,18 @@ def _auth_headers(token: str) -> dict:
 
 class TestRegister:
     def test_successful_registration(self, client):
-        """POST /register → 201 with user data (no password hash)."""
+        """POST /register → 201 with registration payload including recovery seed."""
         resp = _register(client)
         assert resp.status_code == status.HTTP_201_CREATED
         data = resp.json()
         assert data["username"] == _VALID_USERNAME
-        assert data["is_active"] is True
-        assert "id" in data
-        assert "created_at" in data
+        assert "user_id" in data
+        assert "vault_id" in data
+        assert "seed" in data
+        assert "access_token" in data
+        assert "refresh_token" in data
+        # Seed must be exactly 16 words
+        assert len(data["seed"].split()) == 16
 
     def test_password_hash_never_returned(self, client):
         """Registration response must never expose the password hash."""

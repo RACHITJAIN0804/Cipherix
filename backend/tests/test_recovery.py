@@ -63,9 +63,13 @@ def client(in_memory_engine, db_session):
 
 
 def _register_and_login(client, username: str = "recoveryuser", password: str = "OldPassword123!") -> dict:
-    client.post("/api/v1/auth/register", json={"username": username, "password": password})
-    resp = client.post("/api/v1/auth/login", json={"username": username, "password": password})
-    token = resp.json()["access_token"]
+    reg_resp = client.post("/api/v1/auth/register", json={"username": username, "password": password})
+    # New register endpoint returns access_token directly; fall back to login if needed.
+    if reg_resp.status_code == 201 and "access_token" in reg_resp.json():
+        token = reg_resp.json()["access_token"]
+    else:
+        resp = client.post("/api/v1/auth/login", json={"username": username, "password": password})
+        token = resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -75,22 +79,23 @@ class TestVaultRecovery:
         old_pass = "OldPassword123!"
         new_pass = "NewPassword123!"
 
-        headers = _register_and_login(client, username=username, password=old_pass)
-
-        # 1. Create vault
-        v_res = client.post(
-            "/api/v1/vaults/",
-            headers=headers,
-            json={"name": "My Vault", "password": old_pass},
+        # Registration now creates user + vault + recovery seed atomically.
+        # Capture the vault_id from the registration response.
+        reg_resp = client.post(
+            "/api/v1/auth/register",
+            json={"username": username, "password": old_pass},
         )
-        assert v_res.status_code == status.HTTP_201_CREATED
-        v_id = v_res.json()["vault_id"]
+        assert reg_resp.status_code == status.HTTP_201_CREATED
+        reg_data = reg_resp.json()
+        token = reg_data["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+        v_id = reg_data["vault_id"]
 
-        # 2. Unlock vault
+        # Unlock the vault (it was locked after recovery seed setup)
         un_res = client.post(f"/api/v1/vaults/{v_id}/unlock", headers=headers)
         assert un_res.status_code == status.HTTP_200_OK
 
-        # 3. Upload document
+        # Upload document
         doc_content = b"Top secret file content before password loss"
         doc_res = client.post(
             f"/api/v1/vaults/{v_id}/documents",
@@ -105,21 +110,15 @@ class TestVaultRecovery:
         assert blob_path.is_file()
         pre_recovery_ciphertext = blob_path.read_bytes()
 
-        # 4. Generate recovery seed with password
-        from app.services.security_service import SecurityService
-        sec_svc = SecurityService(vault_base_dir=settings.VAULT_DIR)
-        gen = sec_svc.generate_recovery_seed(v_id, password=old_pass)
-        seed = gen.seed
-
-        # 5. Lock vault (simulate forgotten password)
+        # Lock vault (simulate forgotten password)
         client.post(f"/api/v1/vaults/{v_id}/lock", headers=headers)
 
-        # 6. Recover vault via POST /api/v1/auth/recover
+        # Recover vault via POST /api/v1/auth/recover
         rec_res = client.post(
             "/api/v1/auth/recover",
             json={
                 "username": username,
-                "seed": seed,
+                "seed": reg_data["seed"],
                 "new_password": new_pass,
             },
         )
@@ -130,15 +129,15 @@ class TestVaultRecovery:
 
         new_headers = {"Authorization": f"Bearer {rec_tokens['access_token']}"}
 
-        # 7. Unlock vault with new_password
+        # Unlock vault with new_password
         un_new = client.post(f"/api/v1/vaults/{v_id}/unlock", headers=new_headers)
         assert un_new.status_code == status.HTTP_200_OK
 
-        # 8. Post-recovery ciphertext on disk must be EXACTLY identical to pre-recovery ciphertext
+        # Post-recovery ciphertext on disk must be EXACTLY identical to pre-recovery ciphertext
         post_recovery_ciphertext = blob_path.read_bytes()
         assert post_recovery_ciphertext == pre_recovery_ciphertext
 
-        # 9. Download document using new_password -> content must match original!
+        # Download document using new_password -> content must match original!
         dl_res = client.get(
             f"/api/v1/vaults/{v_id}/documents/{doc_id}",
             headers={**new_headers, "X-Vault-Password": new_pass},
@@ -246,4 +245,95 @@ class TestVaultRecovery:
         for json_file in vault_dir.glob("*.json"):
             content = json_file.read_text(encoding="utf-8")
             assert gen.seed not in content
+
+    def test_twelve_word_seed_fails_for_sixteen_word_flow(self, client):
+        """Standard 12-word mnemonic must fail since Cipherix requires exactly 16 words."""
+        username = "twelve_user"
+        old_pass = "OldPassword123!"
+        _register_and_login(client, username=username, password=old_pass)
+
+        twelve_word_seed = "abandon ability able about above absent absorb abstract absurd abuse access accident"
+        assert len(twelve_word_seed.split()) == 12
+
+        rec_res = client.post(
+            "/api/v1/auth/recover",
+            json={
+                "username": username,
+                "seed": twelve_word_seed,
+                "new_password": "NewPassword123!",
+            },
+        )
+        assert rec_res.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_login_with_new_password_after_recovery_and_old_password_fails(self, client):
+        """After recovery, normal login with new password succeeds and old password fails."""
+        username = "rec_login_user"
+        old_pass = "OldPassword123!"
+        new_pass = "BrandNewPassword123!"
+
+        reg_res = client.post(
+            "/api/v1/auth/register",
+            json={"username": username, "password": old_pass},
+        )
+        assert reg_res.status_code == status.HTTP_201_CREATED
+        seed = reg_res.json()["seed"]
+
+        # Recover account
+        rec_res = client.post(
+            "/api/v1/auth/recover",
+            json={
+                "username": username,
+                "seed": seed,
+                "new_password": new_pass,
+            },
+        )
+        assert rec_res.status_code == status.HTTP_200_OK
+
+        # Login with old password must fail
+        old_login = client.post(
+            "/api/v1/auth/login",
+            json={"username": username, "password": old_pass},
+        )
+        assert old_login.status_code == status.HTTP_401_UNAUTHORIZED
+
+        # Login with new password must succeed WITHOUT seed
+        new_login = client.post(
+            "/api/v1/auth/login",
+            json={"username": username, "password": new_pass},
+        )
+        assert new_login.status_code == status.HTTP_200_OK
+        assert "access_token" in new_login.json()
+        assert "seed" not in new_login.json()
+
+    def test_seed_not_exposed_in_login_or_me_response(self, client):
+        """Neither /auth/login nor /auth/me may expose the recovery seed."""
+        username = "seed_privacy_user"
+        password = "SecurePassword123!"
+
+        reg_res = client.post(
+            "/api/v1/auth/register",
+            json={"username": username, "password": password},
+        )
+        assert reg_res.status_code == status.HTTP_201_CREATED
+
+        # Check login response
+        login_res = client.post(
+            "/api/v1/auth/login",
+            json={"username": username, "password": password},
+        )
+        assert login_res.status_code == status.HTTP_200_OK
+        login_data = login_res.json()
+        assert "seed" not in login_data
+        token = login_data["access_token"]
+
+        # Check /me response
+        me_res = client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert me_res.status_code == status.HTTP_200_OK
+        me_data = me_res.json()
+        assert "seed" not in me_data
+        assert "password_hash" not in me_data
+
 

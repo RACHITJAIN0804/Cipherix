@@ -346,6 +346,10 @@ class SecurityService:
                 pass
 
         try:
+            from argon2 import PasswordHasher as _PH
+            _ph_local = _PH()
+            new_password_hash: str = _ph_local.hash(new_password)
+
             sec_record = db.get(SecurityMetadataRecord, vault_id)
             if sec_record is not None:
                 sec_record.encrypted_vault_key = new_encrypted_vk_b64
@@ -357,6 +361,9 @@ class SecurityService:
             if v_record is not None:
                 v_record.status = _STATUS_LOCKED
                 v_record.updated_at = datetime.now(UTC)
+
+            user.password_hash = new_password_hash
+            user.updated_at = datetime.now(UTC)
 
             db.commit()
         except SQLAlchemyError as db_exc:

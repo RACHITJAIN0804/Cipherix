@@ -26,6 +26,7 @@ from app.schemas.auth import (
     RecoverVaultRequest,
     RefreshRequest,
     RegisterRequest,
+    RegisterWithVaultResponse,
     TokenResponse,
     UserResponse,
 )
@@ -96,17 +97,23 @@ def _map_auth_exception(exc: Exception) -> None:
 
 @router.post(
     "/register",
-    response_model=UserResponse,
+    response_model=RegisterWithVaultResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user account",
+    description=(
+        "Create a new user account, initialise a default vault, and generate a "
+        "16-word BIP-39 recovery seed.  The seed is returned exactly once in this "
+        "response and is never stored in plaintext.  The client must display it to "
+        "the user and prompt them to confirm the backup before discarding it."
+    ),
     dependencies=[Depends(limit_auth_requests)],
 )
 async def register(
     payload: RegisterRequest,
     db: Session = Depends(get_db),
-) -> UserResponse:
+) -> RegisterWithVaultResponse:
     try:
-        return _auth_service.register(db, payload)
+        return _auth_service.register_with_vault(db, payload, settings.VAULT_DIR)
     except Exception as exc:  # noqa: BLE001
         _map_auth_exception(exc)
 

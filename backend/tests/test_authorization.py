@@ -110,12 +110,13 @@ class TestVaultOwnershipAndIsolation:
         list_a = client.get("/api/v1/vaults/", headers=_auth_header(token_a))
         assert list_a.status_code == status.HTTP_200_OK
         summaries_a = list_a.json()
-        assert len(summaries_a) == 1
-        assert summaries_a[0]["vault_id"] == vault_a_id
+        vault_a_ids = [v["vault_id"] for v in summaries_a]
+        assert vault_a_id in vault_a_ids
 
         list_b = client.get("/api/v1/vaults/", headers=_auth_header(token_b))
         assert list_b.status_code == status.HTTP_200_OK
-        assert len(list_b.json()) == 0
+        vault_b_ids = [v["vault_id"] for v in list_b.json()]
+        assert vault_a_id not in vault_b_ids
 
     def test_user_b_cannot_access_or_lock_unlock_user_a_vault(self, client):
         """User B cannot lock or unlock User A's vault -> returns 404."""

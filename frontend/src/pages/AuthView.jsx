@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Shield, Lock, User, ArrowRight, CheckCircle2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { CipherixAPI } from '../api';
 import { PageTransition } from '../components/PageTransition';
+import { SeedConfirmPanel } from '../components/SeedConfirmPanel';
+import { useNavigate } from 'react-router-dom';
 
 export function AuthView({ initialMode = 'login', onLoginSuccess }) {
   const navigate = useNavigate();
@@ -15,10 +16,14 @@ export function AuthView({ initialMode = 'login', onLoginSuccess }) {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
+  // Registration onboarding: after account creation, show seed display
+  const [seedData, setSeedData] = useState(null); // { seed, username, access_token, refresh_token }
+
   React.useEffect(() => {
     setIsRegister(initialMode === 'register');
     setError('');
     setSuccessMsg('');
+    setSeedData(null);
   }, [initialMode]);
 
   const handleSubmit = async (e) => {
@@ -37,13 +42,25 @@ export function AuthView({ initialMode = 'login', onLoginSuccess }) {
     setLoading(true);
     try {
       if (isRegister) {
-        await CipherixAPI.request('/auth/register', {
+        const res = await CipherixAPI.request('/auth/register', {
           method: 'POST',
           body: JSON.stringify({ username: username.trim(), password }),
         });
-        setSuccessMsg('Registration successful! You can now log in.');
-        setIsRegister(false);
-        setPassword(''); setConfirmPassword('');
+        // Store auth state immediately — user is logged in after registration
+        if (res.access_token) {
+          CipherixAPI.setAuthToken(res.access_token);
+          localStorage.setItem('cipherix_username', res.username || username.trim());
+        }
+        // Transition to seed display phase — seed stays in JS memory only
+        setSeedData({
+          seed: res.seed,
+          username: res.username || username.trim(),
+          access_token: res.access_token,
+          refresh_token: res.refresh_token,
+        });
+        // Clear password from state
+        setPassword('');
+        setConfirmPassword('');
       } else {
         const res = await CipherixAPI.request('/auth/login', {
           method: 'POST',
@@ -64,6 +81,25 @@ export function AuthView({ initialMode = 'login', onLoginSuccess }) {
       setLoading(false);
     }
   };
+
+  const handleSeedConfirmed = () => {
+    // Seed has been confirmed — user acknowledged backup, clear seed from state
+    const uname = seedData?.username || username.trim();
+    setSeedData(null);
+    if (onLoginSuccess) onLoginSuccess({ username: uname, role: 'Administrator' });
+    navigate('/');
+  };
+
+  // Show seed confirmation panel after successful registration
+  if (seedData) {
+    return (
+      <SeedConfirmPanel
+        seed={seedData.seed}
+        username={seedData.username}
+        onConfirmed={handleSeedConfirmed}
+      />
+    );
+  }
 
   const inputStyle = {
     width: '100%',
@@ -93,7 +129,6 @@ export function AuthView({ initialMode = 'login', onLoginSuccess }) {
           overflow: 'hidden',
         }}
       >
-        {}
         <div
           style={{
             position: 'absolute',
@@ -118,7 +153,6 @@ export function AuthView({ initialMode = 'login', onLoginSuccess }) {
           }}
         />
 
-        {}
         <div
           style={{
             maxWidth: '420px',
@@ -133,7 +167,6 @@ export function AuthView({ initialMode = 'login', onLoginSuccess }) {
             zIndex: 10,
           }}
         >
-          {}
           <div style={{ textAlign: 'center', marginBottom: '32px' }}>
             <div
               style={{
@@ -170,7 +203,6 @@ export function AuthView({ initialMode = 'login', onLoginSuccess }) {
             </p>
           </div>
 
-          {}
           {error && (
             <div
               style={{
@@ -211,9 +243,7 @@ export function AuthView({ initialMode = 'login', onLoginSuccess }) {
             </div>
           )}
 
-          {}
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {}
             <div>
               <label
                 style={{
@@ -252,7 +282,6 @@ export function AuthView({ initialMode = 'login', onLoginSuccess }) {
               </div>
             </div>
 
-            {}
             <div>
               <label
                 style={{
@@ -313,7 +342,6 @@ export function AuthView({ initialMode = 'login', onLoginSuccess }) {
               </div>
             </div>
 
-            {}
             {isRegister && (
               <div>
                 <label
@@ -354,7 +382,6 @@ export function AuthView({ initialMode = 'login', onLoginSuccess }) {
               </div>
             )}
 
-            {}
             <button
               type="submit"
               disabled={loading}
@@ -382,12 +409,11 @@ export function AuthView({ initialMode = 'login', onLoginSuccess }) {
               onMouseEnter={e => { if (!loading) { e.currentTarget.style.opacity = '0.92'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(34,211,238,0.35)'; } }}
               onMouseLeave={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(34,211,238,0.25)'; }}
             >
-              <span>{loading ? 'Authenticating...' : isRegister ? 'Register Account' : 'Authenticate Session'}</span>
+              <span>{loading ? (isRegister ? 'Creating Account...' : 'Authenticating...') : isRegister ? 'Register Account' : 'Authenticate Session'}</span>
               <ArrowRight style={{ width: 16, height: 16 }} />
             </button>
           </form>
 
-          {}
           <div
             style={{
               marginTop: '24px',

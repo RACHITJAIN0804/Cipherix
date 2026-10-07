@@ -56,6 +56,116 @@ class AuthService:
         logger.info("User registered | user_id=%s | username=%s", user.id, user.username)
         return UserResponse.model_validate(user)
 
+    def register_with_vault(
+        self,
+        db: Session,
+        request: RegisterRequest,
+        vault_base_dir,
+    ):
+        """Atomically register a new user, create their default vault, and
+        generate a 16-word recovery seed.
+
+        Returns a ``RegisterWithVaultResponse`` whose ``seed`` field contains
+        the plaintext mnemonic exactly once.  The caller (route handler) must
+        forward this to the frontend, which displays it once and then discards
+        it from memory.  The plaintext seed is NEVER written to any database,
+        log file, or persistent storage.
+        """
+        from pathlib import Path
+        from app.schemas.auth import RegisterWithVaultResponse
+        from app.schemas.vault import CreateVaultRequest
+        from app.services.vault_service import VaultService
+        from app.services.security_service import SecurityService
+        from app.vault.vault_manager import VaultManager
+        from app.vault.manifest import VaultManifest
+        from app.database.models import Vault as VaultRecord
+
+        existing = db.query(User).filter(User.username == request.username).first()
+        if existing is not None:
+            raise UserAlreadyExistsError(
+                f"Username '{request.username}' is already taken.",
+                detail="A user with that username already exists.",
+            )
+
+        password_hash = _ph.hash(request.password)
+        user_id = str(uuid.uuid4())
+        user = User(
+            id=user_id,
+            username=request.username,
+            password_hash=password_hash,
+            is_active=True,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+
+        try:
+            db.add(user)
+            db.flush()
+        except SQLAlchemyIntegrityError:
+            db.rollback()
+            raise UserAlreadyExistsError(
+                f"Username '{request.username}' is already taken.",
+                detail="A user with that username already exists.",
+            )
+
+        base_dir = Path(vault_base_dir)
+        vault_mgr = VaultManager(vault_base_dir=base_dir)
+        vault_svc = VaultService(manager=vault_mgr)
+        vault_resp = vault_svc.create_vault(
+            request=CreateVaultRequest(
+                name=f"{request.username}'s Vault",
+                password=request.password,
+            ),
+            user_id=user_id,
+            db=db,
+        )
+        vault_id = vault_resp.vault_id
+
+        vault_root = base_dir / vault_id
+        manifest_path = vault_root / "manifest.json"
+        m = VaultManifest.read(manifest_path)
+        m.status = "unlocked"
+        m.write(manifest_path)
+
+        vr = db.get(VaultRecord, vault_id)
+        if vr is not None:
+            vr.status = "unlocked"
+
+        sec_svc = SecurityService(vault_base_dir=base_dir)
+        seed_resp = sec_svc.generate_recovery_seed(
+            vault_id=vault_id,
+            password=request.password,
+            db=db,
+        )
+
+        m.status = "locked"
+        m.write(manifest_path)
+        if vr is not None:
+            vr.status = "locked"
+
+        db.commit()
+
+        access_token = JWTManager.create_access_token(user_id)
+        refresh_token = JWTManager.create_refresh_token(user_id)
+
+        logger.info(
+            "User registered with vault and recovery seed | user_id=%s | vault_id=%s",
+            user_id,
+            vault_id,
+        )
+
+        return RegisterWithVaultResponse(
+            id=user_id,
+            user_id=user_id,
+            username=request.username,
+            is_active=True,
+            created_at=user.created_at,
+            vault_id=vault_id,
+            seed=seed_resp.seed,
+            access_token=access_token,
+            refresh_token=refresh_token,
+        )
+
     def login(self, db: Session, request: LoginRequest) -> TokenResponse:
         user = db.query(User).filter(User.username == request.username).first()
 
