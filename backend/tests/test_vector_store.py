@@ -66,7 +66,6 @@ def test_vector_store_reindexing_prevents_duplicates(temp_vector_store):
     )
     fake_embedding = [0.2] * 384
 
-    # Index first time
     temp_vector_store.add_chunks(
         chunks=[chunk_v1],
         embeddings=[fake_embedding],
@@ -74,7 +73,6 @@ def test_vector_store_reindexing_prevents_duplicates(temp_vector_store):
         document_id=doc_id,
     )
 
-    # Re-index second time with updated chunk
     chunk_v2 = DocumentChunk(
         chunk_id="chunk-v2",
         document_id=doc_id,
@@ -163,13 +161,11 @@ def test_vector_store_vault_isolation_search(temp_vector_store):
     temp_vector_store.add_chunks([c_a], [emb], v_a, d_a)
     temp_vector_store.add_chunks([c_b], [emb], v_b, d_b)
 
-    # Search vault A
     res_a = temp_vector_store.search_vault(emb, vault_id=v_a)
     assert len(res_a) == 1
     assert res_a[0]["vault_id"] == v_a
     assert res_a[0]["text"] == "Secret user A document content"
 
-    # Search vault B
     res_b = temp_vector_store.search_vault(emb, vault_id=v_b)
     assert len(res_b) == 1
     assert res_b[0]["vault_id"] == v_b

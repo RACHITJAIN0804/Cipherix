@@ -139,7 +139,6 @@ def test_audit_event_upload_anchor_success(client: TestClient, db_session: Sessi
     vault_id = _create_and_unlock_vault(client, token)
     doc_id = _upload_doc(client, token, vault_id)
 
-    # Check audit log in DB
     logs = db_session.scalars(
         select(ComputerAccessAuditLog).where(
             ComputerAccessAuditLog.user_id == user_id,
@@ -159,7 +158,6 @@ def test_audit_event_upload_anchor_success(client: TestClient, db_session: Sessi
     assert "network" in details
     assert "integrity_hash" in details
 
-    # Ensure no secrets logged
     for secret in ["password", "key", "seed", "token", "plaintext"]:
         assert secret not in details
 
@@ -169,7 +167,6 @@ def test_audit_event_verification_success(client: TestClient, db_session: Sessio
     vault_id = _create_and_unlock_vault(client, token)
     doc_id = _upload_doc(client, token, vault_id)
 
-    # Perform verification
     resp = client.post(
         "/api/v1/blockchain/verify",
         headers={"Authorization": f"Bearer {token}"},
@@ -177,7 +174,6 @@ def test_audit_event_verification_success(client: TestClient, db_session: Sessio
     )
     assert resp.status_code == status.HTTP_200_OK
 
-    # Check request and success audit logs
     req_logs = db_session.scalars(
         select(ComputerAccessAuditLog).where(
             ComputerAccessAuditLog.user_id == user_id,
@@ -203,11 +199,9 @@ def test_audit_event_verification_mismatch(client: TestClient, db_session: Sessi
     vault_id = _create_and_unlock_vault(client, token)
     doc_id = _upload_doc(client, token, vault_id, content=b"Original File Data")
 
-    # Tamper with encrypted file on disk
     blob_path = settings.VAULT_DIR / vault_id / "encrypted" / f"{doc_id}.bin"
     blob_path.write_bytes(b"CORRUPTED_CIPHERTEXT_FOR_AUDIT_TEST")
 
-    # Perform verification
     resp = client.post(
         "/api/v1/blockchain/verify",
         headers={"Authorization": f"Bearer {token}"},

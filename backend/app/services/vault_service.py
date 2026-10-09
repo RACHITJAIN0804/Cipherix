@@ -165,21 +165,42 @@ class VaultService:
         raw_manifests = self._manager.list_vaults()
 
         allowed_vault_ids: set[str] | None = None
+        doc_counts: dict[str, int] = {}
         if db is not None and user_id is not None:
             user_records = db.query(VaultRecord.id).filter(VaultRecord.user_id == user_id).all()
             allowed_vault_ids = {r.id for r in user_records}
+            if allowed_vault_ids:
+                from app.database.models import Document as DocumentRecord
+                from sqlalchemy import func
+
+                counts = (
+                    db.query(DocumentRecord.vault_id, func.count(DocumentRecord.id))
+                    .filter(DocumentRecord.vault_id.in_(allowed_vault_ids))
+                    .group_by(DocumentRecord.vault_id)
+                    .all()
+                )
+                doc_counts = {v_id: int(c) for v_id, c in counts}
 
         summaries: list[VaultSummary] = []
         for manifest in raw_manifests:
             if allowed_vault_ids is not None and manifest.vault_id not in allowed_vault_ids:
                 continue
             try:
+                doc_count = doc_counts.get(manifest.vault_id, 0)
+                if db is None:
+                    try:
+                        from app.storage.document_manager import DocumentManager
+                        doc_mgr = DocumentManager(self._manager.vault_root(manifest.vault_id))
+                        doc_count = len(doc_mgr.list_metadata(manifest.vault_id))
+                    except Exception:
+                        doc_count = 0
                 summaries.append(
                     VaultSummary(
                         vault_id=manifest.vault_id,
                         name=manifest.name,
                         created_at=datetime.fromisoformat(manifest.created_at),
                         status=manifest.status,
+                        document_count=doc_count,
                     )
                 )
             except (ValueError, TypeError) as exc:

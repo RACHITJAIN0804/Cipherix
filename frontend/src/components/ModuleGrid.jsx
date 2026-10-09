@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { ModuleCard } from './ModuleCard';
 
-export function ModuleGrid({ vaultCount = 2, docCount = 5 }) {
+export function ModuleGrid({ vaultCount = 0, docCount = 0 }) {
   const modules = [
     {
       title: "Dashboard",

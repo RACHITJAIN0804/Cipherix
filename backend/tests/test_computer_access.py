@@ -59,10 +59,6 @@ from app.services.computer_access import (
     PermissionService,
 )
 
-# ---------------------------------------------------------------------------
-# Test Fixtures
-# ---------------------------------------------------------------------------
-
 
 @pytest.fixture(scope="function")
 def in_memory_engine():
@@ -145,11 +141,6 @@ def auth_headers_b(client: TestClient):
     return {"Authorization": f"Bearer {token}", "user_id": user_id, "username": username}
 
 
-# ---------------------------------------------------------------------------
-# Test Cases
-# ---------------------------------------------------------------------------
-
-
 def test_1_computer_access_disabled_by_default(client: TestClient, auth_headers: dict):
     headers = {"Authorization": auth_headers["Authorization"]}
     resp = client.get("/api/v1/computer-access/status", headers=headers)
@@ -167,20 +158,17 @@ def test_2_enable_computer_access(client: TestClient, auth_headers: dict):
     assert resp.status_code == status.HTTP_200_OK
     assert resp.json()["enabled"] is True
 
-    # Verify status endpoint reflects change
     resp_status = client.get("/api/v1/computer-access/status", headers=headers)
     assert resp_status.json()["enabled"] is True
 
 
 def test_3_disable_computer_access(client: TestClient, auth_headers: dict):
     headers = {"Authorization": auth_headers["Authorization"]}
-    # Enable first
     client.post(
         "/api/v1/computer-access/toggle",
         headers=headers,
         json={"enabled": True},
     )
-    # Disable
     resp = client.post(
         "/api/v1/computer-access/toggle",
         headers=headers,
@@ -196,11 +184,9 @@ def test_4_unauthorized_user_cannot_access_another_users_workspace(
     headers_a = {"Authorization": auth_headers["Authorization"]}
     headers_b = {"Authorization": auth_headers_b["Authorization"]}
 
-    # Enable for both
     client.post("/api/v1/computer-access/toggle", headers=headers_a, json={"enabled": True})
     client.post("/api/v1/computer-access/toggle", headers=headers_b, json={"enabled": True})
 
-    # User A creates file
     create_resp = client.post(
         "/api/v1/computer-access/action",
         headers=headers_a,
@@ -212,7 +198,6 @@ def test_4_unauthorized_user_cannot_access_another_users_workspace(
     )
     assert create_resp.status_code == status.HTTP_200_OK
 
-    # User B tries to read user A's relative path in their workspace -> does not exist in User B workspace
     read_resp_b = client.post(
         "/api/v1/computer-access/action",
         headers=headers_b,
@@ -221,7 +206,6 @@ def test_4_unauthorized_user_cannot_access_another_users_workspace(
             "parameters": {"path": "secret.txt"},
         },
     )
-    # B cannot find secret.txt in B's workspace
     assert read_resp_b.status_code == status.HTTP_400_BAD_REQUEST
 
 
@@ -284,7 +268,6 @@ def test_10_symlink_escape_rejected(tmp_path: Path):
         with pytest.raises(PathGuardError):
             guard.validate_and_resolve("link.txt")
     except OSError:
-        # Symlink creation requires developer mode or privileges on Windows; skip if OS prohibits symlink creation
         pytest.skip("Symlink creation not supported in current environment.")
 
 
@@ -305,7 +288,6 @@ def test_12_arbitrary_shell_command_rejected(client: TestClient, auth_headers: d
     headers = {"Authorization": auth_headers["Authorization"]}
     client.post("/api/v1/computer-access/toggle", headers=headers, json={"enabled": True})
 
-    # Attempt execute shell command endpoint or action
     resp = client.post(
         "/api/v1/computer-access/action",
         headers=headers,
@@ -330,7 +312,6 @@ def test_14_read_action_works(client: TestClient, auth_headers: dict):
     headers = {"Authorization": auth_headers["Authorization"]}
     client.post("/api/v1/computer-access/toggle", headers=headers, json={"enabled": True})
 
-    # Create file first
     client.post(
         "/api/v1/computer-access/action",
         headers=headers,
@@ -341,7 +322,6 @@ def test_14_read_action_works(client: TestClient, auth_headers: dict):
         },
     )
 
-    # Read action does not require approval
     read_resp = client.post(
         "/api/v1/computer-access/action",
         headers=headers,
@@ -356,7 +336,6 @@ def test_14_read_action_works(client: TestClient, auth_headers: dict):
 
 def test_15_write_action_works_only_when_permitted(client: TestClient, auth_headers: dict):
     headers = {"Authorization": auth_headers["Authorization"]}
-    # Disabled by default -> write action rejected with 403
     resp_disabled = client.post(
         "/api/v1/computer-access/action",
         headers=headers,
@@ -368,10 +347,8 @@ def test_15_write_action_works_only_when_permitted(client: TestClient, auth_head
     )
     assert resp_disabled.status_code == status.HTTP_403_FORBIDDEN
 
-    # Enable computer access
     client.post("/api/v1/computer-access/toggle", headers=headers, json={"enabled": True})
 
-    # Write action with approved=True works
     resp_enabled = client.post(
         "/api/v1/computer-access/action",
         headers=headers,
@@ -389,7 +366,6 @@ def test_16_approval_required_for_write_action(client: TestClient, auth_headers:
     headers = {"Authorization": auth_headers["Authorization"]}
     client.post("/api/v1/computer-access/toggle", headers=headers, json={"enabled": True})
 
-    # Write action without approved=True returns status=approval_required
     resp = client.post(
         "/api/v1/computer-access/action",
         headers=headers,
@@ -410,7 +386,6 @@ def test_17_missing_approval_rejected(client: TestClient, auth_headers: dict):
     headers = {"Authorization": auth_headers["Authorization"]}
     client.post("/api/v1/computer-access/toggle", headers=headers, json={"enabled": True})
 
-    # Propose write without approval flag -> returns approval_required challenge
     resp = client.post(
         "/api/v1/computer-access/action",
         headers=headers,
@@ -432,7 +407,6 @@ def test_18_user_cannot_approve_another_users_action(
 
     client.post("/api/v1/computer-access/toggle", headers=headers_a, json={"enabled": True})
 
-    # User A generates approval request
     resp_a = client.post(
         "/api/v1/computer-access/action",
         headers=headers_a,
@@ -443,7 +417,6 @@ def test_18_user_cannot_approve_another_users_action(
     )
     approval_id = resp_a.json()["approval_id"]
 
-    # User B tries to approve User A's approval_id -> 403 Forbidden
     approve_b = client.post(
         "/api/v1/computer-access/approve",
         headers=headers_b,
@@ -456,7 +429,6 @@ def test_19_audit_event_created(client: TestClient, auth_headers: dict, db_sessi
     headers = {"Authorization": auth_headers["Authorization"]}
     client.post("/api/v1/computer-access/toggle", headers=headers, json={"enabled": True})
 
-    # Execute an action
     client.post(
         "/api/v1/computer-access/action",
         headers=headers,
@@ -467,7 +439,6 @@ def test_19_audit_event_created(client: TestClient, auth_headers: dict, db_sessi
         },
     )
 
-    # Check audit log endpoint
     logs_resp = client.get("/api/v1/computer-access/audit-logs", headers=headers)
     assert logs_resp.status_code == status.HTTP_200_OK
     logs = logs_resp.json()
@@ -504,10 +475,8 @@ def test_21_disabled_computer_access_cannot_be_bypassed_through_api(
     client: TestClient, auth_headers: dict
 ):
     headers = {"Authorization": auth_headers["Authorization"]}
-    # Ensure disabled
     client.post("/api/v1/computer-access/toggle", headers=headers, json={"enabled": False})
 
-    # Try read
     resp_read = client.post(
         "/api/v1/computer-access/action",
         headers=headers,
@@ -515,7 +484,6 @@ def test_21_disabled_computer_access_cannot_be_bypassed_through_api(
     )
     assert resp_read.status_code == status.HTTP_403_FORBIDDEN
 
-    # Try write with approved=True
     resp_write = client.post(
         "/api/v1/computer-access/action",
         headers=headers,
@@ -537,7 +505,6 @@ def test_22_vault_isolation_works_correctly(
     client.post("/api/v1/computer-access/toggle", headers=headers_a, json={"enabled": True})
     client.post("/api/v1/computer-access/toggle", headers=headers_b, json={"enabled": True})
 
-    # User A creates a vault
     vault_resp_a = client.post(
         "/api/v1/vaults/",
         headers=headers_a,
@@ -546,7 +513,6 @@ def test_22_vault_isolation_works_correctly(
     assert vault_resp_a.status_code == status.HTTP_201_CREATED
     vault_id_a = vault_resp_a.json()["vault_id"]
 
-    # User B tries to pass user A's vault_id in action request -> 404 Not Found
     action_b = client.post(
         "/api/v1/computer-access/action",
         headers=headers_b,
@@ -563,7 +529,6 @@ def test_23_invalid_action_parameters_rejected(client: TestClient, auth_headers:
     headers = {"Authorization": auth_headers["Authorization"]}
     client.post("/api/v1/computer-access/toggle", headers=headers, json={"enabled": True})
 
-    # Extra disallowed parameters or wrong type
     resp = client.post(
         "/api/v1/computer-access/action",
         headers=headers,
@@ -579,13 +544,11 @@ def test_24_executor_only_runs_registered_actions(tmp_path: Path, db_session: Se
     permission_service = PermissionService()
     executor = ComputerAccessExecutor(permission_service=permission_service)
 
-    # Enable for test user
     user_id = str(uuid.uuid4())
     user = User(id=user_id, username=f"user_{user_id[:6]}", password_hash="hash")
     db_session.add(user)
     permission_service.set_computer_access_enabled(db_session, user_id, True)
 
-    # Attempt unregistered action on executor directly -> ActionNotAllowedError
     with pytest.raises(ActionNotAllowedError):
         executor.execute_action(
             db_session,

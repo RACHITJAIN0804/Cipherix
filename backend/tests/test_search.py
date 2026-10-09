@@ -13,7 +13,6 @@ from app.core.config import settings
 from app.main import create_app
 
 
-
 @pytest.fixture(scope="function")
 def in_memory_engine(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "VAULT_DIR", tmp_path / "vaults")
@@ -77,13 +76,11 @@ class TestSemanticSearch:
         pwd = "Password123!"
         headers = _register_and_login(client, "search_user1", pwd)
 
-        # 1. Create Vault & Unlock
         v_res = client.post("/api/v1/vaults/", headers=headers, json={"name": "Search Vault", "password": pwd})
         assert v_res.status_code == status.HTTP_201_CREATED
         v_id = v_res.json()["vault_id"]
         client.post(f"/api/v1/vaults/{v_id}/unlock", headers=headers)
 
-        # 2. Upload Document
         doc_text = "Cipherix stores encrypted files and uses Argon2id for key derivation."
         d_res = client.post(
             f"/api/v1/vaults/{v_id}/documents",
@@ -93,7 +90,6 @@ class TestSemanticSearch:
         assert d_res.status_code == status.HTTP_201_CREATED
         d_id = d_res.json()["document_id"]
 
-        # 3. Process Document
         p_res = client.post(
             f"/api/v1/vaults/{v_id}/documents/{d_id}/process",
             headers={**headers, "X-Vault-Password": pwd},
@@ -101,7 +97,6 @@ class TestSemanticSearch:
         assert p_res.status_code == status.HTTP_200_OK
         assert p_res.json()["processing_status"] == "processed"
 
-        # 4. Perform Search
         s_res = client.post(
             "/api/v1/search",
             headers=headers,
@@ -120,12 +115,10 @@ class TestSemanticSearch:
         headers_a = _register_and_login(client, "user_a", pwd)
         headers_b = _register_and_login(client, "user_b", pwd)
 
-        # User A creates Vault A
         v_res = client.post("/api/v1/vaults/", headers=headers_a, json={"name": "User A Vault", "password": pwd})
         v_id_a = v_res.json()["vault_id"]
         client.post(f"/api/v1/vaults/{v_id_a}/unlock", headers=headers_a)
 
-        # User A uploads & processes document
         d_res = client.post(
             f"/api/v1/vaults/{v_id_a}/documents",
             headers={**headers_a, "X-Vault-Password": pwd},
@@ -134,7 +127,6 @@ class TestSemanticSearch:
         d_id = d_res.json()["document_id"]
         client.post(f"/api/v1/vaults/{v_id_a}/documents/{d_id}/process", headers={**headers_a, "X-Vault-Password": pwd})
 
-        # User B attempts to search User A's vault
         s_res = client.post(
             "/api/v1/search",
             headers=headers_b,
@@ -158,15 +150,12 @@ class TestSemanticSearch:
         d_id = d_res.json()["document_id"]
         client.post(f"/api/v1/vaults/{v_id}/documents/{d_id}/process", headers={**headers, "X-Vault-Password": pwd})
 
-        # Verify search returns result before deletion
         s1 = client.post("/api/v1/search", headers=headers, json={"vault_id": v_id, "query": "Temporary data"})
         assert s1.json()["total_results"] > 0
 
-        # Delete document
         del_res = client.delete(f"/api/v1/vaults/{v_id}/documents/{d_id}", headers=headers)
         assert del_res.status_code == status.HTTP_204_NO_CONTENT
 
-        # Search should now return 0 results
         s2 = client.post("/api/v1/search", headers=headers, json={"vault_id": v_id, "query": "Temporary data"})
         assert s2.json()["total_results"] == 0
 
@@ -186,11 +175,9 @@ class TestSemanticSearch:
         d_id = d_res.json()["document_id"]
         client.post(f"/api/v1/vaults/{v_id}/documents/{d_id}/process", headers={**headers, "X-Vault-Password": pwd})
 
-        # Delete Vault
         del_res = client.delete(f"/api/v1/vaults/{v_id}", headers=headers)
         assert del_res.status_code == status.HTTP_204_NO_CONTENT
 
-        # Attempt search on deleted vault
         s_res = client.post("/api/v1/search", headers=headers, json={"vault_id": v_id, "query": "Vault content"})
         assert s_res.status_code in (status.HTTP_404_NOT_FOUND, status.HTTP_403_FORBIDDEN)
 
@@ -209,11 +196,9 @@ class TestSemanticSearch:
         )
         d_id = d_res.json()["document_id"]
 
-        # Process document twice
         client.post(f"/api/v1/vaults/{v_id}/documents/{d_id}/process", headers={**headers, "X-Vault-Password": pwd})
         client.post(f"/api/v1/vaults/{v_id}/documents/{d_id}/process", headers={**headers, "X-Vault-Password": pwd})
 
-        # Search should return exact chunk count, no duplicates
         s_res = client.post("/api/v1/search", headers=headers, json={"vault_id": v_id, "query": "Unique reindexing"})
         assert s_res.json()["total_results"] == 1
 

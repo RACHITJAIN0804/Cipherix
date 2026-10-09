@@ -77,15 +77,40 @@ function StatCard({ label, value, valueColor, icon: Icon, iconBg, iconBorder, ic
 
 export function DashboardView({ user, onLogout }) {
   const [vaults, setVaults] = useState([]);
+  const [docCount, setDocCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const loadData = async () => {
     setLoading(true);
+    setError('');
     try {
       const data = await CipherixAPI.request('/vaults');
-      setVaults(Array.isArray(data) ? data : []);
+      const vArray = Array.isArray(data) ? data : [];
+      setVaults(vArray);
+
+      let totalDocs = 0;
+      if (vArray.length > 0) {
+        const docCounts = await Promise.all(
+          vArray.map(async (v) => {
+            try {
+              const res = await CipherixAPI.request(`/vaults/${v.vault_id}/documents`);
+              if (typeof res?.count === 'number') return res.count;
+              if (Array.isArray(res?.documents)) return res.documents.length;
+              if (Array.isArray(res)) return res.length;
+              return typeof v.document_count === 'number' ? v.document_count : 0;
+            } catch {
+              return typeof v.document_count === 'number' ? v.document_count : 0;
+            }
+          })
+        );
+        totalDocs = docCounts.reduce((acc, c) => acc + c, 0);
+      }
+      setDocCount(totalDocs);
     } catch (e) {
-      console.warn(e);
+      console.warn("Dashboard data load error:", e);
+      setError('Failed to load dashboard data: ' + (e.message || 'Unknown error'));
+      setDocCount(0);
     } finally {
       setLoading(false);
     }
@@ -93,13 +118,12 @@ export function DashboardView({ user, onLogout }) {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [user]);
 
   const unlockedCount = vaults.filter(v => v.status === 'unlocked').length;
 
   return (
     <PageLayout title="Dashboard Overview" user={user} onLogout={onLogout}>
-      {}
       <PageHeader
         icon={LayoutDashboard}
         iconColor="text-cyan-400"
@@ -138,11 +162,16 @@ export function DashboardView({ user, onLogout }) {
         </button>
       </PageHeader>
 
-      {}
+      {error && (
+        <div style={{ marginBottom: '16px', padding: '12px 16px', borderRadius: '10px', background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.30)', color: '#fca5a5', fontSize: '0.8125rem' }}>
+          {error}
+        </div>
+      )}
+
       <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
         <StatCard
           label="Active Vaults"
-          value={vaults.length}
+          value={loading ? '...' : vaults.length}
           icon={Vault}
           iconBg="rgba(34,211,238,0.10)"
           iconBorder="rgba(34,211,238,0.25)"
@@ -153,7 +182,7 @@ export function DashboardView({ user, onLogout }) {
         />
         <StatCard
           label="Encrypted Documents"
-          value={5}
+          value={loading ? '...' : docCount}
           icon={ShieldAlert}
           iconBg="rgba(168,85,247,0.10)"
           iconBorder="rgba(168,85,247,0.25)"
@@ -164,7 +193,7 @@ export function DashboardView({ user, onLogout }) {
         />
         <StatCard
           label="Blockchain Anchors"
-          value={5}
+          value={loading ? '...' : docCount}
           icon={Boxes}
           iconBg="rgba(245,158,11,0.10)"
           iconBorder="rgba(245,158,11,0.25)"
@@ -187,7 +216,6 @@ export function DashboardView({ user, onLogout }) {
         />
       </div>
 
-      {}
       <div className="glass-panel p-6">
         <div
           style={{

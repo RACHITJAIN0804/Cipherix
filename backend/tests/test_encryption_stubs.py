@@ -26,7 +26,7 @@ class TestSeedPhraseManager(unittest.TestCase):
 
     def test_generated_seed_validates_successfully(self) -> None:
         seed = self.mgr.generate_seed()
-        self.mgr.validate_seed(seed)  # Should not raise
+        self.mgr.validate_seed(seed)
 
     def test_invalid_word_count_rejected(self) -> None:
         seed = self.mgr.generate_seed()
@@ -54,7 +54,7 @@ class TestKeyDerivationManager(unittest.TestCase):
     def test_generate_salt_returns_hex_string(self) -> None:
         salt = self.kdf.generate_salt()
         self.assertIsInstance(salt, str)
-        self.assertEqual(len(salt), 64)  # 32 bytes = 64 hex chars
+        self.assertEqual(len(salt), 64)
 
     def test_derive_key_is_deterministic(self) -> None:
         salt = self.kdf.generate_salt()

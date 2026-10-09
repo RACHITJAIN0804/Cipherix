@@ -46,10 +46,6 @@ from app.services.context_builder import ContextBuilder, ContextResult, ContextS
 from app.services.llm_service import LLMService
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
 @pytest.fixture(scope="function")
 def in_memory_engine(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "VAULT_DIR", tmp_path / "vaults")
@@ -97,10 +93,6 @@ def client(in_memory_engine, db_session):
     app.dependency_overrides.clear()
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def _register_and_login(client: TestClient, username: str, password: str) -> dict:
     res = client.post("/api/v1/auth/register", json={"username": username, "password": password})
     assert res.status_code == status.HTTP_201_CREATED
@@ -131,10 +123,6 @@ def _create_vault_and_upload(client, headers, vault_name, doc_text, filename="te
     assert p_res.status_code == status.HTTP_200_OK
     return v_id, d_id
 
-
-# ---------------------------------------------------------------------------
-# Test 1: Successful RAG query (mocked LLM)
-# ---------------------------------------------------------------------------
 
 class TestRAGSuccessfulQuery:
 
@@ -169,10 +157,6 @@ class TestRAGSuccessfulQuery:
         assert mock_llm.generate.called
 
 
-# ---------------------------------------------------------------------------
-# Test 2: JWT authentication requirement
-# ---------------------------------------------------------------------------
-
 class TestRAGJWTRequirement:
 
     def test_rag_query_without_jwt_returns_401(self, client):
@@ -191,10 +175,6 @@ class TestRAGJWTRequirement:
         assert res.status_code == status.HTTP_401_UNAUTHORIZED
 
 
-# ---------------------------------------------------------------------------
-# Test 3: Vault ownership enforcement
-# ---------------------------------------------------------------------------
-
 class TestRAGVaultOwnership:
 
     def test_rag_query_on_nonexistent_vault_returns_404(self, client):
@@ -209,10 +189,6 @@ class TestRAGVaultOwnership:
             )
         assert res.status_code == status.HTTP_404_NOT_FOUND
 
-
-# ---------------------------------------------------------------------------
-# Test 4: Cross-vault isolation
-# ---------------------------------------------------------------------------
 
 class TestRAGCrossVaultIsolation:
 
@@ -232,7 +208,7 @@ class TestRAGCrossVaultIsolation:
             mock_factory.return_value = MagicMock(spec=LLMService)
             res = client.post(
                 "/api/v1/rag/query",
-                headers=headers_b,  # User B queries User A's vault
+                headers=headers_b,
                 json={"vault_id": v_id_a, "query": "What is the salary?"},
             )
 
@@ -264,10 +240,6 @@ class TestRAGCrossVaultIsolation:
         assert res.status_code == status.HTTP_200_OK
 
 
-# ---------------------------------------------------------------------------
-# Test 5: Query embedding failure
-# ---------------------------------------------------------------------------
-
 class TestRAGEmbeddingFailure:
 
     def test_embedding_failure_returns_500(self, client):
@@ -291,10 +263,6 @@ class TestRAGEmbeddingFailure:
 
         assert res.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
-
-# ---------------------------------------------------------------------------
-# Test 6: Vector search failure
-# ---------------------------------------------------------------------------
 
 class TestRAGVectorSearchFailure:
 
@@ -320,10 +288,6 @@ class TestRAGVectorSearchFailure:
         assert res.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
 
-# ---------------------------------------------------------------------------
-# Test 7: No relevant documents
-# ---------------------------------------------------------------------------
-
 class TestRAGNoRelevantDocuments:
 
     def test_query_with_no_matching_chunks_returns_canned_answer(self, client):
@@ -335,14 +299,13 @@ class TestRAGNoRelevantDocuments:
         with patch("app.services.rag_service.get_llm_service") as mock_factory:
             mock_factory.return_value = MagicMock(spec=LLMService)
 
-            # Use impossibly high similarity threshold so no chunks pass
             res = client.post(
                 "/api/v1/rag/query",
                 headers=headers,
                 json={
                     "vault_id": v_id,
                     "query": "What is the weather today?",
-                    "min_similarity": 0.999,  # nothing will score this high
+                    "min_similarity": 0.999,
                 },
             )
 
@@ -353,20 +316,15 @@ class TestRAGNoRelevantDocuments:
         assert "not found" in data["answer"].lower()
 
 
-# ---------------------------------------------------------------------------
-# Test 8: Context size limits enforced
-# ---------------------------------------------------------------------------
-
 class TestContextBuilderSizeLimits:
 
     def test_context_builder_enforces_char_ceiling(self):
         builder = ContextBuilder(
             max_chunks=10,
-            max_context_chars=100,  # very small ceiling
+            max_context_chars=100,
             min_similarity=0.0,
         )
 
-        # Create search results with large text
         results = [
             {
                 "chunk_id": f"chunk-{i}",
@@ -376,13 +334,13 @@ class TestContextBuilderSizeLimits:
                 "character_count": 200,
                 "page_number": None,
                 "similarity_score": 0.9,
-                "text": "A" * 200,  # 200 chars each
+                "text": "A" * 200,
             }
             for i in range(5)
         ]
 
         result = builder.build(results)
-        assert result.total_chars <= 110  # allow slight overhead for delimiters
+        assert result.total_chars <= 110
 
     def test_context_builder_respects_max_chunks(self):
         builder = ContextBuilder(max_chunks=2, max_context_chars=10000, min_similarity=0.0)
@@ -402,10 +360,6 @@ class TestContextBuilderSizeLimits:
         result = builder.build(results)
         assert result.chunks_used <= 2
 
-
-# ---------------------------------------------------------------------------
-# Test 9: Similarity threshold filtering
-# ---------------------------------------------------------------------------
 
 class TestRAGSimilarityThreshold:
 
@@ -430,7 +384,7 @@ class TestRAGSimilarityThreshold:
                 "chunk_index": 1,
                 "character_count": 50,
                 "page_number": None,
-                "similarity_score": 0.20,  # below threshold
+                "similarity_score": 0.20,
                 "text": "Low similarity chunk.",
             },
         ]
@@ -457,10 +411,6 @@ class TestRAGSimilarityThreshold:
         assert result.chunks_used == 0
         assert result.context_text == ""
 
-
-# ---------------------------------------------------------------------------
-# Test 10: Source references in response
-# ---------------------------------------------------------------------------
 
 class TestRAGSourceReferences:
 
@@ -510,10 +460,6 @@ class TestRAGSourceReferences:
         assert source.page_number == 5
 
 
-# ---------------------------------------------------------------------------
-# Test 11: LLM generation failure → 500
-# ---------------------------------------------------------------------------
-
 class TestRAGLLMGenerationFailure:
 
     def test_llm_generation_error_returns_500(self, client):
@@ -538,10 +484,6 @@ class TestRAGLLMGenerationFailure:
 
         assert res.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
-
-# ---------------------------------------------------------------------------
-# Test 12: LLM unavailable → 503
-# ---------------------------------------------------------------------------
 
 class TestRAGLLMUnavailable:
 
@@ -568,10 +510,6 @@ class TestRAGLLMUnavailable:
 
         assert res.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
 
-
-# ---------------------------------------------------------------------------
-# Test 13: LLM configuration — model name from settings
-# ---------------------------------------------------------------------------
 
 class TestRAGLLMConfiguration:
 
@@ -614,10 +552,6 @@ class TestRAGLLMConfiguration:
         assert res.json()["llm_model"] == "custom-model:3b"
 
 
-# ---------------------------------------------------------------------------
-# Test 14: Prompt injection resistance
-# ---------------------------------------------------------------------------
-
 class TestRAGPromptInjection:
 
     def test_prompt_contains_system_instructions_before_context(self):
@@ -657,7 +591,7 @@ class TestRAGPromptInjection:
         context_result = builder.build(results)
         assert "[DOCUMENT EXCERPT" in context_result.context_text, "Context must use DOCUMENT EXCERPT delimiters"
         assert "[END EXCERPT" in context_result.context_text, "Context must close DOCUMENT EXCERPT delimiters"
-        assert injection_text in context_result.context_text  # text is included but delimited
+        assert injection_text in context_result.context_text
 
     def test_llm_generate_is_called_with_delimited_context(self, client):
         """
@@ -698,10 +632,6 @@ class TestRAGPromptInjection:
         assert "[DOCUMENT EXCERPT" in ctx, "Context must use DOCUMENT EXCERPT delimiters"
 
 
-# ---------------------------------------------------------------------------
-# Test 15: Private document text is not logged
-# ---------------------------------------------------------------------------
-
 class TestRAGPrivacyLogging:
 
     def test_document_text_not_present_in_rag_service_logs(self, client, caplog):
@@ -729,7 +659,6 @@ class TestRAGPrivacyLogging:
                 )
 
         assert res.status_code == status.HTTP_200_OK
-        # Secret document text must not appear in rag_service logs
         for record in caplog.records:
             if record.name == "app.services.rag_service":
                 assert secret_text not in record.getMessage(), (
@@ -763,10 +692,6 @@ class TestRAGPrivacyLogging:
         finally:
             llm_logger.removeHandler(cap)
 
-
-# ---------------------------------------------------------------------------
-# Test 16: Multiple documents contribute correctly to context
-# ---------------------------------------------------------------------------
 
 class TestRAGMultipleDocuments:
 
@@ -816,7 +741,6 @@ class TestRAGMultipleDocuments:
         data = res.json()
         assert data["total_chunks_used"] >= 1
         assert len(data["sources"]) >= 1
-        # Verify all sources are from the authorized vault
         for src in data["sources"]:
             assert src["document_id"] in doc_ids
 
@@ -842,8 +766,7 @@ class TestRAGMultipleDocuments:
 
         assert result.chunks_used == 3
         source_doc_ids = {s.document_id for s in result.sources}
-        assert len(source_doc_ids) == 3  # all three documents represented
-        # Filenames correctly mapped
+        assert len(source_doc_ids) == 3
         for src in result.sources:
             assert src.filename is not None
             assert src.filename.startswith("file_")

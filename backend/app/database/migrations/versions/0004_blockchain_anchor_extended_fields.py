@@ -36,8 +36,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # vault_id — soft reference; SET NULL on vault deletion so anchor history
-    # is preserved even after a vault is removed.
     op.add_column(
         "blockchain_anchor_records",
         sa.Column(
@@ -54,7 +52,6 @@ def upgrade() -> None:
         unique=False,
     )
 
-    # last_verified_at — set on every successful or failed verify call
     op.add_column(
         "blockchain_anchor_records",
         sa.Column(
@@ -64,7 +61,6 @@ def upgrade() -> None:
         ),
     )
 
-    # last_verification_result — True / False / None (never checked)
     op.add_column(
         "blockchain_anchor_records",
         sa.Column(
@@ -74,7 +70,6 @@ def upgrade() -> None:
         ),
     )
 
-    # error_message — last failure reason from anchor or verify operations
     op.add_column(
         "blockchain_anchor_records",
         sa.Column(

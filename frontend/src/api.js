@@ -135,47 +135,11 @@ export class CipherixAPI {
           created_at: new Date().toISOString(),
         };
       }
-      return [
-        {
-          vault_id: "063aadc1-1696-43e8-b151-1f1759b713fd",
-          name: "Financial & Security Vault",
-          created_at: "2026-08-15T21:00:00Z",
-          status: "unlocked",
-          document_count: 3,
-        },
-        {
-          vault_id: "7b219e42-990a-48d1-91bc-341e00a881cd",
-          name: "RAG Knowledge Vault",
-          created_at: "2026-08-16T10:15:00Z",
-          status: "unlocked",
-          document_count: 2,
-        },
-      ];
+      return [];
     }
 
     if (endpoint.includes("/documents")) {
-      return [
-        {
-          document_id: "85085a79-9be6-4fee-86a2-1db42e7d1a38",
-          vault_id: "063aadc1-1696-43e8-b151-1f1759b713fd",
-          filename: "security_protocol.txt",
-          mime_type: "text/plain",
-          file_size_bytes: 2048,
-          integrity_hash: "7f7c621d36a26039401f8d91a27e4b93108ab34c112233445566778899aabbcc",
-          processing_status: "processed",
-          created_at: "2026-08-16T11:00:00Z",
-        },
-        {
-          document_id: "aecbd5f8-f5ca-415a-b7d7-dd6d79c1b553",
-          vault_id: "063aadc1-1696-43e8-b151-1f1759b713fd",
-          filename: "blockchain_anchor_spec.pdf",
-          mime_type: "application/pdf",
-          file_size_bytes: 145000,
-          integrity_hash: "c3d15ad30e858a310c95501b6e2ec68c1234567890abcdef1234567890abcdef",
-          processing_status: "processed",
-          created_at: "2026-08-16T11:15:00Z",
-        },
-      ];
+      return { vault_id: "", count: 0, documents: [] };
     }
 
     if (endpoint.includes("/search")) {

@@ -18,7 +18,6 @@ from app.database.models import ComputerAccessAuditLog
 
 logger = get_logger(__name__)
 
-# Standard Audit Event Types for Blockchain
 EVENT_BLOCKCHAIN_ANCHOR_SUCCESS = "blockchain_anchor_success"
 EVENT_BLOCKCHAIN_ANCHOR_FAILURE = "blockchain_anchor_failure"
 EVENT_BLOCKCHAIN_VERIFY_REQUEST = "blockchain_verify_request"
@@ -46,7 +45,6 @@ class AuditService:
             safe_details = {}
             if details:
                 for k, v in details.items():
-                    # Sanitize: NEVER log keys, seed phrases, passwords, or plaintext content
                     if k.lower() in ("content", "password", "key", "seed", "token", "jwt", "plaintext", "vault_key", "master_key"):
                         continue
                     safe_details[k] = v

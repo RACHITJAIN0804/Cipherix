@@ -23,7 +23,6 @@ export function DocumentsView({ user, onLogout }) {
   const [statusMsg, setStatusMsg] = useState('');
   const [dragOver, setDragOver] = useState(false);
 
-  // Verification Modal State
   const [verifyingDoc, setVerifyingDoc] = useState(null);
   const [verifyingLoading, setVerifyingLoading] = useState(false);
   const [verifyResult, setVerifyResult] = useState(null);
@@ -452,7 +451,6 @@ export function DocumentsView({ user, onLogout }) {
         onCancel={() => setDeleteDocId(null)}
       />
 
-      {/* Blockchain Verification Modal */}
       {verifyingDoc && (
         <div className="modal-backdrop">
           <div className="modal-panel" style={{ maxWidth: '560px', width: '90%' }}>

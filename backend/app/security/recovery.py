@@ -39,8 +39,6 @@ _FINGERPRINT_HEX_LEN: int = 16
 _RECOVERY_META_FILENAME: str = "recovery_meta.json"
 
 
-# Version 2 = 16-word (160-bit entropy + 16-bit checksum) — current default.
-# Version 1 = legacy 24-word (256-bit entropy); retained for backward compatibility.
 _SUPPORTED_VERSIONS: frozenset[str] = frozenset({"1", "2"})
 
 

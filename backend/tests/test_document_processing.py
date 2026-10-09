@@ -110,7 +110,6 @@ class TestExtractorCleanerChunkerUnit:
         pdf_bytes = stream.getvalue()
 
         extractor = DocumentExtractor()
-        # Empty/blank page PDF will raise EmptyDocumentError or return text
         with pytest.raises(EmptyDocumentError):
             extractor.extract_text(pdf_bytes, "blank.pdf", "application/pdf")
 
@@ -153,23 +152,19 @@ class TestExtractorCleanerChunkerUnit:
         chunks1 = chunker.chunk_text(sample_text, "doc1", chunk_size=100, chunk_overlap=20)
         chunks2 = chunker.chunk_text(sample_text, "doc1", chunk_size=100, chunk_overlap=20)
 
-        # Deterministic check
         assert len(chunks1) == len(chunks2)
         for c1, c2 in zip(chunks1, chunks2):
             assert c1.chunk_id == c2.chunk_id
             assert c1.text == c2.text
             assert c1.chunk_index == c2.chunk_index
 
-        # Ordering check
         for i, c in enumerate(chunks1):
             assert c.chunk_index == i
 
-        # Overlap check
         if len(chunks1) > 1:
             overlap_tail = chunks1[0].text[-10:]
             assert overlap_tail in chunks1[1].text or chunks1[1].text in chunks1[0].text
 
-        # No text loss check
         combined = " ".join([c.text for c in chunks1])
         for word in ["Sentence", "simple", "important", "topic", "overview"]:
             assert word in combined
@@ -180,14 +175,12 @@ class TestDocumentProcessingPipelineIntegration:
         password = "Password123!"
         headers = _register_and_login(client, "proc_user", password)
 
-        # 1. Create vault
         v_res = client.post("/api/v1/vaults/", headers=headers, json={"name": "Proc Vault", "password": password})
         assert v_res.status_code == status.HTTP_201_CREATED
         v_id = v_res.json()["vault_id"]
 
         client.post(f"/api/v1/vaults/{v_id}/unlock", headers=headers)
 
-        # Upload TXT
         txt_content = b"This is a comprehensive text document for RAG processing testing. It contains multiple sentences to test chunking."
         t_res = client.post(
             f"/api/v1/vaults/{v_id}/documents",
@@ -197,7 +190,6 @@ class TestDocumentProcessingPipelineIntegration:
         assert t_res.status_code == status.HTTP_201_CREATED
         t_doc_id = t_res.json()["document_id"]
 
-        # Process TXT document
         p_res = client.post(
             f"/api/v1/vaults/{v_id}/documents/{t_doc_id}/process",
             headers={**headers, "X-Vault-Password": password},
@@ -209,7 +201,6 @@ class TestDocumentProcessingPipelineIntegration:
         assert len(p_data["chunks"]) == p_data["chunk_count"]
         assert p_data["chunks"][0]["document_id"] == t_doc_id
 
-        # Upload DOCX
         docx_bytes = _create_synthetic_docx(["Sample docx paragraph for processing.", "Another docx paragraph."])
         d_res = client.post(
             f"/api/v1/vaults/{v_id}/documents",
@@ -241,11 +232,9 @@ class TestDocumentProcessingPipelineIntegration:
         )
         doc_id = doc_res.json()["document_id"]
 
-        # Tamper with the encrypted .bin file on disk
         blob_path = settings.VAULT_DIR / v_id / "encrypted" / f"{doc_id}.bin"
         blob_path.write_bytes(b"TAMPERED CIPHERTEXT CONTENT")
 
-        # Processing must fail with 409 Conflict (Integrity error)
         p_res = client.post(
             f"/api/v1/vaults/{v_id}/documents/{doc_id}/process",
             headers={**headers, "X-Vault-Password": password},
@@ -268,7 +257,6 @@ class TestDocumentProcessingPipelineIntegration:
         )
         doc_id = doc_res.json()["document_id"]
 
-        # User 2 attempts to process User 1's document
         p_res = client.post(
             f"/api/v1/vaults/{v_id}/documents/{doc_id}/process",
             headers={**headers2, "X-Vault-Password": pass1},

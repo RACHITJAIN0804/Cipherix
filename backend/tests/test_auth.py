@@ -41,11 +41,6 @@ from app.database.models import Base, User
 from app.main import create_app
 
 
-# ---------------------------------------------------------------------------
-# Test fixtures
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture(scope="function")
 def in_memory_engine():
     """
@@ -106,10 +101,6 @@ def client(db_session: Session, tmp_path):
     _limiter.clear()
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 _REGISTER_URL = "/api/v1/auth/register"
 _LOGIN_URL = "/api/v1/auth/login"
 _ME_URL = "/api/v1/auth/me"
@@ -137,7 +128,6 @@ def _auth_headers(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-
 class TestRegister:
     def test_successful_registration(self, client):
         """POST /register → 201 with registration payload including recovery seed."""
@@ -150,7 +140,6 @@ class TestRegister:
         assert "seed" in data
         assert "access_token" in data
         assert "refresh_token" in data
-        # Seed must be exactly 16 words
         assert len(data["seed"].split()) == 16
 
     def test_password_hash_never_returned(self, client):
@@ -191,7 +180,6 @@ class TestRegister:
         assert resp.json()["username"] == "alice"
 
 
-
 class TestLogin:
     def test_successful_login_returns_tokens(self, client):
         """POST /login → 200 with access_token and refresh_token."""
@@ -230,7 +218,6 @@ class TestLogin:
         data = _login(client).json()
         assert "password" not in data
         assert "password_hash" not in data
-
 
 
 class TestMe:
@@ -289,7 +276,6 @@ class TestMe:
         """GET /me with a refresh token (wrong type) → 401."""
         _register(client)
         refresh_token = _login(client).json()["refresh_token"]
-        # Presenting a refresh token where an access token is required must fail.
         resp = client.get(_ME_URL, headers=_auth_headers(refresh_token))
         assert resp.status_code == status.HTTP_401_UNAUTHORIZED
 
@@ -298,14 +284,12 @@ class TestMe:
         _register(client)
         token = _login(client).json()["access_token"]
 
-        # Deactivate after login (token is still valid, but user is inactive).
         user = db_session.query(User).filter(User.username == _VALID_USERNAME).first()
         user.is_active = False
         db_session.commit()
 
         resp = client.get(_ME_URL, headers=_auth_headers(token))
         assert resp.status_code == status.HTTP_403_FORBIDDEN
-
 
 
 class TestRefresh:
@@ -357,7 +341,6 @@ class TestRefresh:
         ).json()
         resp = client.get(_ME_URL, headers=_auth_headers(new_tokens["access_token"]))
         assert resp.status_code == status.HTTP_200_OK
-
 
 
 class TestJWTManager:
@@ -447,14 +430,12 @@ class TestJWTManager:
         )
 
 
-
 class TestUserModelSecurity:
     """Assert User ORM model does not have plaintext-sensitive columns."""
 
     def test_user_table_has_no_plaintext_password_column(self):
         cols = {c.name for c in User.__table__.columns}
         assert "password" not in cols
-        # password_hash is OK; "password" alone is not.
 
     def test_user_table_has_no_token_column(self):
         cols = {c.name for c in User.__table__.columns}

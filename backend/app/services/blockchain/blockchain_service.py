@@ -72,9 +72,6 @@ class BlockchainService:
         self.adapter: BlockchainAdapter = adapter or _build_default_adapter()
         self._enc_mgr = EncryptionManager()
 
-    # ------------------------------------------------------------------
-    # Health / status
-    # ------------------------------------------------------------------
 
     def get_health(self) -> Dict[str, Any]:
         """Return a health/status dict for the current blockchain connection.

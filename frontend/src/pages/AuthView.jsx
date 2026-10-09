@@ -16,8 +16,7 @@ export function AuthView({ initialMode = 'login', onLoginSuccess }) {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Registration onboarding: after account creation, show seed display
-  const [seedData, setSeedData] = useState(null); // { seed, username, access_token, refresh_token }
+  const [seedData, setSeedData] = useState(null);
 
   React.useEffect(() => {
     setIsRegister(initialMode === 'register');
@@ -46,19 +45,16 @@ export function AuthView({ initialMode = 'login', onLoginSuccess }) {
           method: 'POST',
           body: JSON.stringify({ username: username.trim(), password }),
         });
-        // Store auth state immediately — user is logged in after registration
         if (res.access_token) {
           CipherixAPI.setAuthToken(res.access_token);
           localStorage.setItem('cipherix_username', res.username || username.trim());
         }
-        // Transition to seed display phase — seed stays in JS memory only
         setSeedData({
           seed: res.seed,
           username: res.username || username.trim(),
           access_token: res.access_token,
           refresh_token: res.refresh_token,
         });
-        // Clear password from state
         setPassword('');
         setConfirmPassword('');
       } else {
@@ -83,14 +79,12 @@ export function AuthView({ initialMode = 'login', onLoginSuccess }) {
   };
 
   const handleSeedConfirmed = () => {
-    // Seed has been confirmed — user acknowledged backup, clear seed from state
     const uname = seedData?.username || username.trim();
     setSeedData(null);
     if (onLoginSuccess) onLoginSuccess({ username: uname, role: 'Administrator' });
     navigate('/');
   };
 
-  // Show seed confirmation panel after successful registration
   if (seedData) {
     return (
       <SeedConfirmPanel

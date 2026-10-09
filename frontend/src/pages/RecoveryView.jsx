@@ -21,20 +21,16 @@ export function RecoveryView({ user, onLogout }) {
   const [vaults, setVaults] = useState([]);
   const [selectedVaultId, setSelectedVaultId] = useState('');
   
-  // Setup wizard step: 1 = Password Input, 2 = Display 4x4 Grid, 3 = Confirm Words, 4 = Complete
   const [step, setStep] = useState(1);
-  
-  // Form & Seed states
   const [vaultPassword, setVaultPassword] = useState('');
-  const [seedWords, setSeedWords] = useState([]); // In-memory ONLY, cleared on complete/unmount
-  const [confirmPositions, setConfirmPositions] = useState([]); // Indices (e.g. [2, 7, 13])
-  const [confirmInputs, setConfirmInputs] = useState({}); // { 2: "word1", 7: "word2", 13: "word3" }
+  const [seedWords, setSeedWords] = useState([]);
+  const [confirmPositions, setConfirmPositions] = useState([]);
+  const [confirmInputs, setConfirmInputs] = useState({});
   
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Memory cleanup on unmount
   useEffect(() => {
     return () => {
       setSeedWords([]);
@@ -56,7 +52,6 @@ export function RecoveryView({ user, onLogout }) {
     loadVaults();
   }, []);
 
-  // Reset wizard flow state
   const resetFlow = () => {
     setStep(1);
     setVaultPassword('');
@@ -67,7 +62,6 @@ export function RecoveryView({ user, onLogout }) {
     setCopied(false);
   };
 
-  // Step 1 -> Step 2: Call API with password
   const handleGenerateSeed = async (e) => {
     e.preventDefault();
     if (!selectedVaultId) {
@@ -98,7 +92,7 @@ export function RecoveryView({ user, onLogout }) {
       }
 
       setSeedWords(words);
-      setVaultPassword(''); // Clear password from memory after request
+      setVaultPassword('');
       setStep(2);
     } catch (err) {
       setError(err.message || 'Seed Generation Failed.');
@@ -107,9 +101,7 @@ export function RecoveryView({ user, onLogout }) {
     }
   };
 
-  // Step 2 -> Step 3: Select 3 random word positions for confirmation
   const handleStartConfirmation = () => {
-    // Pick 3 unique random indices from 0..15
     const indices = [];
     while (indices.length < 3) {
       const rand = Math.floor(Math.random() * 16);
@@ -124,7 +116,6 @@ export function RecoveryView({ user, onLogout }) {
     setStep(3);
   };
 
-  // Step 3 -> Step 4: Verify entered confirmation words against in-memory seedWords
   const handleVerifyConfirmation = (e) => {
     e.preventDefault();
     setError('');
@@ -146,7 +137,6 @@ export function RecoveryView({ user, onLogout }) {
       }
     }
 
-    // Confirmation successful! Clear plaintext seed from memory
     setSeedWords([]);
     setConfirmInputs({});
     setStep(4);
@@ -177,7 +167,6 @@ export function RecoveryView({ user, onLogout }) {
         <VaultSelector vaults={vaults} selectedVaultId={selectedVaultId} onChange={(id) => { setSelectedVaultId(id); resetFlow(); }} />
       </PageHeader>
 
-      {/* Progress Steps Indicator */}
       <div
         className="glass-panel"
         style={{
@@ -243,7 +232,6 @@ export function RecoveryView({ user, onLogout }) {
 
       {error && <ErrorState message={error} />}
 
-      {/* STEP 1: Generate & Authenticate */}
       {step === 1 && (
         <div
           className="glass-panel"
@@ -304,7 +292,6 @@ export function RecoveryView({ user, onLogout }) {
         </div>
       )}
 
-      {/* STEP 2: Display 4x4 Grid & Backup */}
       {step === 2 && (
         <div
           className="glass-panel"
@@ -345,7 +332,6 @@ export function RecoveryView({ user, onLogout }) {
             </div>
           </div>
 
-          {/* 4x4 Word Grid */}
           <div
             style={{
               display: 'grid',
@@ -424,7 +410,6 @@ export function RecoveryView({ user, onLogout }) {
         </div>
       )}
 
-      {/* STEP 3: Confirm Random Words */}
       {step === 3 && (
         <div
           className="glass-panel"
@@ -501,7 +486,6 @@ export function RecoveryView({ user, onLogout }) {
         </div>
       )}
 
-      {/* STEP 4: Complete */}
       {step === 4 && (
         <div
           className="glass-panel"

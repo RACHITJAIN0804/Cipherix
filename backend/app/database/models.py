@@ -385,7 +385,6 @@ class BlockchainAnchorRecord(Base):
         String(32), nullable=False, default="anchored"
     )
 
-    # --- Verification tracking (migration 0004) --------------------------
 
     last_verified_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True),
@@ -415,7 +414,6 @@ class BlockchainAnchorRecord(Base):
         ),
     )
 
-    # --- Audit timestamps ------------------------------------------------
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -429,7 +427,6 @@ class BlockchainAnchorRecord(Base):
         onupdate=func.now(),
     )
 
-    # --- Relationships ----------------------------------------------------
 
     document: Mapped[Optional["Document"]] = relationship(
         "Document",

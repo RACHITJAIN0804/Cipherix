@@ -46,11 +46,6 @@ from app.services.blockchain import BlockchainService, LocalBlockchainAdapter
 from app.storage.document_manager import DocumentManager
 
 
-# ---------------------------------------------------------------------------
-# Test Fixtures
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture(scope="function")
 def in_memory_engine(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "VAULT_DIR", tmp_path / "vaults")
@@ -139,11 +134,6 @@ def _upload_document(
     return resp.json()["document_id"]
 
 
-# ---------------------------------------------------------------------------
-# Test Cases
-# ---------------------------------------------------------------------------
-
-
 def test_1_successful_hash_anchoring(client: TestClient):
     token, _ = _register_and_login(client, "anchor_user")
     vault_id = _create_vault(client, token)
@@ -171,7 +161,6 @@ def test_2_successful_verification(client: TestClient):
     doc_id = _upload_document(client, token, vault_id)
     headers = {"Authorization": f"Bearer {token}"}
 
-    # Anchor first
     anchor_resp = client.post(
         "/api/v1/blockchain/anchor",
         headers=headers,
@@ -179,7 +168,6 @@ def test_2_successful_verification(client: TestClient):
     )
     assert anchor_resp.status_code == status.HTTP_200_OK
 
-    # Verify
     verify_resp = client.post(
         "/api/v1/blockchain/verify",
         headers=headers,
@@ -199,18 +187,15 @@ def test_3_hash_mismatch_detection(client: TestClient, db_session: Session):
     doc_id = _upload_document(client, token, vault_id, content=b"Original content")
     headers = {"Authorization": f"Bearer {token}"}
 
-    # Anchor original document
     client.post(
         "/api/v1/blockchain/anchor",
         headers=headers,
         json={"vault_id": vault_id, "document_id": doc_id},
     )
 
-    # Tamper with the encrypted blob on disk
     blob_path = settings.VAULT_DIR / vault_id / "encrypted" / f"{doc_id}.bin"
     blob_path.write_bytes(b"TAMPERED_CIPHERTEXT_BYTES_1234567890")
 
-    # Verify -> should detect hash mismatch
     verify_resp = client.post(
         "/api/v1/blockchain/verify",
         headers=headers,
@@ -229,7 +214,6 @@ def test_4_unauthorized_user_cannot_anchor_another_users_document(client: TestCl
     vault_a = _create_vault(client, token_a)
     doc_a = _upload_document(client, token_a, vault_a)
 
-    # User B attempts to anchor User A's document -> 404
     headers_b = {"Authorization": f"Bearer {token_b}"}
     resp = client.post(
         "/api/v1/blockchain/anchor",
@@ -246,14 +230,12 @@ def test_5_unauthorized_user_cannot_verify_another_users_document(client: TestCl
     vault_a = _create_vault(client, token_a)
     doc_a = _upload_document(client, token_a, vault_a)
 
-    # Anchor by User A
     client.post(
         "/api/v1/blockchain/anchor",
         headers={"Authorization": f"Bearer {token_a}"},
         json={"vault_id": vault_a, "document_id": doc_a},
     )
 
-    # User B attempts to verify User A's document -> 404
     headers_b = {"Authorization": f"Bearer {token_b}"}
     resp = client.post(
         "/api/v1/blockchain/verify",
@@ -270,7 +252,6 @@ def test_6_cross_vault_access_is_rejected(client: TestClient):
     doc_v1 = _upload_document(client, token_a, vault_1)
 
     headers = {"Authorization": f"Bearer {token_a}"}
-    # Pass doc_v1 with wrong vault_2 ID -> 404
     resp = client.post(
         "/api/v1/blockchain/anchor",
         headers=headers,
@@ -285,7 +266,6 @@ def test_7_client_provided_fake_hash_is_rejected_or_ignored(client: TestClient):
     doc_id = _upload_document(client, token, vault_id)
     headers = {"Authorization": f"Bearer {token}"}
 
-    # API request body ONLY accepts vault_id and document_id (ignores any custom hash attempt)
     resp = client.post(
         "/api/v1/blockchain/anchor",
         headers=headers,
@@ -296,7 +276,6 @@ def test_7_client_provided_fake_hash_is_rejected_or_ignored(client: TestClient):
         },
     )
     assert resp.status_code == status.HTTP_200_OK
-    # Integrity hash anchored MUST match actual document ciphertext hash, not fake_hash
     db_doc = client.get(f"/api/v1/blockchain/anchor/{doc_id}?vault_id={vault_id}", headers=headers)
     assert db_doc.status_code == status.HTTP_200_OK
     assert db_doc.json()["integrity_hash"] != "0000000000000000000000000000000000000000000000000000000000000000"
@@ -308,7 +287,6 @@ def test_8_duplicate_anchor_behavior(client: TestClient):
     doc_id = _upload_document(client, token, vault_id)
     headers = {"Authorization": f"Bearer {token}"}
 
-    # First anchor
     resp1 = client.post(
         "/api/v1/blockchain/anchor",
         headers=headers,
@@ -317,7 +295,6 @@ def test_8_duplicate_anchor_behavior(client: TestClient):
     assert resp1.status_code == status.HTTP_200_OK
     tx1 = resp1.json()["tx_hash"]
 
-    # Second anchor -> returns idempotent existing record
     resp2 = client.post(
         "/api/v1/blockchain/anchor",
         headers=headers,
@@ -334,7 +311,6 @@ def test_9_anchor_not_found_behavior(client: TestClient):
     non_existent_doc_id = str(uuid.uuid4())
     headers = {"Authorization": f"Bearer {token}"}
 
-    # GET anchor for non-existent/unanchored document -> 404 Not Found
     resp = client.get(f"/api/v1/blockchain/anchor/{non_existent_doc_id}?vault_id={vault_id}", headers=headers)
     assert resp.status_code == status.HTTP_404_NOT_FOUND
 
@@ -345,7 +321,6 @@ def test_10_blockchain_unavailable_behavior(client: TestClient, monkeypatch):
     doc_id = _upload_document(client, token, vault_id)
     headers = {"Authorization": f"Bearer {token}"}
 
-    # Simulate blockchain disabled in settings
     monkeypatch.setattr(settings, "blockchain_enabled", False)
 
     resp = client.post(
@@ -419,7 +394,6 @@ def test_14_no_encryption_keys_stored_in_blockchain_records(
     for rec in records:
         assert len(rec.integrity_hash) == 64
         assert len(rec.privacy_reference) == 64
-        # Confirm fields only contain hex digests and standard identifiers
         int(rec.integrity_hash, 16)
         int(rec.privacy_reference, 16)
 
@@ -440,7 +414,7 @@ def test_15_no_recovery_seed_stored_in_blockchain_records(
 
     records = db_session.query(BlockchainAnchorRecord).all()
     for rec in records:
-        assert "abandon" not in rec.privacy_reference  # BIP-39 word test
+        assert "abandon" not in rec.privacy_reference
         assert "zoo" not in rec.privacy_reference
 
 
@@ -467,13 +441,11 @@ def test_17_existing_document_integrity_hash_is_reused(client: TestClient, db_se
     vault_id = _create_vault(client, token)
     doc_id = _upload_document(client, token, vault_id)
 
-    # Get document record from DB
     doc_rec = db_session.get(DocumentRecord, doc_id)
     assert doc_rec is not None
     stored_hash = doc_rec.integrity_hash
     assert stored_hash is not None
 
-    # Anchor hash
     headers = {"Authorization": f"Bearer {token}"}
     anchor_resp = client.post(
         "/api/v1/blockchain/anchor",

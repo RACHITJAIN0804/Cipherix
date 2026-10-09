@@ -10,27 +10,15 @@ import {
 } from 'lucide-react';
 import { PageTransition } from './PageTransition';
 
-/**
- * SeedConfirmPanel
- *
- * Displayed immediately after account registration.  Shows the 16-word
- * recovery seed exactly once, requires the user to verify three random
- * words to confirm they have backed it up, then calls onConfirmed().
- *
- * The plaintext seed exists only in React state here and is cleared after
- * confirmation.  It is never written to localStorage, sessionStorage, URL,
- * or any other persistent storage.
- */
 export function SeedConfirmPanel({ seed, username, onConfirmed }) {
   const [seedWords] = useState(() => (seed || '').trim().split(/\s+/).filter(Boolean));
-  const [step, setStep] = useState(1); // 1 = display, 2 = confirm words, 3 = complete
+  const [step, setStep] = useState(1);
   const [copied, setCopied] = useState(false);
   const [confirmPositions, setConfirmPositions] = useState([]);
   const [confirmInputs, setConfirmInputs] = useState({});
   const [error, setError] = useState('');
   const [checkedWarning, setCheckedWarning] = useState(false);
 
-  // Memory hygiene on unmount
   useEffect(() => {
     return () => {
       setConfirmInputs({});
@@ -105,7 +93,6 @@ export function SeedConfirmPanel({ seed, username, onConfirmed }) {
           overflow: 'hidden',
         }}
       >
-        {/* Ambient glow */}
         <div
           style={{
             position: 'fixed',
@@ -127,7 +114,6 @@ export function SeedConfirmPanel({ seed, username, onConfirmed }) {
             zIndex: 10,
           }}
         >
-          {/* Header */}
           <div
             style={{
               textAlign: 'center',
@@ -174,7 +160,6 @@ export function SeedConfirmPanel({ seed, username, onConfirmed }) {
             </p>
           </div>
 
-          {/* Progress indicator */}
           <div
             style={{
               display: 'flex',
@@ -244,7 +229,6 @@ export function SeedConfirmPanel({ seed, username, onConfirmed }) {
             })}
           </div>
 
-          {/* Error */}
           {error && (
             <div
               style={{
@@ -265,7 +249,6 @@ export function SeedConfirmPanel({ seed, username, onConfirmed }) {
             </div>
           )}
 
-          {/* STEP 1: Display 4×4 seed grid */}
           {step === 1 && (
             <div
               style={{
@@ -279,7 +262,6 @@ export function SeedConfirmPanel({ seed, username, onConfirmed }) {
                 gap: '20px',
               }}
             >
-              {/* Warning banner */}
               <div
                 style={{
                   padding: '14px 16px',
@@ -304,7 +286,6 @@ export function SeedConfirmPanel({ seed, username, onConfirmed }) {
                 </div>
               </div>
 
-              {/* 4×4 word grid */}
               <div
                 style={{
                   display: 'grid',
@@ -353,7 +334,6 @@ export function SeedConfirmPanel({ seed, username, onConfirmed }) {
                 ))}
               </div>
 
-              {/* Copy button */}
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <button
                   type="button"
@@ -385,7 +365,6 @@ export function SeedConfirmPanel({ seed, username, onConfirmed }) {
                 </button>
               </div>
 
-              {/* Confirmation checkbox */}
               <label
                 style={{
                   display: 'flex',
@@ -420,7 +399,6 @@ export function SeedConfirmPanel({ seed, username, onConfirmed }) {
                 </span>
               </label>
 
-              {/* Continue button */}
               <button
                 type="button"
                 onClick={handleStartConfirmation}
@@ -451,7 +429,6 @@ export function SeedConfirmPanel({ seed, username, onConfirmed }) {
             </div>
           )}
 
-          {/* STEP 2: Verify 3 random words */}
           {step === 2 && (
             <div
               style={{
@@ -575,7 +552,6 @@ export function SeedConfirmPanel({ seed, username, onConfirmed }) {
             </div>
           )}
 
-          {/* STEP 3: Complete */}
           {step === 3 && (
             <div
               style={{

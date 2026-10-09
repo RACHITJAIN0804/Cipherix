@@ -33,26 +33,17 @@ from app.core.logger import configure_logging, get_logger
 configure_logging()
 logger = get_logger("blockchain.test_ganache_service")
 
-# ---------------------------------------------------------------------------
-# Sample test data — stable values used across all test steps
-# ---------------------------------------------------------------------------
 
 SAMPLE_DOCUMENT_ID = "test-doc-a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 SAMPLE_VAULT_ID    = "test-vault-cafebabe-dead-beef-0000-111122223333"
 
-# Simulate a SHA-256 of an encrypted ciphertext blob
 CORRECT_HASH   = "0x" + hashlib.sha256(b"encrypted-ciphertext-sample-payload-v1").hexdigest()
 DIFFERENT_HASH = "0x" + hashlib.sha256(b"tampered-ciphertext-completely-different").hexdigest()
 
-# privacy_reference mimics the HMAC the service would produce
 PRIVACY_REF = hashlib.sha256(
     f"cipherix:privacy_ref:{SAMPLE_DOCUMENT_ID}:{SAMPLE_VAULT_ID}".encode()
 ).hexdigest()
 
-
-# ---------------------------------------------------------------------------
-# Test helpers
-# ---------------------------------------------------------------------------
 
 _PASS = "[PASS]"
 _FAIL = "[FAIL]"
@@ -74,10 +65,6 @@ def _result(label: str, ok: bool, detail: str = "") -> None:
     if not ok:
         print(f"         Detail: {detail}")
 
-
-# ---------------------------------------------------------------------------
-# Test steps
-# ---------------------------------------------------------------------------
 
 def step_health(adapter) -> bool:
     _section("Step 1 — Health check")
@@ -150,7 +137,7 @@ def step_verify_correct(adapter) -> bool:
         matched = adapter.verify_anchor(
             privacy_reference=PRIVACY_REF,
             integrity_hash=CORRECT_HASH,
-            tx_hash="",   # unused by GanacheAdapter
+            tx_hash="",
         )
         _result("Correct hash matches on-chain record", matched, f"matched={matched}")
         return matched
@@ -183,7 +170,6 @@ def step_duplicate_anchor(adapter) -> bool:
             privacy_reference=PRIVACY_REF,
             integrity_hash=CORRECT_HASH,
         )
-        # Should have raised — no exception means duplicate slipped through
         _result("Duplicate rejected with AnchorAlreadyExistsError", False, "No exception raised!")
         return False
     except AnchorAlreadyExistsError:
@@ -193,10 +179,6 @@ def step_duplicate_anchor(adapter) -> bool:
         _result("Unexpected exception type", False, f"{type(exc).__name__}: {exc}")
         return False
 
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 
 def main() -> None:
     logger.info("=== Cipherix — GanacheAdapter Integration Test ===")
@@ -210,7 +192,6 @@ def main() -> None:
     print(f"  correct_hash      : {CORRECT_HASH[:32]}...")
     print(f"  different_hash    : {DIFFERENT_HASH[:32]}...")
 
-    # Import here so sys.path is set up first
     from app.services.blockchain.adapters.ganache import GanacheAdapter
 
     try:
@@ -232,7 +213,6 @@ def main() -> None:
     results.append(("verify_anchor (tampered)",   step_verify_wrong(adapter)))
     results.append(("Duplicate prevention",       step_duplicate_anchor(adapter)))
 
-    # Summary
     print()
     print("=" * 60)
     print("  SUMMARY")

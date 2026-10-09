@@ -127,12 +127,10 @@ def test_upload_records_blockchain_hash(client: TestClient, db_session: Session)
     assert resp.status_code == status.HTTP_201_CREATED
     doc_id = resp.json()["document_id"]
 
-    # Verify Document record in DB
     doc_rec = db_session.get(DocumentRecord, doc_id)
     assert doc_rec is not None
     assert doc_rec.vault_id == vault_id
 
-    # Verify BlockchainAnchorRecord in DB
     anchor_rec = (
         db_session.query(BlockchainAnchorRecord)
         .filter(BlockchainAnchorRecord.document_id == doc_id)
@@ -146,7 +144,6 @@ def test_upload_records_blockchain_hash(client: TestClient, db_session: Session)
     assert anchor_rec.tx_hash.startswith("0x")
     assert anchor_rec.created_at is not None
 
-    # Read encrypted blob from disk and verify exact SHA-256 match
     blob_path = settings.VAULT_DIR / vault_id / "encrypted" / f"{doc_id}.bin"
     assert blob_path.is_file()
     ciphertext = blob_path.read_bytes()
@@ -155,7 +152,6 @@ def test_upload_records_blockchain_hash(client: TestClient, db_session: Session)
     assert anchor_rec.integrity_hash == expected_sha256
     assert doc_rec.integrity_hash == expected_sha256
 
-    # Verify privacy principles
     assert file_content.decode("utf-8") not in anchor_rec.integrity_hash
     assert file_content.decode("utf-8") not in anchor_rec.privacy_reference
 
@@ -164,7 +160,6 @@ def test_upload_rollback_on_blockchain_failure(client: TestClient, db_session: S
     token, user_id = _register_and_login(client, "upload_fail")
     vault_id = _create_and_unlock_vault(client, token)
 
-    # Disable local blockchain adapter to simulate RPC network failure
     local_adapter.set_available(False)
 
     file_content = b"This upload should fail cleanly without corrupting state."
@@ -177,15 +172,12 @@ def test_upload_rollback_on_blockchain_failure(client: TestClient, db_session: S
     )
     assert resp.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
-    # Verify NO DocumentRecord exists in DB
     doc_recs = db_session.query(DocumentRecord).filter(DocumentRecord.vault_id == vault_id).all()
     assert len(doc_recs) == 0
 
-    # Verify NO BlockchainAnchorRecord exists in DB
     anchor_recs = db_session.query(BlockchainAnchorRecord).filter(BlockchainAnchorRecord.vault_id == vault_id).all()
     assert len(anchor_recs) == 0
 
-    # Verify NO leftover blob or metadata files on disk
     vault_encrypted_dir = settings.VAULT_DIR / vault_id / "encrypted"
     if vault_encrypted_dir.is_dir():
         files_on_disk = list(vault_encrypted_dir.glob("*.bin"))
@@ -201,7 +193,6 @@ def test_upload_when_blockchain_disabled(client: TestClient, db_session: Session
     token, user_id = _register_and_login(client, "upload_disabled_bc")
     vault_id = _create_and_unlock_vault(client, token)
 
-    # Disable blockchain in settings
     monkeypatch.setattr(settings, "blockchain_enabled", False)
 
     file_content = b"Document uploaded when blockchain is disabled in config."
@@ -215,11 +206,9 @@ def test_upload_when_blockchain_disabled(client: TestClient, db_session: Session
     assert resp.status_code == status.HTTP_201_CREATED
     doc_id = resp.json()["document_id"]
 
-    # Document should exist in DB and filesystem
     doc_rec = db_session.get(DocumentRecord, doc_id)
     assert doc_rec is not None
 
-    # No blockchain anchor record created
     anchor_rec = (
         db_session.query(BlockchainAnchorRecord)
         .filter(BlockchainAnchorRecord.document_id == doc_id)

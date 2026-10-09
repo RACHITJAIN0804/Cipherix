@@ -88,7 +88,6 @@ def client(db_session: Session, local_adapter: LocalBlockchainAdapter, monkeypat
 
 
 def test_step10_end_to_end_flow(client: TestClient, db_session: Session):
-    # TEST 1: Register/login user.
     username = f"step10_user_{uuid.uuid4().hex[:6]}"
     password = "SecurePassword123!"
     reg = client.post("/api/v1/auth/register", json={"username": username, "password": password})
@@ -100,7 +99,6 @@ def test_step10_end_to_end_flow(client: TestClient, db_session: Session):
     token = login.json()["access_token"]
     auth_headers = {"Authorization": f"Bearer {token}"}
 
-    # TEST 2: Create a vault.
     vault_name = "E2E Test Vault"
     vault_pass = "VaultPass123!"
     v_resp = client.post(
@@ -118,7 +116,6 @@ def test_step10_end_to_end_flow(client: TestClient, db_session: Session):
     )
     assert unlock_resp.status_code == status.HTTP_200_OK, "TEST 2 Failed: Vault unlock"
 
-    # TEST 3: Upload a document.
     original_content = b"Confidential Financial Audit Report - Step 10 E2E Verification Document Data"
     files = {"file": ("audit_report.pdf", io.BytesIO(original_content), "application/pdf")}
     up_resp = client.post(
@@ -129,18 +126,15 @@ def test_step10_end_to_end_flow(client: TestClient, db_session: Session):
     assert up_resp.status_code == status.HTTP_201_CREATED, "TEST 3 Failed: Document upload"
     doc_id = up_resp.json()["document_id"]
 
-    # TEST 4: Confirm document is encrypted and stored normally.
     blob_path = settings.VAULT_DIR / vault_id / "encrypted" / f"{doc_id}.bin"
     assert blob_path.is_file(), "TEST 4 Failed: Encrypted blob missing on disk"
     ciphertext = blob_path.read_bytes()
     assert ciphertext != original_content, "TEST 4 Failed: Blob is not encrypted"
 
-    # TEST 5: Confirm SHA-256 hash is generated.
     doc_rec = db_session.get(DocumentRecord, doc_id)
     assert doc_rec is not None, "TEST 5 Failed: Document record missing in DB"
     assert doc_rec.integrity_hash is not None and len(doc_rec.integrity_hash) == 64, "TEST 5 Failed: Invalid SHA-256 hash"
 
-    # TEST 6 & 7: Confirm hash recorded on local blockchain & transaction info stored in DB.
     anchor_rec = (
         db_session.query(BlockchainAnchorRecord)
         .filter(BlockchainAnchorRecord.document_id == doc_id)
@@ -151,7 +145,6 @@ def test_step10_end_to_end_flow(client: TestClient, db_session: Session):
     assert anchor_rec.block_number > 0, "TEST 7 Failed: Missing block_number"
     assert anchor_rec.integrity_hash == doc_rec.integrity_hash, "TEST 6 Failed: Hash mismatch"
 
-    # TEST 8 & 9: Run "Verify Integrity" & confirm calculated hash matches blockchain hash & verification succeeds.
     ver_resp = client.post(
         "/api/v1/blockchain/verify",
         headers=auth_headers,
@@ -163,11 +156,9 @@ def test_step10_end_to_end_flow(client: TestClient, db_session: Session):
     assert ver_data["integrity_match"] is True, "TEST 9 Failed: Integrity match false"
     assert ver_data["blockchain_match"] is True, "TEST 9 Failed: Blockchain match false"
 
-    # TEST 10: Modify/corrupt stored encrypted document in controlled test environment.
     tampered_bytes = b"TAMPERED_CIPHERTEXT_HEADER_AND_BODY_DATA"
     blob_path.write_bytes(tampered_bytes)
 
-    # TEST 11: Run verification again and confirm hash mismatch is detected.
     ver_resp_tampered = client.post(
         "/api/v1/blockchain/verify",
         headers=auth_headers,
@@ -178,7 +169,6 @@ def test_step10_end_to_end_flow(client: TestClient, db_session: Session):
     assert tampered_data["verified"] is False, "TEST 11 Failed: Mismatch not detected"
     assert tampered_data["blockchain_match"] is False, "TEST 11 Failed: Blockchain match true on tampered file"
 
-    # TEST 12: Confirm mismatch is recorded in Activity/Audit system.
     audit_logs = db_session.scalars(
         select(ComputerAccessAuditLog).where(
             ComputerAccessAuditLog.user_id == user_id,
@@ -188,7 +178,6 @@ def test_step10_end_to_end_flow(client: TestClient, db_session: Session):
     assert len(audit_logs) >= 1, "TEST 12 Failed: Mismatch audit event missing"
     assert audit_logs[0].result_status == "FAILED"
 
-    # TEST 13: Restore test document and verify successful integrity again.
     blob_path.write_bytes(ciphertext)
     ver_resp_restored = client.post(
         "/api/v1/blockchain/verify",

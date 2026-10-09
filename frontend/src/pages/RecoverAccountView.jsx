@@ -60,7 +60,6 @@ export function RecoverAccountView({ onLoginSuccess }) {
         }),
       });
 
-      // Clear sensitive form state immediately after request completes
       setSeed('');
       setNewPassword('');
       setConfirmPassword('');
@@ -141,7 +140,6 @@ export function RecoverAccountView({ onLoginSuccess }) {
             zIndex: 10,
           }}
         >
-          {/* Header */}
           <div style={{ textAlign: 'center', marginBottom: '28px' }}>
             <div
               style={{
@@ -216,7 +214,6 @@ export function RecoverAccountView({ onLoginSuccess }) {
           )}
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Username */}
             <div>
               <label
                 style={{
@@ -261,7 +258,6 @@ export function RecoverAccountView({ onLoginSuccess }) {
               </div>
             </div>
 
-            {/* 16-Word Recovery Seed */}
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <label
@@ -310,7 +306,6 @@ export function RecoverAccountView({ onLoginSuccess }) {
               />
             </div>
 
-            {/* New Password */}
             <div>
               <label
                 style={{
@@ -374,7 +369,6 @@ export function RecoverAccountView({ onLoginSuccess }) {
               </div>
             </div>
 
-            {/* Confirm New Password */}
             <div>
               <label
                 style={{

@@ -63,7 +63,11 @@ class VaultResponse(_VaultBase):
 
 
 class VaultSummary(_VaultBase):
-    pass
+    document_count: int = Field(
+        default=0,
+        description="Total number of encrypted documents stored in this vault.",
+        examples=[0, 3],
+    )
 
 
 class VaultStateResponse(BaseModel):

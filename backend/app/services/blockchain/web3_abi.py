@@ -23,18 +23,11 @@ from typing import Optional
 from web3 import Web3
 from web3.contract import Contract
 
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
 
 _BUILD_DIR = Path(__file__).parent / "contracts" / "build"
 _ABI_PATH = _BUILD_DIR / "DocumentIntegrity.abi.json"
 _DEPLOYMENT_PATH = _BUILD_DIR / "deployment.json"
 
-
-# ---------------------------------------------------------------------------
-# ABI loader
-# ---------------------------------------------------------------------------
 
 def load_abi() -> list:
     """Load the DocumentIntegrity ABI from the compiled build artifact.
@@ -69,10 +62,6 @@ def load_deployment() -> dict:
         )
     return json.loads(_DEPLOYMENT_PATH.read_text(encoding="utf-8"))
 
-
-# ---------------------------------------------------------------------------
-# Encoding helpers
-# ---------------------------------------------------------------------------
 
 def str_to_bytes32(value: str) -> bytes:
     """SHA-256 hash a string to a bytes32 value for on-chain use.
@@ -114,10 +103,6 @@ def bytes32_to_hex(value: bytes) -> str:
     return "0x" + value.hex()
 
 
-# ---------------------------------------------------------------------------
-# Contract wrapper
-# ---------------------------------------------------------------------------
-
 class DocumentIntegrityContract:
     """High-level wrapper around the ``DocumentIntegrity`` Solidity contract.
 
@@ -146,9 +131,6 @@ class DocumentIntegrityContract:
         self._private_key = private_key
         self._deployer_address = Web3.to_checksum_address(deployer_address)
 
-    # ------------------------------------------------------------------
-    # Constructors
-    # ------------------------------------------------------------------
 
     @classmethod
     def from_deployment(
@@ -176,7 +158,6 @@ class DocumentIntegrityContract:
         resolved_deployer = deployer_address or deployment["deployerAddress"]
 
         if private_key is None:
-            # Fall back to settings
             from app.services.blockchain.config import get_blockchain_config
             cfg = get_blockchain_config()
             private_key = cfg.private_key
@@ -217,9 +198,6 @@ class DocumentIntegrityContract:
         )
         return cls(w3, contract, private_key, deployer_address)
 
-    # ------------------------------------------------------------------
-    # Internal transaction helper
-    # ------------------------------------------------------------------
 
     def _send_tx(self, fn) -> str:  # type: ignore[type-arg]
         """Build, sign, and broadcast a transaction. Returns the tx hash."""
@@ -240,9 +218,6 @@ class DocumentIntegrityContract:
         self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         return "0x" + tx_hash.hex()
 
-    # ------------------------------------------------------------------
-    # Write functions (require gas / signing)
-    # ------------------------------------------------------------------
 
     def record_hash(
         self,
@@ -271,9 +246,6 @@ class DocumentIntegrityContract:
         fn = self._contract.functions.recordHash(doc_id_b32, vault_id_b32, doc_hash_b32)
         return self._send_tx(fn)
 
-    # ------------------------------------------------------------------
-    # Read functions (no gas, no signing)
-    # ------------------------------------------------------------------
 
     def get_record(self, document_id: str) -> dict:
         """Retrieve the full record for a document.

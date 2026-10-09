@@ -27,7 +27,6 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.database.models import Base, Document, SecurityMetadata, Vault
 
 
-
 @pytest.fixture(scope="function")
 def in_memory_engine():
     """
@@ -37,7 +36,6 @@ def in_memory_engine():
     leaks between them.
     """
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
-    # Enable FK enforcement (SQLite off by default).
     with engine.connect() as conn:
         conn.execute(text("PRAGMA foreign_keys=ON"))
         conn.commit()
@@ -62,7 +60,6 @@ def db_session(in_memory_engine):
         session.close()
 
 
-
 def _new_vault_id() -> str:
     return str(uuid.uuid4())
 
@@ -85,10 +82,9 @@ def _sample_security_metadata(vault_id: str) -> SecurityMetadata:
         vault_id=vault_id,
         key_version="1",
         encryption_algorithm="AES-256-GCM",
-        # encrypted_vault_key is CIPHERTEXT — a Base64 placeholder here.
-        encrypted_vault_key="AAECBAUGB/8=",  # safe fake ciphertext (Base64)
-        nonce="AAAAAAAAAAAAAAAA",             # 12-byte nonce (Base64)
-        salt="deadbeef" * 8,                   # 32-byte hex salt
+        encrypted_vault_key="AAECBAUGB/8=",
+        nonce="AAAAAAAAAAAAAAAA",
+        salt="deadbeef" * 8,
         argon2_time_cost=3,
         argon2_memory_cost=65536,
         argon2_parallelism=4,
@@ -115,7 +111,6 @@ def _sample_document(vault_id: str) -> Document:
         created_at=now,
         updated_at=now,
     )
-
 
 
 class TestDatabaseInitialisation:
@@ -156,7 +151,6 @@ class TestDatabaseInitialisation:
             "created_at", "updated_at",
         }
         assert expected.issubset(cols)
-
 
 
 class TestVaultRecord:
@@ -205,7 +199,6 @@ class TestVaultRecord:
         vault = _sample_vault("My Vault")
         assert "My Vault" in repr(vault)
         assert "locked" in repr(vault)
-
 
 
 class TestSecurityMetadataRecord:
@@ -274,7 +267,6 @@ class TestSecurityMetadataRecord:
 
         sec = _sample_security_metadata(vault.id)
         assert "AES-256-GCM" in repr(sec)
-
 
 
 class TestDocumentRecord:
@@ -349,7 +341,6 @@ class TestDocumentRecord:
         assert len(fetched_vault.documents) == 3
 
 
-
 class TestCascadeDelete:
     def test_delete_vault_cascades_to_documents(self, db_session: Session):
         vault = _sample_vault()
@@ -402,7 +393,6 @@ class TestCascadeDelete:
             assert db_session.get(Document, did) is None
 
 
-
 class TestVaultDocumentRelationship:
     def test_vault_documents_backref(self, db_session: Session):
         vault = _sample_vault()
@@ -429,7 +419,6 @@ class TestVaultDocumentRelationship:
         db_session.refresh(doc)
         assert doc.vault is not None
         assert doc.vault.id == vault.id
-
 
 
 class TestNoSensitiveData:
@@ -467,7 +456,6 @@ class TestNoSensitiveData:
 
         fetched = db_session.get(SecurityMetadata, vault.id)
         assert len(fetched.seed_fingerprint) == 16
-
 
 
 class TestVaultServiceDbIntegration:
@@ -562,7 +550,6 @@ class TestVaultServiceDbIntegration:
 
         assert db_session.get(Vault, vault_id) is None
         assert db_session.get(SecurityMetadata, vault_id) is None
-
 
 
 class TestDocumentServiceDbIntegration:
@@ -699,7 +686,6 @@ class TestDocumentServiceDbIntegration:
             )
 
 
-
 class TestSecurityServiceSeedDbIntegration:
     @pytest.fixture()
     def _seeded_vault(self, db_session: Session, tmp_path):
@@ -759,7 +745,6 @@ class TestSecurityServiceSeedDbIntegration:
         sec_row = db_session.get(SecurityMetadata, vault_id)
         assert sec_row is not None
         assert sec_row.seed_fingerprint is not None
-        # Fingerprint is always exactly 16 hex chars.
         assert len(sec_row.seed_fingerprint) == 16
         assert all(c in "0123456789abcdef" for c in sec_row.seed_fingerprint)
 
@@ -770,7 +755,6 @@ class TestSecurityServiceSeedDbIntegration:
         vault_id, seed, _svc = _seeded_vault
 
         sec_row = db_session.get(SecurityMetadata, vault_id)
-        # The full seed phrase must not appear in any column.
         for col in (
             sec_row.encrypted_vault_key,
             sec_row.nonce,

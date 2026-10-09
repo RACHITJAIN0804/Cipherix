@@ -149,7 +149,6 @@ def test_verification_hash_mismatch(client: TestClient, db_session: Session):
     vault_id = _create_and_unlock_vault(client, token)
     doc_id = _upload_doc(client, token, vault_id, content=b"Original Authentic Content")
 
-    # Tamper with encrypted file on disk
     blob_path = settings.VAULT_DIR / vault_id / "encrypted" / f"{doc_id}.bin"
     blob_path.write_bytes(b"TAMPERED_CIPHERTEXT_FOR_STEP_7_TEST")
 
@@ -173,7 +172,6 @@ def test_verification_unauthorized_access(client: TestClient):
     vault_id = _create_and_unlock_vault(client, token_owner)
     doc_id = _upload_doc(client, token_owner, vault_id)
 
-    # Attacker tries to verify owner's document -> 404
     resp = client.post(
         "/api/v1/blockchain/verify",
         headers={"Authorization": f"Bearer {token_attacker}"},
@@ -186,11 +184,9 @@ def test_verification_missing_blockchain_record(client: TestClient, db_session: 
     token, _ = _register_and_login(client, "no_anchor_user")
     vault_id = _create_and_unlock_vault(client, token)
 
-    # Upload document while blockchain is disabled (no anchor created)
     monkeypatch.setattr(settings, "blockchain_enabled", False)
     doc_id = _upload_doc(client, token, vault_id)
 
-    # Enable blockchain and attempt verification -> 404 Anchor Not Found
     monkeypatch.setattr(settings, "blockchain_enabled", True)
     resp = client.post(
         "/api/v1/blockchain/verify",
@@ -219,7 +215,6 @@ def test_verification_blockchain_unavailable(client: TestClient, local_adapter: 
     vault_id = _create_and_unlock_vault(client, token)
     doc_id = _upload_doc(client, token, vault_id)
 
-    # Set adapter unavailable
     local_adapter.set_available(False)
 
     resp = client.post(

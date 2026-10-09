@@ -101,7 +101,6 @@ def _auth_header(token: str) -> dict[str, str]:
 def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db_session: Session):
     pwd = "VaultPassword123!"
 
-    # 1. Register User A
     reg_a = client.post(
         "/api/v1/auth/register",
         json={"username": "user_a_e2e", "password": "UserAPassword123!"},
@@ -109,7 +108,6 @@ def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db
     assert reg_a.status_code == status.HTTP_201_CREATED
     user_a_id = reg_a.json()["id"]
 
-    # 2. Authenticate User A
     login_a = client.post(
         "/api/v1/auth/login",
         json={"username": "user_a_e2e", "password": "UserAPassword123!"},
@@ -117,7 +115,6 @@ def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db
     assert login_a.status_code == status.HTTP_200_OK
     token_a = login_a.json()["access_token"]
 
-    # 3. Create Vault A & Unlock
     v_resp = client.post(
         "/api/v1/vaults/",
         headers=_auth_header(token_a),
@@ -133,7 +130,6 @@ def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db
     )
     assert unl_resp.status_code == status.HTTP_200_OK
 
-    # 4. Upload Document
     doc_content = (
         b"Cipherix End-to-End Integration Protocol.\n"
         b"This document contains secret proprietary parameters and verification hashes for RAG."
@@ -147,7 +143,6 @@ def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db
     assert up_resp.status_code == status.HTTP_201_CREATED
     doc_a_id = up_resp.json()["document_id"]
 
-    # 5. Process document text extraction & chunking
     proc_resp = client.post(
         f"/api/v1/vaults/{vault_a_id}/documents/{doc_a_id}/process",
         headers={**_auth_header(token_a), "X-Vault-Password": pwd},
@@ -156,16 +151,13 @@ def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db
     pdata = proc_resp.json()
     assert pdata["chunk_count"] >= 1
 
-    # 6. Verify document SHA-256 integrity hash recorded
     doc_db = db_session.get(DocumentRecord, doc_a_id)
     assert doc_db is not None
     assert doc_db.integrity_hash is not None
     assert len(doc_db.integrity_hash) == 64
 
-    # 7. Generate embeddings & 8. Store vectors in ChromaDB (completed inside process endpoint)
     assert pdata["processing_status"] == "processed"
 
-    # 9. Perform vault-isolated semantic search
     search_resp = client.post(
         "/api/v1/search",
         headers=_auth_header(token_a),
@@ -175,7 +167,6 @@ def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db
     sdata = search_resp.json()
     assert len(sdata["results"]) >= 1
 
-    # 10. Perform RAG query & 11. Verify RAG sources
     rag_resp = client.post(
         "/api/v1/rag/query",
         headers=_auth_header(token_a),
@@ -186,7 +177,6 @@ def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db
         rdata = rag_resp.json()
         assert rdata["vault_id"] == vault_a_id
 
-    # 12. Anchor document hash to local blockchain
     anchor_resp = client.post(
         "/api/v1/blockchain/anchor",
         headers=_auth_header(token_a),
@@ -197,7 +187,6 @@ def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db
     assert adata["status"] == "anchored"
     tx_hash = adata["tx_hash"]
 
-    # 13. Verify 3-tier blockchain integrity
     bc_verify_resp = client.post(
         "/api/v1/blockchain/verify",
         headers=_auth_header(token_a),
@@ -209,7 +198,6 @@ def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db
     assert vdata["blockchain_match"] is True
     assert vdata["verified"] is True
 
-    # 14. Enable controlled computer access
     toggle_resp = client.post(
         "/api/v1/computer-access/toggle",
         headers=_auth_header(token_a),
@@ -218,7 +206,6 @@ def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db
     assert toggle_resp.status_code == status.HTTP_200_OK
     assert toggle_resp.json()["enabled"] is True
 
-    # 15. Perform safe filesystem action (list_directory)
     act_resp = client.post(
         "/api/v1/computer-access/action",
         headers=_auth_header(token_a),
@@ -226,7 +213,6 @@ def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db
     )
     assert act_resp.status_code == status.HTTP_200_OK
 
-    # 16. Verify computer access audit logging
     audits = (
         db_session.query(ComputerAccessAuditLog)
         .filter(ComputerAccessAuditLog.user_id == user_a_id)
@@ -234,7 +220,6 @@ def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db
     )
     assert len(audits) >= 1
 
-    # 17. Register User B & Attempt unauthorized access
     reg_b = client.post(
         "/api/v1/auth/register",
         json={"username": "user_b_e2e", "password": "UserBPassword123!"},
@@ -246,14 +231,12 @@ def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db
     )
     token_b = login_b.json()["access_token"]
 
-    # User B attempts to access Vault A -> 404
     unauth_doc_resp = client.get(
         f"/api/v1/vaults/{vault_a_id}/documents/{doc_a_id}",
         headers={**_auth_header(token_b), "X-Vault-Password": pwd},
     )
     assert unauth_doc_resp.status_code == status.HTTP_404_NOT_FOUND
 
-    # 18. Attempt cross-vault vector search by User B -> 403 / 404
     unauth_search_resp = client.post(
         "/api/v1/search",
         headers=_auth_header(token_b),
@@ -261,7 +244,6 @@ def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db
     )
     assert unauth_search_resp.status_code in (status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND)
 
-    # 19. Attempt cross-vault RAG by User B -> 403 / 404
     unauth_rag_resp = client.post(
         "/api/v1/rag/query",
         headers=_auth_header(token_b),
@@ -269,7 +251,6 @@ def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db
     )
     assert unauth_rag_resp.status_code in (status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND)
 
-    # 20. Attempt cross-vault blockchain verification by User B -> 404
     unauth_bc_resp = client.post(
         "/api/v1/blockchain/verify",
         headers=_auth_header(token_b),
@@ -277,7 +258,6 @@ def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db
     )
     assert unauth_bc_resp.status_code == status.HTTP_404_NOT_FOUND
 
-    # 21. Attempt unsafe directory path traversal (../secret.txt) -> 400
     trav_resp = client.post(
         "/api/v1/computer-access/action",
         headers=_auth_header(token_a),
@@ -285,7 +265,6 @@ def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db
     )
     assert trav_resp.status_code == status.HTTP_400_BAD_REQUEST
 
-    # 22. Attempt arbitrary command execution (cmd.exe) -> 400
     cmd_resp = client.post(
         "/api/v1/computer-access/action",
         headers=_auth_header(token_a),
@@ -293,11 +272,9 @@ def test_complete_25_step_end_to_end_integration_pipeline(client: TestClient, db
     )
     assert cmd_resp.status_code == status.HTTP_400_BAD_REQUEST
 
-    # 23. Tamper with a document on disk
     blob_path = settings.VAULT_DIR / vault_a_id / "encrypted" / f"{doc_a_id}.bin"
     blob_path.write_bytes(b"CORRUPTED_AND_TAMPERED_BLOB_DATA")
 
-    # 24. Verify integrity failure & 25. Verify blockchain mismatch detection
     tamper_verify_resp = client.post(
         "/api/v1/blockchain/verify",
         headers=_auth_header(token_a),

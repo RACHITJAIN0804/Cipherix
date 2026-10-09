@@ -103,13 +103,9 @@ class GanacheAdapter(BlockchainAdapter):
         self._network = network
         self._connection_timeout = connection_timeout
 
-        # Lazy-initialised — created on first use
         self._contract: Optional[Any] = None
         self._w3: Optional[Web3] = None
 
-    # ------------------------------------------------------------------
-    # Factory
-    # ------------------------------------------------------------------
 
     @classmethod
     def from_settings(cls) -> "GanacheAdapter":
@@ -139,9 +135,6 @@ class GanacheAdapter(BlockchainAdapter):
             connection_timeout=cfg.connection_timeout_seconds,
         )
 
-    # ------------------------------------------------------------------
-    # Internal: lazy Web3 + contract setup
-    # ------------------------------------------------------------------
 
     def _get_contract(self) -> Any:
         """Return the bound contract instance, creating it on first call."""
@@ -203,13 +196,12 @@ class GanacheAdapter(BlockchainAdapter):
     def _send_tx(self, fn: Any) -> Dict[str, Any]:
         """Build, sign, broadcast a transaction and wait for the receipt."""
         w3 = self._w3
-        assert w3 is not None  # ensured by _get_contract()
+        assert w3 is not None
 
         deployer = Web3.to_checksum_address(self._deployer_address)
 
         try:
             nonce = w3.eth.get_transaction_count(deployer)
-            # estimate_gas raises ContractLogicError / Exception for custom reverts
             gas_estimate = fn.estimate_gas({"from": deployer})
             gas_limit = int(gas_estimate * 1.2)
 
@@ -230,7 +222,6 @@ class GanacheAdapter(BlockchainAdapter):
             receipt = w3.eth.wait_for_transaction_receipt(tx_hash_bytes, timeout=120)
 
             if receipt.status != 1:
-                # Re-raise as a revert so the except block handles it uniformly
                 raise ContractLogicError(
                     "execution reverted",
                     data={"result": "0x"},
@@ -246,7 +237,7 @@ class GanacheAdapter(BlockchainAdapter):
             raise
         except (ContractLogicError, Exception) as exc:
             self._raise_contract_error(exc)
-            raise  # unreachable; satisfies type checkers
+            raise
 
     def _raise_contract_error(self, exc: Exception) -> None:
         """Inspect a revert exception and re-raise the correct Cipherix error.
@@ -263,13 +254,11 @@ class GanacheAdapter(BlockchainAdapter):
         """
         raw = self._extract_revert_bytes(exc)
 
-        # Match by 4-byte selector prefix
         if raw and raw[:4].hex() == "4cba5033":
             raise AnchorAlreadyExistsError(
                 "A blockchain record for this document already exists."
             ) from exc
 
-        # Check string-based match as fallback (decoded environments)
         reason = str(exc)
         if "DocumentAlreadyExists" in reason:
             raise AnchorAlreadyExistsError(
@@ -287,11 +276,9 @@ class GanacheAdapter(BlockchainAdapter):
     @staticmethod
     def _extract_revert_bytes(exc: Exception) -> Optional[bytes]:
         """Extract raw revert data bytes from a revert exception if available."""
-        # ContractLogicError may carry a 'data' dict with 'result' hex
         if isinstance(exc, ContractLogicError):
             try:
                 args = exc.args
-                # args[1] is often a dict like {'result': '0x4cba5033...'}
                 for arg in args:
                     if isinstance(arg, dict):
                         result_hex = arg.get("result", "")
@@ -302,9 +289,7 @@ class GanacheAdapter(BlockchainAdapter):
             except Exception:
                 pass
 
-        # Also check the plain string for a hex payload
         raw_str = str(exc)
-        # Look for '0x' followed by 8+ hex chars in the message
         import re
         match = re.search(r"'result':\s*'(0x[0-9a-fA-F]{8,})'", raw_str)
         if match:
@@ -315,10 +300,6 @@ class GanacheAdapter(BlockchainAdapter):
 
         return None
 
-
-    # ------------------------------------------------------------------
-    # BlockchainAdapter protocol
-    # ------------------------------------------------------------------
 
     @property
     def network_name(self) -> str:
@@ -388,10 +369,6 @@ class GanacheAdapter(BlockchainAdapter):
         Returns ``None`` when lookup is not possible via tx hash alone.
         Callers that need the full record should use ``get_anchor_by_reference``.
         """
-        # The contract is keyed by documentId (bytes32), not tx hash.
-        # Without the original privacy_reference we cannot reconstruct documentId.
-        # Return None to signal "not retrievable via tx_hash" — the service layer
-        # treats None as "blockchain unavailable for cross-check", which is correct.
         logger.debug(
             "GanacheAdapter.get_anchor: lookup-by-tx-hash not supported; "
             "use get_anchor_by_reference instead."
@@ -472,9 +449,6 @@ class GanacheAdapter(BlockchainAdapter):
                 f"RPC error during verifyHash: {type(exc).__name__}: {exc}"
             ) from exc
 
-    # ------------------------------------------------------------------
-    # Health / status
-    # ------------------------------------------------------------------
 
     def health(self) -> Dict[str, Any]:
         """Return a health-check dict for the Ganache connection.
