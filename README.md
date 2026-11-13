@@ -275,10 +275,6 @@ To demonstrate the full capabilities of Cipherix:
 6. **Integrity Check**: Trigger an integrity verification; the system will recalculate the hash, compare it against the blockchain record, and confirm it is untampered.
 7. **Emergency Recovery**: Log out, simulate a forgotten password by navigating to `/recover`, input the 16-word seed and username, set a new password, and successfully restore access to the encrypted vault.
 
-## Screenshots
-
-*(Screenshots can be added here to showcase the Auth flow, Vault Dashboard, RAG Chat interface, and Recovery wizard.)*
-
 ## Limitations
 
 As an academic/portfolio project, Cipherix currently has the following constraints:
